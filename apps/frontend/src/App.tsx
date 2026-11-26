@@ -7,7 +7,11 @@ import { hasPermission } from '@/hooks/use-permission';
 import { AppLayout } from '@/layouts/AppLayout';
 import { AuditLogsPage } from '@/pages/AuditLogsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { CustomerProfilePage } from '@/pages/CustomerProfilePage';
+import { CustomersPage } from '@/pages/CustomersPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { MeasurementPrintPage } from '@/pages/MeasurementPrintPage';
+import { MeasurementsPage } from '@/pages/MeasurementsPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ForbiddenPage, NotFoundPage, PlannedModulePage } from '@/pages/StatusPages';
@@ -29,7 +33,7 @@ function RequirePermission({ module, action = 'VIEW', children }: { module: stri
   return hasPermission(user, module, action) ? <>{children}</> : <ForbiddenPage />;
 }
 
-const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users']);
+const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements']);
 
 export function App() {
   const bootstrap = useAuth((s) => s.bootstrap);
@@ -38,11 +42,15 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/print/measurements/:id" element={<RequireAuth><RequirePermission module="measurements"><MeasurementPrintPage /></RequirePermission></RequireAuth>} />
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<RequirePermission module="dashboard"><DashboardPage /></RequirePermission>} />
         <Route path="settings" element={<RequirePermission module="settings"><SettingsPage /></RequirePermission>} />
         <Route path="settings/users" element={<RequirePermission module="users"><UsersPage /></RequirePermission>} />
         <Route path="settings/roles" element={<RequirePermission module="users"><RolesPage /></RequirePermission>} />
+        <Route path="customers" element={<RequirePermission module="customers"><CustomersPage /></RequirePermission>} />
+        <Route path="customers/:id" element={<RequirePermission module="customers"><CustomerProfilePage /></RequirePermission>} />
+        <Route path="measurements" element={<RequirePermission module="measurements"><MeasurementsPage /></RequirePermission>} />
         <Route path="audit-logs" element={<RequirePermission module="audit_logs"><AuditLogsPage /></RequirePermission>} />
         {MODULES.filter((m) => !IMPLEMENTED.has(m.key) && !m.hidden).map((m) => (
           <Route key={m.key} path={`${m.path.slice(1)}/*`} element={<RequirePermission module={m.key}><PlannedModulePage /></RequirePermission>} />

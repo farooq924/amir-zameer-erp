@@ -31,9 +31,9 @@ flowchart LR
 
 | Phase | Scope | Depends on | Status |
 |---|---|---|---|
-| 1 Foundation | Monorepo, PostgreSQL, full Prisma schema + integrity migrations, session auth (Argon2id, HTTP-only cookies, CSRF, lockout, rate limit), RBAC (8 roles x 22 modules x 8 actions), users, roles matrix, audit log, settings, dashboard (real queries), layout & navigation, tests | - | **Done - awaiting review** |
-| 2 Customers | Customer CRUD, auto codes, duplicate detection, profile tabs, measurement templates (7 garment types + custom fields), versioned measurements, comparison, print sheet | 1 | Next |
-| 3 Orders & Garments | Order numbers AZ-YYYY-NNNNN, multi-garment orders, measurement snapshots, configurable workflow, status history, assignment, partial delivery, cancel/alter/revise/duplicate, receipts | 2 | Planned |
+| 1 Foundation | Monorepo, PostgreSQL, full Prisma schema + integrity migrations, session auth (Argon2id, HTTP-only cookies, CSRF, lockout, rate limit), RBAC (8 roles x 22 modules x 8 actions), users, roles matrix, audit log, settings, dashboard (real queries), layout & navigation, tests | - | **Done** |
+| 2 Customers | Customer CRUD, auto codes, duplicate detection, profile tabs, measurement templates (7 garment types + custom fields), versioned measurements, comparison, print sheet | 1 | **Done - awaiting review** |
+| 3 Orders & Garments | Order numbers AZ-YYYY-NNNNN, multi-garment orders, measurement snapshots, configurable workflow, status history, assignment, partial delivery, cancel/alter/revise/duplicate, receipts | 2 | Next |
 | 4 Inventory & Suppliers | Fabric master, purchases/returns, stock ledger with idempotent movements, reservations, allocation/consumption/reversal, low stock, valuation, suppliers & ledger | 1 (3 for allocation) | Planned |
 | 5 Employees & Payroll | Employees, salary history, attendance, leave, overtime, advances, production records, payroll (monthly/daily/per-piece/fixed+incentive), slips | 1, 3 | Planned |
 | 6 Finance & Accounting | Customer payments & ledger, refunds, expenses + approvals, supplier payments, chart of accounts, automatic double-entry posting, periods, P&L, balance sheet, cash flow | 3, 4, 5 | Planned |

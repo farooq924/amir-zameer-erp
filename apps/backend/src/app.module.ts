@@ -5,6 +5,8 @@ import { CommonModule } from './common/common.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { MeasurementsModule } from './modules/measurements/measurements.module';
 import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthController } from './modules/health/health.controller';
@@ -24,6 +26,8 @@ import { UsersModule } from './modules/users/users.module';
     AuditLogsModule,
     SettingsModule,
     DashboardModule,
+    CustomersModule,
+    MeasurementsModule,
   ],
   controllers: [HealthController],
   providers: [
