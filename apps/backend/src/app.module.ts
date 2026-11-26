@@ -1,0 +1,37 @@
+import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { CommonModule } from './common/common.module';
+import { PrismaModule } from './common/prisma/prisma.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { HealthController } from './modules/health/health.controller';
+import { RolesModule } from './modules/roles/roles.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { UsersModule } from './modules/users/users.module';
+
+@Module({
+  imports: [
+    // Global API rate limit: 300 requests / minute / IP. Login has a stricter limit.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 300 }]),
+    PrismaModule,
+    CommonModule,
+    AuthModule,
+    UsersModule,
+    RolesModule,
+    AuditLogsModule,
+    SettingsModule,
+    DashboardModule,
+  ],
+  controllers: [HealthController],
+  providers: [
+    // Order matters: rate limit -> session -> CSRF -> permissions.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useExisting: SessionAuthGuard },
+    { provide: APP_GUARD, useExisting: CsrfGuard },
+    { provide: APP_GUARD, useExisting: PermissionsGuard },
+  ],
+})
+export class AppModule {}

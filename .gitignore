@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+*.log
+backups/
+uploads/
+playwright-report
+test-results
+.DS_Store
+dist-seed
+.sandbox-ca.crt

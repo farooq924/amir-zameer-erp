@@ -1,0 +1,17 @@
+{
+  "name": "amir-zameer-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AMIR ZAMEER - Enterprise Tailoring & Fabric Management ERP",
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev:backend": "pnpm --filter @az/backend dev",
+    "dev:frontend": "pnpm --filter @az/frontend dev",
+    "build": "pnpm --filter @az/shared build && pnpm --filter @az/backend build && pnpm --filter @az/frontend build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:migrate": "pnpm --filter @az/backend db:migrate",
+    "db:seed": "pnpm --filter @az/backend db:seed"
+  }
+}

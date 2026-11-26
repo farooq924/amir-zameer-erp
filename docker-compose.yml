@@ -1,0 +1,44 @@
+# AMIR ZAMEER ERP - production-style stack.
+#   cp .env.example .env   (fill in real values)
+#   docker compose up -d --build
+#   docker compose exec backend node dist-seed/seed.js   (first time: creates roles + Owner; safe to re-run)
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Karachi
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Not published to the host: only reachable from the backend container.
+
+  backend:
+    build: { context: ., dockerfile: docker/backend.Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public&connection_limit=10
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+      TZ: Asia/Karachi
+
+  frontend:
+    build: { context: ., dockerfile: docker/frontend.Dockerfile }
+    restart: unless-stopped
+    depends_on: [backend]
+    ports:
+      - "127.0.0.1:8080:80"   # host Nginx (with SSL) proxies to this port
+
+volumes:
+  pgdata:

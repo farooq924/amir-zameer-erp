@@ -1,0 +1,1983 @@
+// =============================================================================
+// AMIR ZAMEER ERP - PostgreSQL schema (Prisma)
+// Conventions:
+//   * Primary keys are UUIDs so offline clients can generate IDs safely.
+//   * Money          -> Decimal(14,2)   (never floating point)
+//   * Unit costs     -> Decimal(14,4)
+//   * Fabric qty     -> Decimal(12,3)
+//   * Measurements   -> Decimal(7,2)
+//   * Table names are snake_case plural (@@map); columns are camelCase.
+//   * Sync-able records carry `version` (optimistic concurrency) and `deletedAt` (soft delete).
+//   * Extra CHECK constraints, triggers (immutable audit log, balanced and
+//     immutable posted journal entries) live in the SQL migrations.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum PermissionAction {
+  VIEW
+  CREATE
+  EDIT
+  DELETE
+  APPROVE
+  EXPORT
+  PRINT
+  MANAGE_SETTINGS
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CustomerType {
+  WALK_IN
+  REGULAR
+  VIP
+  CORPORATE
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum MeasurementUnit {
+  INCH
+  CM
+}
+
+enum GarmentCategory {
+  SHALWAR_KAMEEZ
+  FORMAL_SUIT
+  WAISTCOAT
+  SHIRT
+  TROUSER
+  PANT
+  KURTA
+  CUSTOM
+}
+
+enum OrderType {
+  STITCHING
+  STITCHING_WITH_FABRIC
+  FABRIC_SALE
+  ALTERATION
+}
+
+enum OrderLifecycle {
+  OPEN
+  PARTIALLY_DELIVERED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERPAID
+}
+
+enum FabricSource {
+  SHOP
+  CUSTOMER
+}
+
+enum OrderAdjustmentType {
+  PRICE_INCREASE
+  PRICE_DECREASE
+  DISCOUNT
+  ALTERATION_CHARGE
+  WRITE_OFF
+}
+
+enum TaskType {
+  CUTTING
+  STITCHING
+  FINISHING
+  ALTERATION
+  EMBROIDERY
+  PRESSING
+  OTHER
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum FabricUnit {
+  METER
+  YARD
+  PIECE
+  ROLL
+}
+
+enum MovementType {
+  OPENING
+  PURCHASE
+  PURCHASE_RETURN
+  SALE
+  SALE_RETURN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ORDER_CONSUMPTION
+  ORDER_REVERSAL
+}
+
+enum MovementDirection {
+  IN
+  OUT
+}
+
+enum ReservationStatus {
+  ACTIVE
+  CONSUMED
+  RELEASED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum DocumentStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum EmployeeType {
+  TAILOR
+  CUTTER
+  MASTER_TAILOR
+  HELPER
+  FINISHING_STAFF
+  SALES_STAFF
+  OTHER
+}
+
+enum EmploymentType {
+  PERMANENT
+  CONTRACT
+  TEMPORARY
+  PART_TIME
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+  TERMINATED
+}
+
+enum SalaryType {
+  MONTHLY
+  DAILY
+  PER_PIECE
+  FIXED_PLUS_INCENTIVE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
+  HOLIDAY
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  ANNUAL
+  UNPAID
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AdvanceStatus {
+  OPEN
+  RECOVERED
+  WRITTEN_OFF
+}
+
+enum PayrollStatus {
+  DRAFT
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum ExpenseStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum RecurrenceFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  MOBILE_WALLET
+  CHEQUE
+  OTHER
+}
+
+enum CustomerPaymentType {
+  ADVANCE
+  PARTIAL
+  FULL
+  REFUND
+}
+
+enum TransactionStatus {
+  POSTED
+  REVERSED
+}
+
+enum LedgerEntryType {
+  OPENING
+  ORDER
+  ORDER_ADJUSTMENT
+  PAYMENT
+  REFUND
+  SALE_RETURN
+  PURCHASE
+  PURCHASE_RETURN
+  SUPPLIER_PAYMENT
+  REVERSAL
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum BalanceSide {
+  DEBIT
+  CREDIT
+}
+
+enum PeriodStatus {
+  OPEN
+  CLOSED
+  LOCKED
+}
+
+enum JournalStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+enum JournalSource {
+  MANUAL
+  OPENING
+  ORDER
+  PAYMENT
+  REFUND
+  EXPENSE
+  PURCHASE
+  PURCHASE_RETURN
+  SUPPLIER_PAYMENT
+  SALE_RETURN
+  INVENTORY
+  PAYROLL
+  SALARY_PAYMENT
+  ADVANCE
+  REVERSAL
+}
+
+enum MessageChannel {
+  CLOUD_API
+  MANUAL
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum SyncStatus {
+  PENDING
+  APPLIED
+  DUPLICATE
+  CONFLICT
+  REJECTED
+}
+
+enum ConflictResolution {
+  PENDING
+  KEEP_SERVER
+  KEEP_CLIENT
+  MERGED
+  KEEP_BOTH
+}
+
+enum BackupType {
+  AUTOMATIC
+  MANUAL
+}
+
+enum BackupStatus {
+  RUNNING
+  COMPLETED
+  VERIFIED
+  FAILED
+  RESTORED
+}
+
+// -----------------------------------------------------------------------------
+// AUTHENTICATION & RBAC
+// -----------------------------------------------------------------------------
+
+model User {
+  id                  String    @id @default(uuid()) @db.Uuid
+  fullName            String    @db.VarChar(120)
+  email               String    @unique @db.VarChar(160)
+  username            String    @unique @db.VarChar(60)
+  passwordHash        String
+  isActive            Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  passwordChangedAt   DateTime?
+  employeeId          String?   @unique @db.Uuid
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  employee              Employee?             @relation(fields: [employeeId], references: [id])
+  roles                 UserRole[]            @relation("UserRoles")
+  rolesAssigned         UserRole[]            @relation("UserRoleAssignedBy")
+  sessions              Session[]
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+  syncOperations        SyncOperation[]
+  attachments           Attachment[]
+  ordersCreated         Order[]               @relation("OrderCreatedBy")
+  statusChanges         OrderStatusHistory[]
+  measurementsCreated   CustomerMeasurement[]
+  inventoryMovements    InventoryMovement[]
+  paymentsCreated       Payment[]
+  expensesCreated       Expense[]             @relation("ExpenseCreatedBy")
+  expensesApproved      Expense[]             @relation("ExpenseApprovedBy")
+  journalEntriesCreated JournalEntry[]        @relation("JournalCreatedBy")
+  journalEntriesPosted  JournalEntry[]        @relation("JournalPostedBy")
+  payrollsApproved      Payroll[]
+  backups               BackupRecord[]
+  settingsUpdated       SystemSetting[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(40)
+  name        String   @unique @db.VarChar(80)
+  description String?
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  code        String           @unique @db.VarChar(80) // e.g. "customers.view"
+  module      String           @db.VarChar(40)
+  action      PermissionAction
+  description String?
+
+  roles RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+model UserRole {
+  userId       String   @db.Uuid
+  roleId       String   @db.Uuid
+  assignedById String?  @db.Uuid
+  assignedAt   DateTime @default(now())
+
+  user       User  @relation("UserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  role       Role  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  assignedBy User? @relation("UserRoleAssignedBy", fields: [assignedById], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  tokenHash  String    @unique @db.VarChar(128) // SHA-256 of the cookie token; raw token is never stored
+  csrfToken  String    @db.VarChar(128)
+  userId     String    @db.Uuid
+  ipAddress  String?   @db.VarChar(64)
+  userAgent  String?   @db.VarChar(400)
+  deviceId   String?   @db.VarChar(100)
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model LoginAttempt {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String   @db.VarChar(160)
+  ipAddress  String?  @db.VarChar(64)
+  success    Boolean
+  reason     String?  @db.VarChar(80)
+  createdAt  DateTime @default(now())
+
+  @@index([identifier, createdAt])
+  @@index([ipAddress, createdAt])
+  @@map("login_attempts")
+}
+
+// -----------------------------------------------------------------------------
+// SYSTEM: SETTINGS, SEQUENCES, AUDIT, NOTIFICATIONS, FILES, SYNC, BACKUP
+// -----------------------------------------------------------------------------
+
+model SystemSetting {
+  key         String   @id @db.VarChar(100)
+  group       String   @db.VarChar(40)
+  value       Json
+  description String?
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+
+  @@index([group])
+  @@map("system_settings")
+}
+
+/// Gap-free, transaction-safe document numbers, e.g. AZ-2026-00001.
+model NumberSequence {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @db.VarChar(40) // ORDER, CUSTOMER, RECEIPT, EXPENSE ...
+  period    String   @default("") @db.VarChar(10) // "2026" for yearly sequences, "" for global
+  prefix    String   @db.VarChar(20)
+  padding   Int      @default(5)
+  nextValue Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, period])
+  @@map("number_sequences")
+}
+
+/// Append-only. UPDATE/DELETE are blocked by a database trigger.
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  action    String   @db.VarChar(60)
+  module    String   @db.VarChar(40)
+  recordId  String?  @db.VarChar(80)
+  oldValues Json?
+  newValues Json?
+  ipAddress String?  @db.VarChar(64)
+  userAgent String?  @db.VarChar(400)
+  sessionId String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([module, createdAt])
+  @@index([userId, createdAt])
+  @@index([recordId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid // null = broadcast to owner/admins
+  type      String   @db.VarChar(40)
+  title     String   @db.VarChar(160)
+  message   String
+  link      String?  @db.VarChar(300)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Attachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  entityType   String   @db.VarChar(40)
+  entityId     String   @db.Uuid
+  fileName     String   @db.VarChar(255)
+  mimeType     String   @db.VarChar(100)
+  sizeBytes    Int
+  storagePath  String   @db.VarChar(500)
+  checksum     String   @db.VarChar(128)
+  uploadedById String?  @db.Uuid
+  createdAt    DateTime @default(now())
+
+  uploadedBy User? @relation(fields: [uploadedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("attachments")
+}
+
+/// Idempotency keys for non-sync API calls that create financial / stock records.
+model IdempotencyKey {
+  key            String   @id @db.VarChar(100)
+  userId         String?  @db.Uuid
+  endpoint       String   @db.VarChar(200)
+  requestHash    String   @db.VarChar(128)
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+/// Every offline operation pushed by a client. `id` is the client-generated operation id,
+/// so re-sending the same operation can never apply it twice.
+model SyncOperation {
+  id              String     @id @db.Uuid
+  deviceId        String     @db.VarChar(100)
+  userId          String?    @db.Uuid
+  entityType      String     @db.VarChar(40)
+  entityId        String     @db.Uuid
+  operation       String     @db.VarChar(20) // CREATE | UPDATE | DELETE | ACTION
+  baseVersion     Int?
+  payload         Json
+  status          SyncStatus @default(PENDING)
+  result          Json?
+  errorMessage    String?
+  clientTimestamp DateTime
+  serverTimestamp DateTime   @default(now())
+
+  user      User?          @relation(fields: [userId], references: [id])
+  conflicts SyncConflict[]
+
+  @@index([deviceId, serverTimestamp])
+  @@index([entityType, entityId])
+  @@index([status])
+  @@map("sync_operations")
+}
+
+model SyncConflict {
+  id              String             @id @default(uuid()) @db.Uuid
+  syncOperationId String             @db.Uuid
+  entityType      String             @db.VarChar(40)
+  entityId        String             @db.Uuid
+  serverVersion   Int
+  clientVersion   Int?
+  serverData      Json
+  clientData      Json
+  resolution      ConflictResolution @default(PENDING)
+  resolvedById    String?            @db.Uuid
+  resolvedAt      DateTime?
+  notes           String?
+  createdAt       DateTime           @default(now())
+
+  syncOperation SyncOperation @relation(fields: [syncOperationId], references: [id], onDelete: Cascade)
+
+  @@index([resolution])
+  @@map("sync_conflicts")
+}
+
+model BackupRecord {
+  id             String       @id @default(uuid()) @db.Uuid
+  fileName       String       @db.VarChar(255)
+  storagePath    String       @db.VarChar(500)
+  externalPath   String?      @db.VarChar(500)
+  sizeBytes      BigInt?
+  checksumSha256 String?      @db.VarChar(64)
+  encrypted      Boolean      @default(true)
+  type           BackupType
+  status         BackupStatus @default(RUNNING)
+  verifiedAt     DateTime?
+  restoredAt     DateTime?
+  errorMessage   String?
+  createdById    String?      @db.Uuid
+  startedAt      DateTime     @default(now())
+  completedAt    DateTime?
+
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  @@index([startedAt])
+  @@map("backup_records")
+}
+
+// -----------------------------------------------------------------------------
+// CUSTOMERS
+// -----------------------------------------------------------------------------
+
+model Customer {
+  id               String         @id @default(uuid()) @db.Uuid
+  code             String         @unique @db.VarChar(20) // AZC-00001
+  name             String         @db.VarChar(120)
+  mobile           String         @db.VarChar(20) // normalised E.164-ish, e.g. 923001234567
+  whatsapp         String?        @db.VarChar(20)
+  email            String?        @db.VarChar(160)
+  city             String?        @db.VarChar(80)
+  customerType     CustomerType   @default(REGULAR)
+  registrationDate DateTime       @default(now()) @db.Date
+  notes            String?
+  status           CustomerStatus @default(ACTIVE)
+  openingBalance   Decimal        @default(0) @db.Decimal(14, 2)
+  whatsappOptIn    Boolean        @default(false)
+  whatsappOptInAt  DateTime?
+  version          Int            @default(1)
+  createdById      String?        @db.Uuid
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  addresses     CustomerAddress[]
+  customerNotes CustomerNote[]
+  measurements  CustomerMeasurement[]
+  orders        Order[]
+  payments      Payment[]
+  ledger        CustomerLedger[]
+  saleReturns   SaleReturn[]
+  messages      WhatsAppMessage[]
+  journalLines  JournalEntryLine[]
+
+  @@index([mobile])
+  @@index([name])
+  @@index([status])
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id          String   @id @default(uuid()) @db.Uuid
+  customerId  String   @db.Uuid
+  label       String   @default("Home") @db.VarChar(40)
+  addressLine String   @db.VarChar(300)
+  city        String?  @db.VarChar(80)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+model CustomerNote {
+  id          String   @id @default(uuid()) @db.Uuid
+  customerId  String   @db.Uuid
+  note        String
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_notes")
+}
+
+// -----------------------------------------------------------------------------
+// MEASUREMENTS (versioned, never overwritten)
+// -----------------------------------------------------------------------------
+
+model MeasurementTemplate {
+  id              String          @id @default(uuid()) @db.Uuid
+  code            String          @unique @db.VarChar(40)
+  name            String          @db.VarChar(80)
+  garmentCategory GarmentCategory
+  defaultUnit     MeasurementUnit @default(INCH)
+  isSystem        Boolean         @default(false)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  fields       MeasurementField[]
+  measurements CustomerMeasurement[]
+  garmentTypes GarmentType[]
+
+  @@map("measurement_templates")
+}
+
+model MeasurementField {
+  id         String   @id @default(uuid()) @db.Uuid
+  templateId String   @db.Uuid
+  key        String   @db.VarChar(40) // e.g. "chest"
+  label      String   @db.VarChar(60) // e.g. "Chest"
+  sortOrder  Int      @default(0)
+  isRequired Boolean  @default(false)
+  minValue   Decimal? @db.Decimal(7, 2)
+  maxValue   Decimal? @db.Decimal(7, 2)
+  isActive   Boolean  @default(true)
+
+  template MeasurementTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  values   MeasurementValue[]
+
+  @@unique([templateId, key])
+  @@map("measurement_fields")
+}
+
+/// One immutable version of a customer's measurements for one template.
+model CustomerMeasurement {
+  id          String          @id @default(uuid()) @db.Uuid
+  customerId  String          @db.Uuid
+  templateId  String          @db.Uuid
+  versionNo   Int
+  unit        MeasurementUnit @default(INCH)
+  isLatest    Boolean         @default(true)
+  takenAt     DateTime        @default(now())
+  takenByName String?         @db.VarChar(120)
+  notes       String?
+  createdById String?         @db.Uuid
+  createdAt   DateTime        @default(now())
+
+  customer  Customer             @relation(fields: [customerId], references: [id])
+  template  MeasurementTemplate  @relation(fields: [templateId], references: [id])
+  createdBy User?                @relation(fields: [createdById], references: [id])
+  values    MeasurementValue[]
+  orderUses GarmentMeasurement[]
+
+  @@unique([customerId, templateId, versionNo])
+  @@index([customerId, templateId, isLatest])
+  @@map("customer_measurements")
+}
+
+model MeasurementValue {
+  id            String   @id @default(uuid()) @db.Uuid
+  measurementId String   @db.Uuid
+  fieldId       String?  @db.Uuid // null for custom one-off fields
+  fieldKey      String   @db.VarChar(40)
+  fieldLabel    String   @db.VarChar(60)
+  value         Decimal? @db.Decimal(7, 2)
+  textValue     String?  @db.VarChar(200)
+
+  measurement CustomerMeasurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
+  field       MeasurementField?   @relation(fields: [fieldId], references: [id])
+
+  @@unique([measurementId, fieldKey])
+  @@map("measurement_values")
+}
+
+// -----------------------------------------------------------------------------
+// GARMENTS, ORDERS & WORKFLOW
+// -----------------------------------------------------------------------------
+
+model GarmentType {
+  id                       String          @id @default(uuid()) @db.Uuid
+  code                     String          @unique @db.VarChar(40)
+  name                     String          @db.VarChar(80)
+  category                 GarmentCategory
+  measurementTemplateId    String?         @db.Uuid
+  defaultStitchingPrice    Decimal         @default(0) @db.Decimal(14, 2)
+  defaultFabricConsumption Decimal         @default(0) @db.Decimal(12, 3)
+  defaultPieceRate         Decimal         @default(0) @db.Decimal(14, 2)
+  isActive                 Boolean         @default(true)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  measurementTemplate MeasurementTemplate? @relation(fields: [measurementTemplateId], references: [id])
+  orderItems          OrderItem[]
+
+  @@map("garments")
+}
+
+/// Configurable production workflow stages (New Order ... Delivered / Cancelled).
+model WorkflowStage {
+  id         String   @id @default(uuid()) @db.Uuid
+  code       String   @unique @db.VarChar(40)
+  name       String   @db.VarChar(60)
+  sortOrder  Int
+  color      String   @default("slate") @db.VarChar(20)
+  isTerminal Boolean  @default(false) // Delivered, Cancelled
+  isSystem   Boolean  @default(false) // system stages cannot be deleted
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  orders      Order[]
+  orderItems  OrderItem[]
+  historyFrom OrderStatusHistory[] @relation("HistoryFrom")
+  historyTo   OrderStatusHistory[] @relation("HistoryTo")
+
+  @@map("workflow_stages")
+}
+
+model Order {
+  id                   String         @id @default(uuid()) @db.Uuid
+  orderNumber          String         @unique @db.VarChar(30) // AZ-2026-00001
+  customerId           String         @db.Uuid
+  orderType            OrderType      @default(STITCHING)
+  orderDate            DateTime       @default(now()) @db.Date
+  expectedDeliveryDate DateTime?      @db.Date
+  actualDeliveryDate   DateTime?      @db.Date
+  stageId              String         @db.Uuid
+  lifecycle            OrderLifecycle @default(OPEN)
+  paymentStatus        PaymentStatus  @default(UNPAID)
+  stitchingTotal       Decimal        @default(0) @db.Decimal(14, 2)
+  fabricTotal          Decimal        @default(0) @db.Decimal(14, 2)
+  additionalCharges    Decimal        @default(0) @db.Decimal(14, 2)
+  discount             Decimal        @default(0) @db.Decimal(14, 2)
+  subtotal             Decimal        @default(0) @db.Decimal(14, 2)
+  totalAmount          Decimal        @default(0) @db.Decimal(14, 2)
+  adjustmentsTotal     Decimal        @default(0) @db.Decimal(14, 2)
+  paidAmount           Decimal        @default(0) @db.Decimal(14, 2)
+  balanceAmount        Decimal        @default(0) @db.Decimal(14, 2)
+  assignedEmployeeId   String?        @db.Uuid
+  specialInstructions  String?
+  revisionNo           Int            @default(0)
+  duplicatedFromId     String?        @db.Uuid
+  cancelledAt          DateTime?
+  cancelReason         String?
+  version              Int            @default(1)
+  createdById          String?        @db.Uuid
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  deletedAt            DateTime?
+
+  customer         Customer             @relation(fields: [customerId], references: [id])
+  stage            WorkflowStage        @relation(fields: [stageId], references: [id])
+  assignedEmployee Employee?            @relation("OrderAssignedEmployee", fields: [assignedEmployeeId], references: [id])
+  duplicatedFrom   Order?               @relation("OrderDuplicate", fields: [duplicatedFromId], references: [id])
+  duplicates       Order[]              @relation("OrderDuplicate")
+  createdBy        User?                @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  items            OrderItem[]
+  statusHistory    OrderStatusHistory[]
+  deliveries       OrderDelivery[]
+  adjustments      OrderAdjustment[]
+  payments         Payment[]
+  reservations     StockReservation[]
+  saleReturns      SaleReturn[]
+
+  @@index([customerId])
+  @@index([orderDate])
+  @@index([stageId])
+  @@index([lifecycle])
+  @@index([expectedDeliveryDate])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                 String       @id @default(uuid()) @db.Uuid
+  orderId            String       @db.Uuid
+  lineNo             Int
+  garmentTypeId      String?      @db.Uuid
+  garmentName        String       @db.VarChar(100)
+  quantity           Int
+  fabricSource       FabricSource @default(CUSTOMER)
+  fabricId           String?      @db.Uuid
+  fabricDescription  String?      @db.VarChar(200)
+  fabricPerPiece     Decimal      @default(0) @db.Decimal(12, 3)
+  fabricQuantity     Decimal      @default(0) @db.Decimal(12, 3)
+  fabricRate         Decimal      @default(0) @db.Decimal(14, 2)
+  fabricAmount       Decimal      @default(0) @db.Decimal(14, 2)
+  stitchingPrice     Decimal      @default(0) @db.Decimal(14, 2)
+  stitchingAmount    Decimal      @default(0) @db.Decimal(14, 2)
+  additionalCharges  Decimal      @default(0) @db.Decimal(14, 2)
+  lineTotal          Decimal      @default(0) @db.Decimal(14, 2)
+  stageId            String       @db.Uuid
+  assignedEmployeeId String?      @db.Uuid
+  deliveredQuantity  Int          @default(0)
+  notes              String?
+  version            Int          @default(1)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  order             Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  garmentType       GarmentType?         @relation(fields: [garmentTypeId], references: [id])
+  fabric            Fabric?              @relation(fields: [fabricId], references: [id])
+  stage             WorkflowStage        @relation(fields: [stageId], references: [id])
+  assignedEmployee  Employee?            @relation("OrderItemAssignedEmployee", fields: [assignedEmployeeId], references: [id])
+  measurement       GarmentMeasurement?
+  statusHistory     OrderStatusHistory[]
+  assignments       EmployeeAssignment[]
+  productionRecords ProductionRecord[]
+  reservations      StockReservation[]
+  deliveryItems     OrderDeliveryItem[]
+
+  @@unique([orderId, lineNo])
+  @@index([assignedEmployeeId])
+  @@index([stageId])
+  @@map("order_items")
+}
+
+/// Frozen copy of the measurements used for one order item.
+model GarmentMeasurement {
+  id                  String          @id @default(uuid()) @db.Uuid
+  orderItemId         String          @unique @db.Uuid
+  sourceMeasurementId String?         @db.Uuid
+  templateName        String          @db.VarChar(80)
+  unit                MeasurementUnit
+  values              Json // [{ key, label, value }]
+  notes               String?
+  createdAt           DateTime        @default(now())
+
+  orderItem         OrderItem            @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  sourceMeasurement CustomerMeasurement? @relation(fields: [sourceMeasurementId], references: [id])
+
+  @@map("garment_measurements")
+}
+
+model OrderStatusHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @db.Uuid
+  orderItemId String?  @db.Uuid // null = whole-order change
+  fromStageId String?  @db.Uuid
+  toStageId   String   @db.Uuid
+  notes       String?
+  changedById String?  @db.Uuid
+  changedAt   DateTime @default(now())
+
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem OrderItem?     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  fromStage WorkflowStage? @relation("HistoryFrom", fields: [fromStageId], references: [id])
+  toStage   WorkflowStage  @relation("HistoryTo", fields: [toStageId], references: [id])
+  changedBy User?          @relation(fields: [changedById], references: [id])
+
+  @@index([orderId, changedAt])
+  @@map("order_status_history")
+}
+
+model OrderDelivery {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @db.Uuid
+  deliveryNo  Int
+  deliveredAt DateTime @default(now())
+  receivedBy  String?  @db.VarChar(120)
+  notes       String?
+  createdById String?  @db.Uuid
+
+  order Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items OrderDeliveryItem[]
+
+  @@unique([orderId, deliveryNo])
+  @@map("order_deliveries")
+}
+
+model OrderDeliveryItem {
+  id          String @id @default(uuid()) @db.Uuid
+  deliveryId  String @db.Uuid
+  orderItemId String @db.Uuid
+  quantity    Int
+
+  delivery  OrderDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  orderItem OrderItem     @relation(fields: [orderItemId], references: [id])
+
+  @@unique([deliveryId, orderItemId])
+  @@map("order_delivery_items")
+}
+
+/// Authorised financial adjustments (the only way to change a delivered order's value).
+model OrderAdjustment {
+  id           String              @id @default(uuid()) @db.Uuid
+  orderId      String              @db.Uuid
+  type         OrderAdjustmentType
+  amount       Decimal             @db.Decimal(14, 2) // signed: + increases balance, - decreases
+  reason       String
+  approvedById String?             @db.Uuid
+  createdById  String?             @db.Uuid
+  createdAt    DateTime            @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@map("order_adjustments")
+}
+
+// -----------------------------------------------------------------------------
+// PRODUCTION
+// -----------------------------------------------------------------------------
+
+model EmployeeAssignment {
+  id               String           @id @default(uuid()) @db.Uuid
+  orderItemId      String           @db.Uuid
+  employeeId       String           @db.Uuid
+  taskType         TaskType         @default(STITCHING)
+  assignedQuantity Int
+  pieceRate        Decimal          @default(0) @db.Decimal(14, 2)
+  status           AssignmentStatus @default(ASSIGNED)
+  assignedAt       DateTime         @default(now())
+  dueDate          DateTime?        @db.Date
+  assignedById     String?          @db.Uuid
+  notes            String?
+
+  orderItem         OrderItem          @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  employee          Employee           @relation(fields: [employeeId], references: [id])
+  productionRecords ProductionRecord[]
+
+  @@index([employeeId, status])
+  @@index([orderItemId])
+  @@map("employee_assignments")
+}
+
+model ProductionRecord {
+  id                 String    @id @default(uuid()) @db.Uuid
+  assignmentId       String    @db.Uuid
+  employeeId         String    @db.Uuid
+  orderItemId        String    @db.Uuid
+  workDate           DateTime  @db.Date
+  startedAt          DateTime?
+  completedAt        DateTime?
+  completedQuantity  Int       @default(0)
+  rejectedQuantity   Int       @default(0)
+  alterationQuantity Int       @default(0)
+  pieceRate          Decimal   @default(0) @db.Decimal(14, 2)
+  amount             Decimal   @default(0) @db.Decimal(14, 2)
+  payrollItemId      String?   @db.Uuid // set once paid, prevents paying the same pieces twice
+  notes              String?
+  createdById        String?   @db.Uuid
+  createdAt          DateTime  @default(now())
+
+  assignment  EmployeeAssignment @relation(fields: [assignmentId], references: [id])
+  employee    Employee           @relation(fields: [employeeId], references: [id])
+  orderItem   OrderItem          @relation(fields: [orderItemId], references: [id])
+  payrollItem PayrollItem?       @relation(fields: [payrollItemId], references: [id])
+
+  @@index([employeeId, workDate])
+  @@index([payrollItemId])
+  @@map("production_records")
+}
+
+// -----------------------------------------------------------------------------
+// FABRIC INVENTORY
+// -----------------------------------------------------------------------------
+
+model FabricCategory {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(80)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  fabrics Fabric[]
+
+  @@map("fabric_categories")
+}
+
+model Fabric {
+  id            String     @id @default(uuid()) @db.Uuid
+  code          String     @unique @db.VarChar(30)
+  name          String     @db.VarChar(120)
+  brand         String?    @db.VarChar(80)
+  categoryId    String?    @db.Uuid
+  color         String?    @db.VarChar(60)
+  design        String?    @db.VarChar(80)
+  quality       String?    @db.VarChar(80)
+  supplierId    String?    @db.Uuid
+  purchasePrice Decimal    @default(0) @db.Decimal(14, 2)
+  salePrice     Decimal    @default(0) @db.Decimal(14, 2)
+  unit          FabricUnit @default(METER)
+  minimumStock  Decimal    @default(0) @db.Decimal(12, 3)
+  currentStock  Decimal    @default(0) @db.Decimal(12, 3) // maintained only through inventory_movements
+  reservedStock Decimal    @default(0) @db.Decimal(12, 3)
+  averageCost   Decimal    @default(0) @db.Decimal(14, 4)
+  location      String?    @db.VarChar(80)
+  isActive      Boolean    @default(true)
+  version       Int        @default(1)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  category            FabricCategory?      @relation(fields: [categoryId], references: [id])
+  supplier            Supplier?            @relation(fields: [supplierId], references: [id])
+  movements           InventoryMovement[]
+  reservations        StockReservation[]
+  orderItems          OrderItem[]
+  purchaseItems       PurchaseItem[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  purchaseReturnItems PurchaseReturnItem[]
+  saleReturnItems     SaleReturnItem[]
+
+  @@index([name])
+  @@index([categoryId])
+  @@map("fabrics")
+}
+
+/// Inventory ledger. Every stock change is one row; `idempotencyKey` makes duplicate deductions impossible.
+model InventoryMovement {
+  id             String            @id @default(uuid()) @db.Uuid
+  movementNo     String            @unique @db.VarChar(30)
+  fabricId       String            @db.Uuid
+  type           MovementType
+  direction      MovementDirection
+  quantity       Decimal           @db.Decimal(12, 3) // always positive
+  unitCost       Decimal           @default(0) @db.Decimal(14, 4)
+  totalCost      Decimal           @default(0) @db.Decimal(14, 2)
+  balanceAfter   Decimal           @db.Decimal(12, 3)
+  location       String?           @db.VarChar(80)
+  referenceType  String?           @db.VarChar(40)
+  referenceId    String?           @db.Uuid
+  idempotencyKey String            @unique @db.VarChar(120)
+  reason         String?
+  movementDate   DateTime          @default(now())
+  createdById    String?           @db.Uuid
+  createdAt      DateTime          @default(now())
+
+  fabric    Fabric @relation(fields: [fabricId], references: [id])
+  createdBy User?  @relation(fields: [createdById], references: [id])
+
+  @@index([fabricId, movementDate])
+  @@index([referenceType, referenceId])
+  @@index([type, movementDate])
+  @@map("inventory_movements")
+}
+
+model StockReservation {
+  id          String            @id @default(uuid()) @db.Uuid
+  fabricId    String            @db.Uuid
+  orderId     String            @db.Uuid
+  orderItemId String            @db.Uuid
+  quantity    Decimal           @db.Decimal(12, 3)
+  consumed    Decimal           @default(0) @db.Decimal(12, 3)
+  status      ReservationStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now())
+  closedAt    DateTime?
+
+  fabric    Fabric    @relation(fields: [fabricId], references: [id])
+  order     Order     @relation(fields: [orderId], references: [id])
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+
+  @@unique([orderItemId, fabricId])
+  @@index([fabricId, status])
+  @@map("stock_reservations")
+}
+
+model SaleReturn {
+  id          String   @id @default(uuid()) @db.Uuid
+  returnNo    String   @unique @db.VarChar(30)
+  orderId     String?  @db.Uuid
+  customerId  String   @db.Uuid
+  returnDate  DateTime @default(now()) @db.Date
+  totalAmount Decimal  @db.Decimal(14, 2)
+  reason      String?
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  order    Order?           @relation(fields: [orderId], references: [id])
+  customer Customer         @relation(fields: [customerId], references: [id])
+  items    SaleReturnItem[]
+
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  saleReturnId String  @db.Uuid
+  fabricId     String  @db.Uuid
+  quantity     Decimal @db.Decimal(12, 3)
+  rate         Decimal @db.Decimal(14, 2)
+  amount       Decimal @db.Decimal(14, 2)
+
+  saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+  fabric     Fabric     @relation(fields: [fabricId], references: [id])
+
+  @@map("sale_return_items")
+}
+
+// -----------------------------------------------------------------------------
+// SUPPLIERS & PURCHASES
+// -----------------------------------------------------------------------------
+
+model Supplier {
+  id             String       @id @default(uuid()) @db.Uuid
+  code           String       @unique @db.VarChar(20)
+  name           String       @db.VarChar(120)
+  contactNumber  String?      @db.VarChar(20)
+  whatsapp       String?      @db.VarChar(20)
+  address        String?      @db.VarChar(300)
+  city           String?      @db.VarChar(80)
+  openingBalance Decimal      @default(0) @db.Decimal(14, 2) // amount we owe at go-live
+  notes          String?
+  status         RecordStatus @default(ACTIVE)
+  version        Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  fabrics         Fabric[]
+  purchaseOrders  PurchaseOrder[]
+  purchases       Purchase[]
+  purchaseReturns PurchaseReturn[]
+  payments        SupplierPayment[]
+  ledger          SupplierLedger[]
+  journalLines    JournalEntryLine[]
+
+  @@index([name])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id           String              @id @default(uuid()) @db.Uuid
+  poNumber     String              @unique @db.VarChar(30)
+  supplierId   String              @db.Uuid
+  orderDate    DateTime            @default(now()) @db.Date
+  expectedDate DateTime?           @db.Date
+  status       PurchaseOrderStatus @default(DRAFT)
+  totalAmount  Decimal             @default(0) @db.Decimal(14, 2)
+  notes        String?
+  approvedById String?             @db.Uuid
+  createdById  String?             @db.Uuid
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  supplier  Supplier            @relation(fields: [supplierId], references: [id])
+  items     PurchaseOrderItem[]
+  purchases Purchase[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id               String  @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String  @db.Uuid
+  fabricId         String  @db.Uuid
+  quantity         Decimal @db.Decimal(12, 3)
+  rate             Decimal @db.Decimal(14, 2)
+  amount           Decimal @db.Decimal(14, 2)
+  receivedQuantity Decimal @default(0) @db.Decimal(12, 3)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  fabric        Fabric        @relation(fields: [fabricId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+/// Goods received / supplier invoice.
+model Purchase {
+  id                String         @id @default(uuid()) @db.Uuid
+  purchaseNo        String         @unique @db.VarChar(30)
+  supplierId        String         @db.Uuid
+  purchaseOrderId   String?        @db.Uuid
+  supplierInvoiceNo String?        @db.VarChar(60)
+  purchaseDate      DateTime       @default(now()) @db.Date
+  subtotal          Decimal        @default(0) @db.Decimal(14, 2)
+  discount          Decimal        @default(0) @db.Decimal(14, 2)
+  otherCharges      Decimal        @default(0) @db.Decimal(14, 2)
+  totalAmount       Decimal        @default(0) @db.Decimal(14, 2)
+  paidAmount        Decimal        @default(0) @db.Decimal(14, 2)
+  balanceAmount     Decimal        @default(0) @db.Decimal(14, 2)
+  status            DocumentStatus @default(POSTED)
+  notes             String?
+  createdById       String?        @db.Uuid
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  supplier      Supplier          @relation(fields: [supplierId], references: [id])
+  purchaseOrder PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id])
+  items         PurchaseItem[]
+  returns       PurchaseReturn[]
+  payments      SupplierPayment[]
+
+  @@unique([supplierId, supplierInvoiceNo])
+  @@index([purchaseDate])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String  @id @default(uuid()) @db.Uuid
+  purchaseId String  @db.Uuid
+  fabricId   String  @db.Uuid
+  quantity   Decimal @db.Decimal(12, 3)
+  rate       Decimal @db.Decimal(14, 2)
+  amount     Decimal @db.Decimal(14, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  fabric   Fabric   @relation(fields: [fabricId], references: [id])
+
+  @@map("purchase_items")
+}
+
+model PurchaseReturn {
+  id          String   @id @default(uuid()) @db.Uuid
+  returnNo    String   @unique @db.VarChar(30)
+  supplierId  String   @db.Uuid
+  purchaseId  String?  @db.Uuid
+  returnDate  DateTime @default(now()) @db.Date
+  totalAmount Decimal  @db.Decimal(14, 2)
+  reason      String?
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  supplier Supplier             @relation(fields: [supplierId], references: [id])
+  purchase Purchase?            @relation(fields: [purchaseId], references: [id])
+  items    PurchaseReturnItem[]
+
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id               String  @id @default(uuid()) @db.Uuid
+  purchaseReturnId String  @db.Uuid
+  fabricId         String  @db.Uuid
+  quantity         Decimal @db.Decimal(12, 3)
+  rate             Decimal @db.Decimal(14, 2)
+  amount           Decimal @db.Decimal(14, 2)
+
+  purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  fabric         Fabric         @relation(fields: [fabricId], references: [id])
+
+  @@map("purchase_return_items")
+}
+
+model SupplierPayment {
+  id             String            @id @default(uuid()) @db.Uuid
+  paymentNo      String            @unique @db.VarChar(30)
+  supplierId     String            @db.Uuid
+  purchaseId     String?           @db.Uuid
+  paymentDate    DateTime          @default(now()) @db.Date
+  amount         Decimal           @db.Decimal(14, 2)
+  method         PaymentMethod
+  reference      String?           @db.VarChar(100)
+  idempotencyKey String            @unique @db.VarChar(120)
+  status         TransactionStatus @default(POSTED)
+  notes          String?
+  createdById    String?           @db.Uuid
+  createdAt      DateTime          @default(now())
+
+  supplier Supplier  @relation(fields: [supplierId], references: [id])
+  purchase Purchase? @relation(fields: [purchaseId], references: [id])
+
+  @@index([supplierId, paymentDate])
+  @@map("supplier_payments")
+}
+
+/// Supplier sub-ledger. Credit = we owe more (purchase), Debit = we owe less (payment/return).
+model SupplierLedger {
+  id            String          @id @default(uuid()) @db.Uuid
+  supplierId    String          @db.Uuid
+  entryDate     DateTime        @db.Date
+  entryType     LedgerEntryType
+  referenceType String          @db.VarChar(40)
+  referenceId   String          @db.Uuid
+  description   String?
+  debit         Decimal         @default(0) @db.Decimal(14, 2)
+  credit        Decimal         @default(0) @db.Decimal(14, 2)
+  createdAt     DateTime        @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@unique([referenceType, referenceId, entryType])
+  @@index([supplierId, entryDate])
+  @@map("supplier_ledger")
+}
+
+// -----------------------------------------------------------------------------
+// EMPLOYEES, ATTENDANCE & PAYROLL
+// -----------------------------------------------------------------------------
+
+model Employee {
+  id                String         @id @default(uuid()) @db.Uuid
+  code              String         @unique @db.VarChar(20) // AZE-0001
+  name              String         @db.VarChar(120)
+  fatherName        String?        @db.VarChar(120)
+  contactNumber     String?        @db.VarChar(20)
+  address           String?        @db.VarChar(300)
+  cnic              String?        @unique @db.VarChar(15) // 12345-1234567-1
+  joiningDate       DateTime       @db.Date
+  leavingDate       DateTime?      @db.Date
+  designation       String?        @db.VarChar(80)
+  employeeType      EmployeeType
+  employmentType    EmploymentType @default(PERMANENT)
+  bankName          String?        @db.VarChar(80)
+  bankAccountTitle  String?        @db.VarChar(120)
+  bankAccountNumber String?        @db.VarChar(40)
+  status            EmployeeStatus @default(ACTIVE)
+  notes             String?
+  version           Int            @default(1)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deletedAt         DateTime?
+
+  user               User?
+  salaryStructures   SalaryStructure[]
+  employmentHistory  EmploymentHistory[]
+  attendance         Attendance[]
+  leaves             LeaveRecord[]
+  overtime           OvertimeRecord[]
+  advances           EmployeeAdvance[]
+  payrollItems       PayrollItem[]
+  salaryPayments     SalaryPayment[]
+  assignments        EmployeeAssignment[]
+  productionRecords  ProductionRecord[]
+  ordersAssigned     Order[]              @relation("OrderAssignedEmployee")
+  orderItemsAssigned OrderItem[]          @relation("OrderItemAssignedEmployee")
+  journalLines       JournalEntryLine[]
+
+  @@index([name])
+  @@index([status])
+  @@map("employees")
+}
+
+/// Salary history: a new row per change, never edited in place.
+model SalaryStructure {
+  id                  String     @id @default(uuid()) @db.Uuid
+  employeeId          String     @db.Uuid
+  salaryType          SalaryType
+  monthlySalary       Decimal    @default(0) @db.Decimal(14, 2)
+  dailyWage           Decimal    @default(0) @db.Decimal(14, 2)
+  perPieceRate        Decimal    @default(0) @db.Decimal(14, 2)
+  overtimeRatePerHour Decimal    @default(0) @db.Decimal(14, 2)
+  effectiveFrom       DateTime   @db.Date
+  effectiveTo         DateTime?  @db.Date
+  isCurrent           Boolean    @default(true)
+  reason              String?
+  createdById         String?    @db.Uuid
+  createdAt           DateTime   @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, effectiveFrom])
+  @@map("salary_structures")
+}
+
+model EmploymentHistory {
+  id            String   @id @default(uuid()) @db.Uuid
+  employeeId    String   @db.Uuid
+  changeType    String   @db.VarChar(40) // DESIGNATION, STATUS, TYPE ...
+  fromValue     String?  @db.VarChar(120)
+  toValue       String?  @db.VarChar(120)
+  effectiveDate DateTime @db.Date
+  notes         String?
+  createdById   String?  @db.Uuid
+  createdAt     DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+  @@map("employment_history")
+}
+
+model Attendance {
+  id               String           @id @default(uuid()) @db.Uuid
+  employeeId       String           @db.Uuid
+  date             DateTime         @db.Date
+  status           AttendanceStatus
+  checkIn          DateTime?
+  checkOut         DateTime?
+  isLate           Boolean          @default(false)
+  lateMinutes      Int              @default(0)
+  isEarlyDeparture Boolean          @default(false)
+  earlyMinutes     Int              @default(0)
+  overtimeMinutes  Int              @default(0)
+  notes            String?
+  version          Int              @default(1)
+  createdById      String?          @db.Uuid
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@map("attendance")
+}
+
+model LeaveRecord {
+  id           String         @id @default(uuid()) @db.Uuid
+  employeeId   String         @db.Uuid
+  leaveType    LeaveType
+  fromDate     DateTime       @db.Date
+  toDate       DateTime       @db.Date
+  days         Decimal        @db.Decimal(5, 1)
+  reason       String?
+  status       ApprovalStatus @default(PENDING)
+  approvedById String?        @db.Uuid
+  approvedAt   DateTime?
+  createdAt    DateTime       @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, fromDate])
+  @@map("leave_records")
+}
+
+model OvertimeRecord {
+  id            String         @id @default(uuid()) @db.Uuid
+  employeeId    String         @db.Uuid
+  date          DateTime       @db.Date
+  hours         Decimal        @db.Decimal(5, 2)
+  ratePerHour   Decimal        @db.Decimal(14, 2)
+  amount        Decimal        @db.Decimal(14, 2)
+  status        ApprovalStatus @default(PENDING)
+  payrollItemId String?        @db.Uuid
+  notes         String?
+  createdById   String?        @db.Uuid
+  createdAt     DateTime       @default(now())
+
+  employee    Employee     @relation(fields: [employeeId], references: [id])
+  payrollItem PayrollItem? @relation(fields: [payrollItemId], references: [id])
+
+  @@index([employeeId, date])
+  @@map("overtime_records")
+}
+
+model EmployeeAdvance {
+  id                String        @id @default(uuid()) @db.Uuid
+  advanceNo         String        @unique @db.VarChar(30)
+  employeeId        String        @db.Uuid
+  advanceDate       DateTime      @db.Date
+  amount            Decimal       @db.Decimal(14, 2)
+  recoveredAmount   Decimal       @default(0) @db.Decimal(14, 2)
+  balanceAmount     Decimal       @db.Decimal(14, 2)
+  installmentAmount Decimal       @default(0) @db.Decimal(14, 2)
+  paymentMethod     PaymentMethod @default(CASH)
+  status            AdvanceStatus @default(OPEN)
+  reason            String?
+  idempotencyKey    String        @unique @db.VarChar(120)
+  createdById       String?       @db.Uuid
+  createdAt         DateTime      @default(now())
+
+  employee   Employee          @relation(fields: [employeeId], references: [id])
+  recoveries AdvanceRecovery[]
+
+  @@index([employeeId, status])
+  @@map("employee_advances")
+}
+
+model AdvanceRecovery {
+  id            String   @id @default(uuid()) @db.Uuid
+  advanceId     String   @db.Uuid
+  payrollItemId String?  @db.Uuid
+  amount        Decimal  @db.Decimal(14, 2)
+  recoveryDate  DateTime @db.Date
+  createdAt     DateTime @default(now())
+
+  advance     EmployeeAdvance @relation(fields: [advanceId], references: [id])
+  payrollItem PayrollItem?    @relation(fields: [payrollItemId], references: [id])
+
+  @@unique([advanceId, payrollItemId])
+  @@map("advance_recoveries")
+}
+
+model Payroll {
+  id              String        @id @default(uuid()) @db.Uuid
+  payrollNo       String        @unique @db.VarChar(30)
+  periodKey       String        @unique @db.VarChar(10) // "2026-11" - one payroll run per month
+  periodStart     DateTime      @db.Date
+  periodEnd       DateTime      @db.Date
+  status          PayrollStatus @default(DRAFT)
+  totalGross      Decimal       @default(0) @db.Decimal(14, 2)
+  totalDeductions Decimal       @default(0) @db.Decimal(14, 2)
+  totalNet        Decimal       @default(0) @db.Decimal(14, 2)
+  totalPaid       Decimal       @default(0) @db.Decimal(14, 2)
+  approvedById    String?       @db.Uuid
+  approvedAt      DateTime?
+  notes           String?
+  createdById     String?       @db.Uuid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  approvedBy User?         @relation(fields: [approvedById], references: [id])
+  items      PayrollItem[]
+
+  @@map("payrolls")
+}
+
+model PayrollItem {
+  id               String     @id @default(uuid()) @db.Uuid
+  payrollId        String     @db.Uuid
+  employeeId       String     @db.Uuid
+  periodKey        String     @db.VarChar(10)
+  salaryType       SalaryType
+  basicAmount      Decimal    @default(0) @db.Decimal(14, 2)
+  presentDays      Decimal    @default(0) @db.Decimal(5, 1)
+  absentDays       Decimal    @default(0) @db.Decimal(5, 1)
+  completedPieces  Int        @default(0)
+  pieceAmount      Decimal    @default(0) @db.Decimal(14, 2)
+  overtimeAmount   Decimal    @default(0) @db.Decimal(14, 2)
+  incentives       Decimal    @default(0) @db.Decimal(14, 2)
+  bonus            Decimal    @default(0) @db.Decimal(14, 2)
+  absenceDeduction Decimal    @default(0) @db.Decimal(14, 2)
+  advanceDeduction Decimal    @default(0) @db.Decimal(14, 2)
+  otherDeductions  Decimal    @default(0) @db.Decimal(14, 2)
+  grossAmount      Decimal    @default(0) @db.Decimal(14, 2)
+  netAmount        Decimal    @default(0) @db.Decimal(14, 2)
+  paidAmount       Decimal    @default(0) @db.Decimal(14, 2)
+  notes            String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  payroll           Payroll            @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  employee          Employee           @relation(fields: [employeeId], references: [id])
+  productionRecords ProductionRecord[]
+  overtimeRecords   OvertimeRecord[]
+  advanceRecoveries AdvanceRecovery[]
+  payments          SalaryPayment[]
+
+  @@unique([employeeId, periodKey]) // never two payrolls for the same employee & period
+  @@map("payroll_items")
+}
+
+model SalaryPayment {
+  id             String            @id @default(uuid()) @db.Uuid
+  paymentNo      String            @unique @db.VarChar(30)
+  payrollItemId  String            @db.Uuid
+  employeeId     String            @db.Uuid
+  paymentDate    DateTime          @db.Date
+  amount         Decimal           @db.Decimal(14, 2)
+  method         PaymentMethod
+  reference      String?           @db.VarChar(100)
+  idempotencyKey String            @unique @db.VarChar(120)
+  status         TransactionStatus @default(POSTED)
+  createdById    String?           @db.Uuid
+  createdAt      DateTime          @default(now())
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id])
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, paymentDate])
+  @@map("salary_payments")
+}
+
+// -----------------------------------------------------------------------------
+// EXPENSES
+// -----------------------------------------------------------------------------
+
+model ExpenseCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(80)
+  accountId String?  @db.Uuid // expense account in chart of accounts
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account   ChartOfAccount?    @relation(fields: [accountId], references: [id])
+  expenses  Expense[]
+  recurring RecurringExpense[]
+
+  @@map("expense_categories")
+}
+
+model Expense {
+  id                 String        @id @default(uuid()) @db.Uuid
+  expenseNo          String        @unique @db.VarChar(30)
+  expenseDate        DateTime      @db.Date
+  categoryId         String        @db.Uuid
+  description        String        @db.VarChar(300)
+  amount             Decimal       @db.Decimal(14, 2)
+  paymentMethod      PaymentMethod
+  paidTo             String?       @db.VarChar(120)
+  reference          String?       @db.VarChar(100)
+  notes              String?
+  status             ExpenseStatus @default(APPROVED)
+  approvedById       String?       @db.Uuid
+  approvedAt         DateTime?
+  recurringExpenseId String?       @db.Uuid
+  idempotencyKey     String        @unique @db.VarChar(120)
+  version            Int           @default(1)
+  createdById        String?       @db.Uuid
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  deletedAt          DateTime?
+
+  category         ExpenseCategory   @relation(fields: [categoryId], references: [id])
+  recurringExpense RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
+  createdBy        User?             @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  approvedBy       User?             @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+
+  @@index([expenseDate])
+  @@index([categoryId, expenseDate])
+  @@map("expenses")
+}
+
+model RecurringExpense {
+  id            String              @id @default(uuid()) @db.Uuid
+  categoryId    String              @db.Uuid
+  description   String              @db.VarChar(300)
+  amount        Decimal             @db.Decimal(14, 2)
+  paymentMethod PaymentMethod       @default(CASH)
+  frequency     RecurrenceFrequency
+  dayOfMonth    Int?
+  nextRunDate   DateTime            @db.Date
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  category ExpenseCategory @relation(fields: [categoryId], references: [id])
+  expenses Expense[]
+
+  @@map("recurring_expenses")
+}
+
+// -----------------------------------------------------------------------------
+// CUSTOMER PAYMENTS & LEDGER
+// -----------------------------------------------------------------------------
+
+model Payment {
+  id             String              @id @default(uuid()) @db.Uuid
+  receiptNo      String              @unique @db.VarChar(30)
+  customerId     String              @db.Uuid
+  orderId        String?             @db.Uuid
+  paymentDate    DateTime            @default(now())
+  amount         Decimal             @db.Decimal(14, 2) // always positive; REFUND type reduces paid
+  method         PaymentMethod
+  type           CustomerPaymentType
+  reference      String?             @db.VarChar(100)
+  idempotencyKey String              @unique @db.VarChar(120)
+  status         TransactionStatus   @default(POSTED)
+  reversalOfId   String?             @unique @db.Uuid
+  notes          String?
+  createdById    String?             @db.Uuid
+  createdAt      DateTime            @default(now())
+
+  customer   Customer @relation(fields: [customerId], references: [id])
+  order      Order?   @relation(fields: [orderId], references: [id])
+  reversalOf Payment? @relation("PaymentReversal", fields: [reversalOfId], references: [id])
+  reversedBy Payment? @relation("PaymentReversal")
+  createdBy  User?    @relation(fields: [createdById], references: [id])
+
+  @@index([customerId, paymentDate])
+  @@index([orderId])
+  @@index([paymentDate])
+  @@map("payments")
+}
+
+/// Customer sub-ledger. Debit = customer owes more, Credit = customer paid / owes less.
+model CustomerLedger {
+  id            String          @id @default(uuid()) @db.Uuid
+  customerId    String          @db.Uuid
+  entryDate     DateTime        @db.Date
+  entryType     LedgerEntryType
+  referenceType String          @db.VarChar(40)
+  referenceId   String          @db.Uuid
+  description   String?
+  debit         Decimal         @default(0) @db.Decimal(14, 2)
+  credit        Decimal         @default(0) @db.Decimal(14, 2)
+  createdAt     DateTime        @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([referenceType, referenceId, entryType])
+  @@index([customerId, entryDate])
+  @@map("customer_ledger")
+}
+
+// -----------------------------------------------------------------------------
+// ACCOUNTING (double entry)
+// -----------------------------------------------------------------------------
+
+model ChartOfAccount {
+  id            String      @id @default(uuid()) @db.Uuid
+  code          String      @unique @db.VarChar(20) // 1000 Cash, 4000 Stitching Revenue ...
+  name          String      @db.VarChar(120)
+  type          AccountType
+  subType       String?     @db.VarChar(40) // CURRENT_ASSET, COGS, DIRECT_LABOUR, OPERATING_EXPENSE ...
+  normalBalance BalanceSide
+  parentId      String?     @db.Uuid
+  isSystem      Boolean     @default(false)
+  isActive      Boolean     @default(true)
+  description   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  parent            ChartOfAccount?    @relation("AccountTree", fields: [parentId], references: [id])
+  children          ChartOfAccount[]   @relation("AccountTree")
+  lines             JournalEntryLine[]
+  expenseCategories ExpenseCategory[]
+
+  @@index([type])
+  @@map("chart_of_accounts")
+}
+
+model AccountingPeriod {
+  id         String       @id @default(uuid()) @db.Uuid
+  name       String       @unique @db.VarChar(40) // "Nov 2026"
+  startDate  DateTime     @db.Date
+  endDate    DateTime     @db.Date
+  status     PeriodStatus @default(OPEN)
+  closedById String?      @db.Uuid
+  closedAt   DateTime?
+  createdAt  DateTime     @default(now())
+
+  journalEntries JournalEntry[]
+
+  @@unique([startDate, endDate])
+  @@map("accounting_periods")
+}
+
+/// Posted entries are immutable (DB trigger); corrections use a reversal entry.
+model JournalEntry {
+  id           String        @id @default(uuid()) @db.Uuid
+  entryNo      String        @unique @db.VarChar(30)
+  entryDate    DateTime      @db.Date
+  periodId     String?       @db.Uuid
+  description  String        @db.VarChar(300)
+  sourceType   JournalSource
+  sourceId     String?       @db.Uuid
+  sourceKey    String?       @unique @db.VarChar(120) // e.g. "PAYMENT:<id>" - prevents double posting
+  status       JournalStatus @default(DRAFT)
+  totalDebit   Decimal       @default(0) @db.Decimal(14, 2)
+  totalCredit  Decimal       @default(0) @db.Decimal(14, 2)
+  reversalOfId String?       @unique @db.Uuid
+  postedAt     DateTime?
+  postedById   String?       @db.Uuid
+  createdById  String?       @db.Uuid
+  createdAt    DateTime      @default(now())
+
+  period     AccountingPeriod?  @relation(fields: [periodId], references: [id])
+  reversalOf JournalEntry?      @relation("JournalReversal", fields: [reversalOfId], references: [id])
+  reversedBy JournalEntry?      @relation("JournalReversal")
+  createdBy  User?              @relation("JournalCreatedBy", fields: [createdById], references: [id])
+  postedBy   User?              @relation("JournalPostedBy", fields: [postedById], references: [id])
+  lines      JournalEntryLine[]
+
+  @@index([entryDate])
+  @@index([sourceType, sourceId])
+  @@map("journal_entries")
+}
+
+model JournalEntryLine {
+  id             String  @id @default(uuid()) @db.Uuid
+  journalEntryId String  @db.Uuid
+  lineNo         Int
+  accountId      String  @db.Uuid
+  debit          Decimal @default(0) @db.Decimal(14, 2)
+  credit         Decimal @default(0) @db.Decimal(14, 2)
+  description    String? @db.VarChar(300)
+  customerId     String? @db.Uuid
+  supplierId     String? @db.Uuid
+  employeeId     String? @db.Uuid
+
+  journalEntry JournalEntry   @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+  account      ChartOfAccount @relation(fields: [accountId], references: [id])
+  customer     Customer?      @relation(fields: [customerId], references: [id])
+  supplier     Supplier?      @relation(fields: [supplierId], references: [id])
+  employee     Employee?      @relation(fields: [employeeId], references: [id])
+
+  @@unique([journalEntryId, lineNo])
+  @@index([accountId])
+  @@map("journal_entry_lines")
+}
+
+// -----------------------------------------------------------------------------
+// WHATSAPP (official Meta Cloud API)
+// -----------------------------------------------------------------------------
+
+model WhatsAppTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(100) // Meta template name
+  language    String   @default("en") @db.VarChar(10)
+  category    String   @db.VarChar(30) // UTILITY, MARKETING ...
+  purpose     String   @db.VarChar(40) // ORDER_CONFIRMATION, ORDER_READY ...
+  bodyPreview String
+  variables   Json     @default("[]")
+  metaStatus  String?  @db.VarChar(30)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  messages WhatsAppMessage[]
+
+  @@unique([name, language])
+  @@map("whatsapp_templates")
+}
+
+model WhatsAppMessage {
+  id           String         @id @default(uuid()) @db.Uuid
+  customerId   String?        @db.Uuid
+  toNumber     String         @db.VarChar(20)
+  templateId   String?        @db.Uuid
+  channel      MessageChannel @default(CLOUD_API)
+  messageType  String         @db.VarChar(20) // TEMPLATE | TEXT | DOCUMENT
+  body         String?
+  payload      Json?
+  status       MessageStatus  @default(QUEUED)
+  waMessageId  String?        @unique @db.VarChar(120)
+  attempts     Int            @default(0)
+  nextRetryAt  DateTime?
+  errorCode    String?        @db.VarChar(40)
+  errorMessage String?
+  relatedType  String?        @db.VarChar(40)
+  relatedId    String?        @db.Uuid
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  failedAt     DateTime?
+  createdById  String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  customer Customer?         @relation(fields: [customerId], references: [id])
+  template WhatsAppTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([status, nextRetryAt])
+  @@index([customerId])
+  @@map("whatsapp_messages")
+}
+
+model WhatsAppWebhookEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  payload    Json
+  processed  Boolean  @default(false)
+  error      String?
+  receivedAt DateTime @default(now())
+
+  @@index([processed])
+  @@map("whatsapp_webhook_events")
+}
