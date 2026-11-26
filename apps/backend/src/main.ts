@@ -1,4 +1,10 @@
 import 'reflect-metadata';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
+
+// Load apps/backend/.env (Node 22 built-in). Real environment variables always win.
+const envFile = resolve(__dirname, '..', '.env');
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 import { Logger } from '@nestjs/common';
 import { createApp } from './app.factory';
 import { env } from './config/env';

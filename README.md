@@ -21,7 +21,7 @@ docs/            Roadmap, ER diagram, database, testing, deployment, phase repor
 ```
 
 ## Local development
-Requirements: Node.js 22+, pnpm 10, PostgreSQL 16.
+Requirements: Node.js 22+, pnpm 10, PostgreSQL 16. **Windows step-by-step: `docs/RUN-ON-WINDOWS.md`.**
 
 ```bash
 pnpm install
