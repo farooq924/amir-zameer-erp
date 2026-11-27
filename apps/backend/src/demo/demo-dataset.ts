@@ -192,3 +192,53 @@ export function bodyMeasurements(chest: number, height: 'S' | 'M' | 'L'): Record
     sleeve: 24 + h * 0.5, collar: 15.5 + (chest - 40) * 0.2, rise: 11,
   };
 }
+
+// ------------------------------------------------------------------ Phase 6/7: shop expenses, owner capital, saved report filters
+
+/** [category, description, paid to, method, amount, bill / reference]. Monthly bills are made on these days of every demo month. */
+export const DEMO_MONTHLY_EXPENSES: { day: number; category: string; description: string; paidTo: string; method: 'CASH' | 'BANK_TRANSFER' | 'MOBILE_WALLET'; amounts: string[]; reference?: string }[] = [
+  { day: 1, category: 'Shop Rent', description: 'Shop rent, Shop 14 Tariq Road', paidTo: 'Haji Abdul Ghaffar (landlord)', method: 'BANK_TRANSFER', amounts: ['85000'], reference: 'Meezan IBFT' },
+  { day: 3, category: 'Cleaning & Security', description: 'Chowkidar and sweeper monthly', paidTo: 'Gul Khan (chowkidar)', method: 'CASH', amounts: ['6000'] },
+  { day: 7, category: 'Internet & Phone', description: 'StormFiber internet 15 Mbps', paidTo: 'StormFiber', method: 'MOBILE_WALLET', amounts: ['3499'], reference: 'JazzCash bill payment' },
+  { day: 9, category: 'Electricity', description: 'K-Electric bill (shop meter)', paidTo: 'K-Electric', method: 'BANK_TRANSFER', amounts: ['21840', '18460', '24115'], reference: 'KE consumer 0400012345678' },
+  { day: 11, category: 'Gas', description: 'SSGC bill', paidTo: 'Sui Southern Gas Company', method: 'CASH', amounts: ['2150', '1980', '2430'] },
+  { day: 12, category: 'Water', description: 'KW&SC water charges', paidTo: 'Karachi Water & Sewerage Corp.', method: 'CASH', amounts: ['1200'] },
+];
+
+/** Day-to-day expenses: [days ago, category, description, paid to, method, amount]. */
+export const DEMO_DAILY_EXPENSES: [number, string, string, string, 'CASH' | 'MOBILE_WALLET' | 'BANK_TRANSFER', string][] = [
+  [58, 'Tailoring Accessories', 'Thread cones, buttons and interlining', 'Al-Madina Accessories, Jama Cloth Market', 'CASH', '7850'],
+  [55, 'Staff Food & Tea', 'Doodh patti chai for staff (week)', 'Quetta Hotel, Tariq Road', 'CASH', '1400'],
+  [52, 'Transport & Delivery', 'Bykea parcel delivery to DHA Phase 6', 'Bykea', 'MOBILE_WALLET', '420'],
+  [50, 'Generator Fuel', 'Petrol for generator (load shedding)', 'PSO, Shahrah-e-Faisal', 'CASH', '2850'],
+  [47, 'Stationery & Printing', 'Order receipt books (5) and job cards', 'Saddar Printing Press', 'CASH', '1800'],
+  [45, 'Repairs & Maintenance', 'Juki machine service and needle plate', 'Bilal Sewing Machine Repair', 'CASH', '3500'],
+  [41, 'Staff Food & Tea', 'Doodh patti chai for staff (week)', 'Quetta Hotel, Tariq Road', 'CASH', '1350'],
+  [38, 'Marketing', 'Facebook page boost (Eid collection)', 'Meta Ads', 'BANK_TRANSFER', '3000'],
+  [36, 'Transport & Delivery', 'Rickshaw to Jama Cloth Market and back', 'Rickshaw', 'CASH', '600'],
+  [33, 'Tailoring Accessories', 'Collar canvas, kaj thread and labels', 'Al-Madina Accessories, Jama Cloth Market', 'CASH', '5400'],
+  [30, 'Bank Charges', 'IBFT and SMS alert charges', 'Meezan Bank', 'BANK_TRANSFER', '150'],
+  [27, 'Staff Food & Tea', 'Biryani lunch for staff (big order finished)', 'Student Biryani, Tariq Road', 'CASH', '2600'],
+  [24, 'Generator Fuel', 'Petrol for generator (load shedding)', 'Shell, Tariq Road', 'CASH', '3100'],
+  [20, 'Transport & Delivery', 'Bykea delivery to Bahria Town', 'Bykea', 'MOBILE_WALLET', '650'],
+  [17, 'Repairs & Maintenance', 'Steam iron element replaced', 'Raza Electric Works', 'CASH', '1700'],
+  [13, 'Staff Food & Tea', 'Doodh patti chai for staff (week)', 'Quetta Hotel, Tariq Road', 'CASH', '1450'],
+  [10, 'Tailoring Accessories', 'Kurta buttons (fancy) and piping', 'Al-Madina Accessories, Jama Cloth Market', 'CASH', '4300'],
+  [6, 'Miscellaneous', 'Shop signboard light repair', 'Raza Electric Works', 'CASH', '1200'],
+  [3, 'Transport & Delivery', 'Bykea parcel delivery to Clifton', 'Bykea', 'MOBILE_WALLET', '380'],
+];
+
+/** Entered by staff (the demo Manager cannot approve), so they wait for the owner's approval. */
+export const DEMO_PENDING_EXPENSES: [number, string, string, string, 'CASH', string][] = [
+  [1, 'Staff Food & Tea', 'Doodh patti chai for staff (week)', 'Quetta Hotel, Tariq Road', 'CASH', '1500'],
+  [0, 'Stationery & Printing', 'Measurement register and pens', 'Paper Point, Saddar', 'CASH', '950'],
+];
+
+export const DEMO_OWNER_CAPITAL = { cash: '150000', bank: '350000', description: 'Owner capital introduced (cash in hand and Meezan Bank account)' } as const;
+
+/** Saved report filters for the demo login. */
+export const DEMO_SAVED_FILTERS: { reportKey: string; name: string; params: Record<string, string> }[] = [
+  { reportKey: 'delayed-orders', name: 'Late orders (biggest delay first)', params: { sort: 'daysLate', dir: 'desc' } },
+  { reportKey: 'order-register', name: 'Unpaid orders this month', params: { preset: 'this_month', paymentStatus: 'UNPAID' } },
+  { reportKey: 'expense-summary', name: 'Expenses last month', params: { preset: 'last_month' } },
+];

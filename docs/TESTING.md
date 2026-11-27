@@ -49,3 +49,12 @@ It refuses to run against a database whose name does not end in `_test`.
   duplicates; refunds and reversals; expense approval, rejection and cancel; recurring bills; manual journals and reversal; trial balance,
   P&L and balance sheet in balance; month close / reopen / lock; role access; journal clean-up for demo data).
 * Frontend: 5 files, 17 tests; type check and production build clean.
+
+## Phase 7 results (2026-11-27)
+* Backend: 21 suites, 172 tests passed. New `test/phase7-reports.e2e-spec.ts` (11 tests): all 30 reports run for the owner; order register
+  filter, totals, search, sort and paging; customer ledger balance equals the outstanding report; expense reports agree with P&L, trial
+  balance and balance sheet (balanced); bad filters give 400 and unknown reports 404; Excel / CSV / PDF export with the developer footer and
+  an audit entry; CSV formula neutralising; role access (inventory manager sees only stock reports, cashier none); saved filters per user;
+  cancelled orders listed but kept out of the totals.
+* Frontend: 6 files, 20 tests (new report cell formatting test); type check and production build clean.
+* Manual check at 1366 px and 390 px: reports home, viewer, columns, export, saved filters and A4 print. Screenshots in `docs/screenshots/phase-7`.

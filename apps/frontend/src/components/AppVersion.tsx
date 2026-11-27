@@ -11,6 +11,21 @@ export const BUILD_DATE = __BUILD_DATE__;
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
   {
+    version: '1.7.0', title: 'Reports & Exports',
+    notes: [
+      'New Reports page with all 30 business reports in one place, grouped by area',
+      'Sales: daily and monthly sales, stitching revenue, fabric sales, order register, pending, delivered and delayed orders',
+      'Customers: ledger with running balance, outstanding balances and payment report',
+      'Fabric & purchases: stock, stock movements, fabric used on orders, supplier ledger and purchase register',
+      'Staff: attendance, production, salaries, daily wages, advances and overtime',
+      'Expenses register and summary; Profit & Loss, Cash Flow, Balance Sheet, Trial Balance and General Ledger',
+      'Audit log report: who did what and when',
+      'Every report: period and filters, search, sorting, paging, choose columns, totals and summary cards',
+      'Download any report as Excel, CSV or PDF, or print it on A4 (with the developer footer)',
+      'Save your favourite filters and open them again in one click',
+    ],
+  },
+  {
     version: '1.6.0', title: 'Payments, Expenses & Accounting',
     notes: [
       'Payments page: every receipt in one place, receive payment for any order, reverse a wrong receipt',

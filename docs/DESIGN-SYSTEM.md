@@ -52,3 +52,11 @@ Payment: Unpaid = `danger`, Partly paid = `warning`, Paid = `success`, Credit = 
 ## Printing
 * Every printed document ends with the developer footer: `<PrintFooter />` from `@/components/PrintFooter`
   (`variant="receipt"` on 58/80 mm thermal receipts). App pages printed with `window.print()` get it from the layout automatically.
+
+## Reports (Phase 7)
+* Every report uses one viewer (`pages/ReportViewerPage.tsx`): header with Saved / Columns / Export (navy) / Print (gold), a filter card,
+  stat cards, then a sortable table on desktop and a card list on phones (filters fold behind a "Filters" button).
+* Cell formatting and status badges come from `features/reports/shared.tsx` (`cellText`, `Cell`, `reportStatusTone` in `@az/shared`);
+  minus money is shown in red. New reports only add a definition in `packages/shared/src/reports.ts` and a builder in the backend.
+* Report print (`/print/reports/:key`) is A4, landscape when more than 6 columns, navy table header and `<PrintFooter />`.
+  Excel, CSV and PDF exports carry the same footer text.

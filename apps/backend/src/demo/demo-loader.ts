@@ -6,7 +6,9 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { RequestContext } from '../common/types/auth-user';
 import { karachiToday } from '../common/utils/date-range';
 import { AttendanceService } from '../modules/attendance/attendance.service';
+import { AccountingService } from '../modules/accounting/accounting.service';
 import { PostingService } from '../modules/accounting/posting.service';
+import { ExpensesService } from '../modules/expenses/expenses.service';
 import { purgeJournalsFor } from '../modules/accounting/purge-journals';
 import { PasswordService } from '../modules/auth/password.service';
 import { CustomersService } from '../modules/customers/customers.service';
@@ -20,7 +22,7 @@ import { PurchasesService } from '../modules/purchases/purchases.service';
 import { SettingsService } from '../modules/settings/settings.service';
 import { SuppliersService } from '../modules/suppliers/suppliers.service';
 import {
-  DEMO_CUSTOMERS, DEMO_EMPLOYEES, DEMO_FABRICS, DEMO_NOTE, DEMO_PURCHASES, DEMO_SETTING_KEY, DEMO_SUPPLIERS, DEMO_SUPPLIER_PAYMENTS, DEMO_USER,
+  DEMO_CUSTOMERS, DEMO_DAILY_EXPENSES, DEMO_EMPLOYEES, DEMO_MONTHLY_EXPENSES, DEMO_OWNER_CAPITAL, DEMO_PENDING_EXPENSES, DEMO_SAVED_FILTERS, DEMO_FABRICS, DEMO_NOTE, DEMO_PURCHASES, DEMO_SETTING_KEY, DEMO_SUPPLIERS, DEMO_SUPPLIER_PAYMENTS, DEMO_USER,
   FABRIC_PER_PIECE, GARMENT_PRICES, SPECIAL_INSTRUCTIONS, bodyMeasurements,
 } from './demo-dataset';
 
@@ -35,6 +37,11 @@ export interface DemoManifest {
   fabrics: string[];
   employees: string[];
   payrolls: string[];
+  /** Added in v1.7.0 (older manifests do not have them). */
+  expenses?: string[];
+  recurring?: string[];
+  journals?: string[];
+  savedFilters?: boolean;
 }
 
 export async function readManifest(prisma: PrismaService): Promise<DemoManifest | null> {
@@ -126,6 +133,8 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   const payrollSvc = get(PayrollService);
   const settingsSvc = get(SettingsService);
   const passwords = get(PasswordService);
+  const expensesSvc = get(ExpensesService);
+  const accountingSvc = get(AccountingService);
 
   const existing = await readManifest(prisma);
   if (existing?.complete) return { status: 'already-loaded', counts: countsOf(existing), notes: ['Demo data is already loaded. Nothing was changed.'] };
@@ -139,7 +148,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   const prevMonthStart = `${addDays(`${thisMonth}-01`, -1).slice(0, 7)}-01`;
   const prevMonth = prevMonthStart.slice(0, 7);
 
-  const manifest: DemoManifest = { version: 1, complete: false, loadedAt: new Date().toISOString(), userId: null, customers: [], suppliers: [], fabrics: [], employees: [], payrolls: [] };
+  const manifest: DemoManifest = { version: 1, complete: false, loadedAt: new Date().toISOString(), userId: null, customers: [], suppliers: [], fabrics: [], employees: [], payrolls: [], expenses: [], recurring: [], journals: [] };
 
   // ---------------------------------------------------------------- 1. demo login
   const role = await prisma.role.findUnique({ where: { code: DEMO_USER.roleCode } });
@@ -573,6 +582,61 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
     });
   }
 
+  // ---------------------------------------------------------------- owner capital and shop expenses (books + expense reports)
+  const accountId = async (code: string) => (await prisma.chartOfAccount.findUnique({ where: { code } }))?.id;
+  add(at(addDays(setupDay, -1), '09:00'), 'owner capital', async () => {
+    const [cash, bank, capital] = await Promise.all([accountId('1000'), accountId('1010'), accountId('3000')]);
+    if (!cash || !bank || !capital) { notes.push('Owner capital was not added: the standard accounts are missing.'); return; }
+    if (lockedMonths.has(addDays(setupDay, -1).slice(0, 7))) return;
+    const j = await accountingSvc.createManual({
+      entryDate: addDays(setupDay, -1), description: `${DEMO_NOTE} ${DEMO_OWNER_CAPITAL.description}`, idempotencyKey: randomUUID(),
+      lines: [
+        { accountId: cash, debit: DEMO_OWNER_CAPITAL.cash, description: 'Cash in hand' },
+        { accountId: bank, debit: DEMO_OWNER_CAPITAL.bank, description: 'Meezan Bank' },
+        { accountId: capital, credit: String(Number(DEMO_OWNER_CAPITAL.cash) + Number(DEMO_OWNER_CAPITAL.bank)), description: "Owner's capital" },
+      ],
+    } as never, ctx);
+    manifest.journals!.push(j.id);
+    await saveManifest(prisma, manifest);
+  });
+  const expenseCats = new Map((await prisma.expenseCategory.findMany({ where: { isActive: true } })).map((c) => [c.name, c.id]));
+  const approver = { id: user.id, fullName: user.fullName, email: user.email, username: user.username, isOwner: true, roles: [], permissions: [], sessionId: '' };
+  const staff = { ...approver, isOwner: false, permissions: ['expenses.view', 'expenses.create'] };
+  const addExpense = (date: string, time: string, category: string, description: string, paidTo: string, method: string, amount: string, reference: string | undefined, pending = false) => {
+    const categoryId = expenseCats.get(category);
+    if (!categoryId || !monthOpen(date)) return;
+    add(at(date, time), `expense ${description}`, async () => {
+      const x = await expensesSvc.create({
+        expenseDate: date, categoryId, description, paidTo, paymentMethod: method, amount, reference, notes: DEMO_NOTE, idempotencyKey: randomUUID(),
+      } as never, (pending ? staff : approver) as never, ctx);
+      manifest.expenses!.push(x.id);
+      await saveManifest(prisma, manifest);
+    });
+  };
+  for (let m = setupDay.slice(0, 7); m <= thisMonth; m = nextMonthKey(m)) {
+    DEMO_MONTHLY_EXPENSES.forEach((e, i) => {
+      const date = `${m}-${String(e.day).padStart(2, '0')}`;
+      if (date < setupDay || date > today) return;
+      addExpense(date, '12:00', e.category, `${e.description} (${monthName(m)})`, e.paidTo, e.method, e.amounts[(i + Number(m.slice(5))) % e.amounts.length], e.reference);
+    });
+  }
+  for (const [ago, cat, desc, to, method, amount] of DEMO_DAILY_EXPENSES) addExpense(day(ago), '18:30', cat, desc, to, method, amount, undefined);
+  for (const [ago, cat, desc, to, method, amount] of DEMO_PENDING_EXPENSES) addExpense(day(ago), '19:00', cat, desc, to, method, amount, undefined, true);
+  add(at(today, '08:30'), 'recurring bills', async () => {
+    const next = `${nextMonthKey(thisMonth)}-01`;
+    for (const r of [
+      { category: 'Shop Rent', description: 'Shop rent, Shop 14 Tariq Road', amount: '85000', paymentMethod: 'BANK_TRANSFER', nextRunDate: next },
+      { category: 'Internet & Phone', description: 'StormFiber internet 15 Mbps', amount: '3499', paymentMethod: 'MOBILE_WALLET', nextRunDate: `${nextMonthKey(thisMonth)}-07` },
+      { category: 'Cleaning & Security', description: 'Chowkidar and sweeper monthly', amount: '6000', paymentMethod: 'CASH', nextRunDate: `${nextMonthKey(thisMonth)}-03` },
+    ]) {
+      const categoryId = expenseCats.get(r.category);
+      if (!categoryId) continue;
+      const row = await expensesSvc.createRecurring({ categoryId, description: `${r.description} ${DEMO_NOTE}`, amount: r.amount, paymentMethod: r.paymentMethod, frequency: 'MONTHLY', nextRunDate: r.nextRunDate } as never, ctx);
+      if (row) manifest.recurring!.push(row.id);
+    }
+    await saveManifest(prisma, manifest);
+  });
+
   // ---------------------------------------------------------------- run in time order
   steps.sort((a, b) => a.when.getTime() - b.when.getTime());
   const done = new Set<string>();
@@ -614,6 +678,17 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   const books = await posting.sync();
   if (books.failed.length) notes.push(`${books.failed.length} accounting entries could not be posted (for example a closed month). See Accounting > Sync.`);
 
+  // Saved report filters for the demo login (Reports > Saved).
+  await prisma.systemSetting.upsert({
+    where: { key: `reports.saved_filters.${user.id}` },
+    create: {
+      key: `reports.saved_filters.${user.id}`, group: 'report_filters', description: 'Saved report filters', updatedById: user.id,
+      value: DEMO_SAVED_FILTERS.map((f) => ({ id: randomUUID(), ...f, createdAt: new Date().toISOString() })) as unknown as Prisma.InputJsonValue,
+    },
+    update: {},
+  });
+  manifest.savedFilters = true;
+
   manifest.complete = true;
   await saveManifest(prisma, manifest);
   const counts = countsOf(manifest);
@@ -622,5 +697,17 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
 }
 
 function countsOf(m: DemoManifest): Record<string, number> {
-  return { customers: m.customers.length, suppliers: m.suppliers.length, fabrics: m.fabrics.length, employees: m.employees.length, payrolls: m.payrolls.length };
+  return {
+    customers: m.customers.length, suppliers: m.suppliers.length, fabrics: m.fabrics.length, employees: m.employees.length, payrolls: m.payrolls.length,
+    expenses: m.expenses?.length ?? 0,
+  };
+}
+
+function nextMonthKey(key: string) {
+  const [y, mo] = key.split('-').map(Number);
+  return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
+}
+function monthName(key: string) {
+  const [y, mo] = key.split('-').map(Number);
+  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][mo - 1]} ${y}`;
 }

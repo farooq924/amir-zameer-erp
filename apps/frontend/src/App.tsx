@@ -12,6 +12,9 @@ import { AccountLedgerPage } from '@/pages/AccountLedgerPage';
 import { ExpensesPage } from '@/pages/ExpensesPage';
 import { ExpenseVoucherPrintPage } from '@/pages/ExpenseVoucherPrintPage';
 import { PaymentsPage } from '@/pages/PaymentsPage';
+import { ReportPrintPage } from '@/pages/ReportPrintPage';
+import { ReportsPage } from '@/pages/ReportsPage';
+import { ReportViewerPage } from '@/pages/ReportViewerPage';
 import { EmployeeDetailPage } from '@/pages/EmployeeDetailPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
 import { PayrollDetailPage } from '@/pages/PayrollDetailPage';
@@ -57,7 +60,7 @@ function RequirePermission({ module, action = 'VIEW', children }: { module: stri
   return hasPermission(user, module, action) ? <>{children}</> : <ForbiddenPage />;
 }
 
-const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers', 'employees', 'attendance', 'payroll', 'production', 'payments', 'expenses', 'accounting']);
+const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers', 'employees', 'attendance', 'payroll', 'production', 'payments', 'expenses', 'accounting', 'reports']);
 
 /** Remount the order form on every navigation so "Book another order" starts clean. */
 function OrderFormRoute() {
@@ -77,6 +80,7 @@ export function App() {
       <Route path="/print/payslips/:id" element={<RequireAuth><RequirePermission module="payroll" action="PRINT"><PayslipPrintPage /></RequirePermission></RequireAuth>} />
       <Route path="/print/payroll/:id" element={<RequireAuth><RequirePermission module="payroll" action="PRINT"><PayrollPrintPage /></RequirePermission></RequireAuth>} />
       <Route path="/print/expenses/:id" element={<RequireAuth><RequirePermission module="expenses" action="PRINT"><ExpenseVoucherPrintPage /></RequirePermission></RequireAuth>} />
+      <Route path="/print/reports/:key" element={<RequireAuth><RequirePermission module="reports" action="PRINT"><ReportPrintPage /></RequirePermission></RequireAuth>} />
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<RequirePermission module="dashboard"><DashboardPage /></RequirePermission>} />
         <Route path="settings" element={<RequirePermission module="settings"><SettingsPage /></RequirePermission>} />
@@ -107,6 +111,8 @@ export function App() {
         <Route path="expenses" element={<RequirePermission module="expenses"><ExpensesPage /></RequirePermission>} />
         <Route path="accounting" element={<RequirePermission module="accounting"><AccountingPage /></RequirePermission>} />
         <Route path="accounting/accounts/:id" element={<RequirePermission module="accounting"><AccountLedgerPage /></RequirePermission>} />
+        <Route path="reports" element={<RequirePermission module="reports"><ReportsPage /></RequirePermission>} />
+        <Route path="reports/:key" element={<RequirePermission module="reports"><ReportViewerPage /></RequirePermission>} />
         <Route path="audit-logs" element={<RequirePermission module="audit_logs"><AuditLogsPage /></RequirePermission>} />
         {MODULES.filter((m) => !IMPLEMENTED.has(m.key) && !m.hidden).map((m) => (
           <Route key={m.key} path={`${m.path.slice(1)}/*`} element={<RequirePermission module={m.key}><PlannedModulePage /></RequirePermission>} />
