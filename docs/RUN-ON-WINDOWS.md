@@ -94,4 +94,4 @@ pnpm db:seed
 `prisma generate` must run before migrate/seed; without it you get "Cannot find module '.prisma/client/default'".
 
 ## Always online at your own domain (auto-start)
-See [ONLINE-AUTO-START.md](ONLINE-AUTO-START.md): run `SETUP-AUTO-START.cmd` once. After that the ERP starts by itself whenever the PC is on and is reachable at https://tr-erp.brandistan.pk. Updates: paste the zip, double-click `UPDATE-ERP.cmd`.
+See [ONLINE-AUTO-START.md](ONLINE-AUTO-START.md): run `SETUP-AUTO-START.cmd` once. After that the ERP starts by itself whenever the PC is on and is reachable at https://tailoringerp.brandistan.pk. Updates: paste the zip, double-click `UPDATE-ERP.cmd`.

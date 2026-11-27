@@ -1,6 +1,6 @@
-# ERP always online at tr-erp.brandistan.pk (auto-start on this PC)
+# ERP always online at tailoringerp.brandistan.pk (auto-start on this PC)
 
-Goal: whenever this PC/laptop is switched on, the ERP is live at **https://tr-erp.brandistan.pk**
+Goal: whenever this PC/laptop is switched on, the ERP is live at **https://tailoringerp.brandistan.pk**
 with nothing to start by hand. The ERP and the database stay on this PC.
 
 ```
@@ -29,18 +29,19 @@ If not:
 4. Wait until Cloudflare shows **Active** (usually 1-24 hours; you get an email).
 
 ### A2. Create the tunnel
-1. In the Cloudflare dashboard open **Zero Trust** > **Networks** > **Tunnels**
-   (on newer dashboards: **Networks** > **Connectors** > **Cloudflare Tunnels**).
+1. In the Cloudflare dashboard press **Ctrl+K**, type **Tunnels** and open it
+   (it is under **Zero Trust** > **Networks** > **Tunnels**, or **Networks** > **Connectors** on newer dashboards).
 2. **Create a tunnel** > type **Cloudflared** > name `amir-zameer-erp` > Save.
 3. Choose **Windows**. Cloudflare shows a command like
    `cloudflared.exe service install eyJhIjoi...`. **Copy it** (you paste it in step B). Keep it private:
    anyone with it can run your tunnel.
 4. Next > **Public hostname**:
-   - Subdomain: `tr-erp`
+   - Subdomain: `tailoringerp`
    - Domain: `brandistan.pk`
    - Service type: `HTTP`
    - URL: `localhost:4000`
-5. Save.
+5. Save. You do not need to create the subdomain yourself: Cloudflare adds the DNS record
+   `tailoringerp` for you when you save the public hostname.
 
 ## Step B - This PC (one time)
 1. Apply the update zip (Replace) into `D:\Claude-AI\amir-zameer-erp`.
@@ -49,7 +50,7 @@ If not:
 4. It installs packages, builds the ERP, updates the database, registers auto-start and starts the ERP
    (5-10 minutes the first time).
 5. When it asks for the token, paste the command copied in A2 step 3 and press Enter.
-6. Done. Open https://tr-erp.brandistan.pk (and http://localhost:4000 on this PC).
+6. Done. Open https://tailoringerp.brandistan.pk (and http://localhost:4000 on this PC).
 
 Also set **Settings > System > Power > Screen and sleep > "When plugged in, put my device to sleep after" = Never**.
 A sleeping PC is offline. On a laptop, also set "When I close the lid" to **Do nothing** (Control Panel > Power Options).
@@ -88,5 +89,5 @@ The ERP is on the internet now.
   so one address runs the whole ERP. `FRONTEND_DIST` in `apps\backend\.env` can point elsewhere.
 - The server runs with `NODE_ENV=production` (API docs at /api/docs are off) and `TRUST_PROXY=true`
   (real client IPs in the audit log; login cookies marked Secure over HTTPS).
-- Setup writes `APP_URL=https://tr-erp.brandistan.pk` and `TRUST_PROXY=true` to `apps\backend\.env`.
+- Setup writes `APP_URL=https://tailoringerp.brandistan.pk` and `TRUST_PROXY=true` to `apps\backend\.env`.
   Another domain: `SETUP-AUTO-START.cmd -Domain erp.example.com`.

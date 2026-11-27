@@ -10,7 +10,7 @@
   Remove everything again:  SETUP-AUTO-START.cmd -Uninstall
 #>
 param(
-  [string]$Domain = 'tr-erp.brandistan.pk',
+  [string]$Domain = 'tailoringerp.brandistan.pk',
   [string]$TunnelToken = '',
   [switch]$SkipBuild,
   [switch]$Uninstall
