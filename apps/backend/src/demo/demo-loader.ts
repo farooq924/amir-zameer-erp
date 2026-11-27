@@ -16,6 +16,7 @@ import { EmployeesService } from '../modules/employees/employees.service';
 import { FabricsService } from '../modules/inventory/fabrics.service';
 import { MeasurementsService } from '../modules/measurements/measurements.service';
 import { OrdersService } from '../modules/orders/orders.service';
+import { WhatsAppService } from '../modules/whatsapp/whatsapp.service';
 import { PayrollService } from '../modules/payroll/payroll.service';
 import { ProductionService } from '../modules/production/production.service';
 import { PurchasesService } from '../modules/purchases/purchases.service';
@@ -42,6 +43,8 @@ export interface DemoManifest {
   recurring?: string[];
   journals?: string[];
   savedFilters?: boolean;
+  /** Added in v1.8.0: demo customers opted in and WhatsApp history written. */
+  whatsapp?: boolean;
 }
 
 export async function readManifest(prisma: PrismaService): Promise<DemoManifest | null> {
@@ -124,6 +127,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   const customersSvc = get(CustomersService);
   const measurementsSvc = get(MeasurementsService);
   const ordersSvc = get(OrdersService);
+  get(WhatsAppService).pauseAutomatic(); // never message demo customers
   const fabricsSvc = get(FabricsService);
   const suppliersSvc = get(SuppliersService);
   const purchasesSvc = get(PurchasesService);
@@ -141,6 +145,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   if (existing) throw new Error('An earlier demo load did not finish. Run scripts\\remove-demo-data.ps1 first, then load again.');
 
   const notes: string[] = [];
+  const counts_wa = { messages: 0 };
   const R = rng(20261127);
   const today = karachiToday();
   const day = (daysAgo: number) => addDays(today, -daysAgo);
@@ -678,6 +683,10 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   const books = await posting.sync();
   if (books.failed.length) notes.push(`${books.failed.length} accounting entries could not be posted (for example a closed month). See Accounting > Sync.`);
 
+  // WhatsApp (Phase 8): about half the customers agreed to messages, and a realistic message history.
+  counts_wa.messages = await addDemoWhatsApp(prisma, get(WhatsAppService), manifest.customers, user.id);
+  manifest.whatsapp = true;
+
   // Saved report filters for the demo login (Reports > Saved).
   await prisma.systemSetting.upsert({
     where: { key: `reports.saved_filters.${user.id}` },
@@ -693,6 +702,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   await saveManifest(prisma, manifest);
   const counts = countsOf(manifest);
   counts.orders = orderCount;
+  counts.whatsappMessages = counts_wa.messages;
   return { status: 'loaded', counts, notes };
 }
 
@@ -710,4 +720,61 @@ function nextMonthKey(key: string) {
 function monthName(key: string) {
   const [y, mo] = key.split('-').map(Number);
   return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][mo - 1]} ${y}`;
+}
+
+/**
+ * Demo WhatsApp history. Rows are written directly (nothing is sent): manual messages opened in WhatsApp and
+ * Cloud API messages with delivered / read ticks and one failure, dated with each order's own story dates.
+ * Demo customers are never messaged through the Cloud API (WhatsAppService blocks it), even when opted in.
+ */
+async function addDemoWhatsApp(prisma: PrismaService, wa: WhatsAppService, customerIds: string[], userId: string): Promise<number> {
+  await wa.ensureDefaults();
+  const templates = new Map((await prisma.whatsAppTemplate.findMany()).map((t) => [t.purpose, t]));
+  const customers = await prisma.customer.findMany({ where: { id: { in: customerIds } }, orderBy: { code: 'asc' } });
+  const optedIn = new Set<string>();
+  for (const [i, c] of customers.entries()) {
+    if (i % 2 === 1) continue;
+    optedIn.add(c.id);
+    await prisma.customer.update({ where: { id: c.id }, data: { whatsappOptIn: true, whatsappOptInAt: c.createdAt } });
+  }
+  const orders = await prisma.order.findMany({
+    where: { customerId: { in: customerIds } }, orderBy: { createdAt: 'asc' },
+    include: { payments: { where: { status: 'POSTED', type: { not: 'REFUND' } }, orderBy: { paymentDate: 'asc' } }, stage: { select: { code: true } } },
+  });
+  const minutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
+  const rows: Prisma.WhatsAppMessageCreateManyInput[] = [];
+  let n = 0;
+  const add = async (purpose: string, relatedType: 'ORDER' | 'PAYMENT', relatedId: string, customerId: string, at: Date) => {
+    const t = templates.get(purpose);
+    if (!t) return;
+    const p = await wa.preview({ templateId: t.id, relatedType, relatedId });
+    if (!p.toNumber) return;
+    n += 1;
+    const cloud = optedIn.has(customerId);
+    const failed = cloud && n % 17 === 0;
+    const read = cloud && !failed && n % 3 !== 0;
+    rows.push({
+      customerId, toNumber: p.toNumber, templateId: t.id, channel: cloud ? 'CLOUD_API' : 'MANUAL', messageType: 'TEMPLATE', body: p.text,
+      status: failed ? 'FAILED' : !cloud ? 'SENT' : read ? 'READ' : 'DELIVERED', attempts: cloud ? (failed ? 5 : 1) : 0,
+      waMessageId: cloud && !failed ? `wamid.DEMO${randomUUID().replace(/-/g, '')}` : null,
+      errorCode: failed ? '131026' : null, errorMessage: failed ? 'Message undeliverable: the number is not on WhatsApp' : null,
+      relatedType, relatedId, createdById: cloud ? null : userId, createdAt: at, updatedAt: at,
+      sentAt: failed ? null : minutes(at, 1), deliveredAt: cloud && !failed ? minutes(at, 2) : null, readAt: read ? minutes(at, 25) : null,
+      failedAt: failed ? minutes(at, 90) : null,
+    });
+  };
+  for (const o of orders) {
+    if (o.lifecycle === 'CANCELLED') continue;
+    await add('ORDER_CONFIRMATION', 'ORDER', o.id, o.customerId, minutes(o.createdAt, 2));
+    for (const pay of o.payments.slice(1)) await add('PAYMENT_RECEIVED', 'PAYMENT', pay.id, o.customerId, minutes(pay.paymentDate, 1));
+    if (o.stage.code === 'READY') await add('ORDER_READY', 'ORDER', o.id, o.customerId, minutes(o.updatedAt, 5));
+    if (o.lifecycle === 'DELIVERED' && o.actualDeliveryDate && Number(o.balanceAmount) > 0) {
+      await add('PAYMENT_REMINDER', 'ORDER', o.id, o.customerId, new Date(o.actualDeliveryDate.getTime() + 3 * 86_400_000 + 7 * 3_600_000));
+    }
+  }
+  // Never in the future (the reminder above can land after today).
+  const now = new Date();
+  const safe = rows.filter((r) => (r.createdAt as Date) <= now);
+  if (safe.length) await prisma.whatsAppMessage.createMany({ data: safe });
+  return safe.length;
 }

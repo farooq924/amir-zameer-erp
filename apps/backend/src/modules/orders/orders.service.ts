@@ -19,6 +19,7 @@ import {
   RecordPaymentDto, UpdateOrderDto,
 } from './dto/order.dto';
 import { LineAmounts, lineAmounts, orderAmounts, paymentState } from './order-math';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 
 const OPEN_LIFECYCLES = ['OPEN', 'PARTIALLY_DELIVERED'] as const;
 const stageSelect = { id: true, code: true, name: true, color: true, sortOrder: true } as const;
@@ -128,6 +129,7 @@ export class OrdersService {
     private readonly settings: SettingsService,
     private readonly stock: StockService,
     private readonly fabrics: FabricsService,
+    private readonly whatsapp: WhatsAppService,
   ) {}
 
   /** Fabrics in stock for the order form (works for roles without Inventory access). */
@@ -306,6 +308,7 @@ export class OrdersService {
       if (dto.advance && advance.gt(0)) await this.postPayment(tx, order.id, dto.advance, `order:${order.id}:advance`, ctx);
       return order.id;
     });
+    void this.whatsapp.notify('ORDER_CONFIRMATION', { orderId });
     return this.get(orderId);
   }
 
@@ -423,6 +426,10 @@ export class OrdersService {
       }
       await this.audit.log({ action: 'STATUS_CHANGE', module: 'orders', recordId: id, newValues: { stage: stage.name, items: target.length, note: dto.notes ? `${stage.name}: ${dto.notes}` : stage.name } }, ctx, tx);
     });
+    if (stage.code === 'READY') {
+      const o = await this.prisma.order.findUnique({ where: { id }, select: { stageId: true } });
+      if (o?.stageId === stage.id) void this.whatsapp.notify('ORDER_READY', { orderId: id });
+    }
     return this.get(id);
   }
 
@@ -465,6 +472,8 @@ export class OrdersService {
 
   async deliver(id: string, dto: DeliverDto, ctx: RequestContext) {
     const deliveredStage = await this.prisma.workflowStage.findUniqueOrThrow({ where: { code: STAGE_DELIVERED } });
+    let paymentId: string | null = null;
+    let fullyDelivered = false;
     await this.prisma.$transaction(async (tx) => {
       await this.lock(tx, id);
       const o = await this.openOrder(tx, id);
@@ -507,8 +516,14 @@ export class OrdersService {
       }
       const pieces = dto.items.reduce((a, d) => a + d.quantity, 0);
       await this.audit.log({ action: 'DELIVER', module: 'orders', recordId: id, newValues: { deliveryNo, pieces, note: `Delivery ${deliveryNo}: ${pieces} piece(s)${allDone ? ', order complete' : ''}` } }, ctx, tx);
-      if (dto.payment && money(dto.payment.amount).gt(0)) await this.postPayment(tx, id, dto.payment, `delivery:${delivery.id}`, ctx);
+      if (dto.payment && money(dto.payment.amount).gt(0)) {
+        const p = await this.postPayment(tx, id, dto.payment, `delivery:${delivery.id}`, ctx);
+        paymentId = p.id;
+      }
+      fullyDelivered = allDone;
     });
+    if (fullyDelivered) void this.whatsapp.notify('ORDER_DELIVERED', { orderId: id });
+    if (paymentId) void this.whatsapp.notify('PAYMENT_RECEIVED', { paymentId });
     return this.get(id);
   }
 
@@ -518,10 +533,11 @@ export class OrdersService {
       if (existing.orderId !== id) throw new ConflictException('This payment key was already used for another order');
       return this.get(id); // same request sent twice (double click, retry, offline sync)
     }
-    await this.prisma.$transaction(async (tx) => {
+    const paymentId = await this.prisma.$transaction(async (tx) => {
       await this.lock(tx, id);
-      await this.postPayment(tx, id, dto, dto.idempotencyKey, ctx);
+      return (await this.postPayment(tx, id, dto, dto.idempotencyKey, ctx)).id;
     });
+    void this.whatsapp.notify('PAYMENT_RECEIVED', { paymentId });
     return this.get(id);
   }
 

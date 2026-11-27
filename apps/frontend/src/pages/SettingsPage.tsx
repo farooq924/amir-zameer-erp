@@ -68,11 +68,18 @@ const GROUPS: { key: string; label: string; description: string; fields: Field[]
     ],
   },
   {
-    key: 'printing', label: 'Printing', description: 'Invoice and receipt layout options.',
+    key: 'printing', label: 'Printing', description: 'A4 invoices and 58 / 80 mm thermal receipts.',
     fields: [
+      { key: 'defaultOrderPrint', label: 'Main print for an order', type: 'select', options: [{ value: 'RECEIPT', label: 'Thermal receipt (58 / 80 mm)' }, { value: 'INVOICE', label: 'A4 invoice' }] },
       { key: 'receiptWidth', label: 'Thermal receipt width', type: 'select', options: [{ value: '58mm', label: '58 mm' }, { value: '80mm', label: '80 mm' }] },
-      { key: 'showLogoOnReceipt', label: 'Show logo on receipts', type: 'boolean' },
-      { key: 'invoiceFooter', label: 'Invoice footer text', type: 'textarea' },
+      { key: 'receiptCopies', label: 'Receipt copies per print', type: 'number', min: 1, max: 3 },
+      { key: 'invoiceTitle', label: 'A4 invoice title', type: 'text' },
+      { key: 'showLogoOnReceipt', label: 'Show logo on receipts and invoices', type: 'boolean' },
+      { key: 'showNtnOnInvoice', label: 'Show NTN on the A4 invoice', type: 'boolean' },
+      { key: 'showSignatureLine', label: 'Signature lines on the A4 invoice', type: 'boolean' },
+      { key: 'autoPrint', label: 'Open the print window automatically', type: 'boolean' },
+      { key: 'invoiceFooter', label: 'Thank-you line (receipt and invoice)', type: 'textarea' },
+      { key: 'invoiceTerms', label: 'Terms & conditions on the A4 invoice (one per line)', type: 'textarea' },
     ],
   },
 ];

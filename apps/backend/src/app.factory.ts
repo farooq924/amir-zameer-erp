@@ -15,6 +15,7 @@ import { env } from './config/env';
 export async function createApp(): Promise<INestApplication> {
   const config = env();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true, // WhatsApp webhook signature is checked on the exact bytes Meta sent
     logger: config.NODE_ENV === 'test' ? ['error'] : ['log', 'warn', 'error'],
   });
   if (config.TRUST_PROXY) app.set('trust proxy', 1);

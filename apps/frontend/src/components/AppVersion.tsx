@@ -11,6 +11,21 @@ export const BUILD_DATE = __BUILD_DATE__;
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
   {
+    version: '1.8.0', title: 'WhatsApp & Printing',
+    notes: [
+      'New WhatsApp page: every message with its status (queued, sent, delivered, read, failed), search and filters',
+      'Send WhatsApp from an order, a payment receipt, a customer profile or a print page, with a preview of the text',
+      'Works without any setup: the ERP fills the message and opens WhatsApp, you press Send',
+      'Official WhatsApp Cloud API (Meta) option: messages go out automatically when an order is booked, is ready, is delivered or a payment is received',
+      'Delivery and read ticks from Meta, automatic retry when WhatsApp is busy, and Send again for failed messages',
+      'Message templates with values like customer name, order number and balance filled in automatically; check approval status in Meta',
+      'Customer agreement (opt-in) on the customer profile; customers can reply STOP or START',
+      'New A4 invoice with logo, bill-to, item table, payments, balance, terms and signature lines',
+      'Thermal receipts: switch 58 mm / 80 mm on the print page, customer and shop copies, optional automatic print window',
+      'More print settings: main print for orders, invoice title, terms, NTN and signature lines',
+    ],
+  },
+  {
     version: '1.7.0', title: 'Reports & Exports',
     notes: [
       'New Reports page with all 30 business reports in one place, grouped by area',

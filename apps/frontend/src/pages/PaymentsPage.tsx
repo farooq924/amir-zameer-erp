@@ -1,6 +1,6 @@
 import { PAYMENT_METHODS } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownLeft, ArrowUpRight, Banknote, HandCoins, Printer, Search, Undo2, Wallet } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Banknote, HandCoins, MessageCircle, Printer, Search, Undo2, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { DateRange, METHOD_LABEL, ReceiptStatusBadge, monthStartPK, todayPK } from '@/features/finance/shared';
+import { SendWhatsAppDialog } from '@/features/whatsapp/SendWhatsAppDialog';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
 import type { Paginated } from '@/types';
@@ -201,6 +202,7 @@ function ReceiptsTab() {
   const [to, setTo] = useState(todayPK());
   const [page, setPage] = useState(1);
   const [reverse, setReverse] = useState<CustomerPayment | null>(null);
+  const [wa, setWa] = useState<CustomerPayment | null>(null);
   useEffect(() => setPage(1), [search, method, kind, from, to]);
   const q = useQuery({
     queryKey: ['payments', 'list', { search, method, kind, from, to, page }],
@@ -227,7 +229,7 @@ function ReceiptsTab() {
         ) : (
           <>
             <Table>
-              <THead><TR><TH>Receipt</TH><TH>Customer</TH><TH className="hidden md:table-cell">Order</TH><TH className="hidden sm:table-cell">Method</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH className="w-20"><span className="sr-only">Actions</span></TH></TR></THead>
+              <THead><TR><TH>Receipt</TH><TH>Customer</TH><TH className="hidden md:table-cell">Order</TH><TH className="hidden sm:table-cell">Method</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH className="w-28"><span className="sr-only">Actions</span></TH></TR></THead>
               <TBody>
                 {q.data!.data.map((p) => (
                   <TR key={p.id} className={p.status === 'REVERSED' ? 'opacity-60' : undefined}>
@@ -239,6 +241,7 @@ function ReceiptsTab() {
                     <TD><ReceiptStatusBadge status={p.status} type={p.type} /></TD>
                     <TD>
                       <div className="flex justify-end gap-1">
+                        {p.status === 'POSTED' && can('whatsapp', 'CREATE') && <Button variant="ghost" size="icon" aria-label={`WhatsApp ${p.receiptNo}`} onClick={() => setWa(p)}><MessageCircle className="text-emerald-600" /></Button>}
                         {p.order && can('orders', 'PRINT') && <Button variant="ghost" size="icon" asChild aria-label={`Print ${p.receiptNo}`}><Link to={`/print/orders/${p.order.id}?receipt=${p.id}`} target="_blank"><Printer /></Link></Button>}
                         {p.status === 'POSTED' && p.type !== 'REFUND' && can('payments', 'APPROVE') && <Button variant="ghost" size="icon" aria-label={`Reverse ${p.receiptNo}`} onClick={() => setReverse(p)}><Undo2 /></Button>}
                       </div>
@@ -256,6 +259,7 @@ function ReceiptsTab() {
         )}
       </Card>
       <ReverseDialog payment={reverse} onOpenChange={(o) => !o && setReverse(null)} />
+      {wa && <SendWhatsAppDialog open={!!wa} onOpenChange={(o) => !o && setWa(null)} context={{ type: 'PAYMENT', id: wa.id }} purpose="PAYMENT_RECEIVED" title={`Send receipt ${wa.receiptNo} on WhatsApp`} />}
     </div>
   );
 }

@@ -60,3 +60,11 @@ Payment: Unpaid = `danger`, Partly paid = `warning`, Paid = `success`, Credit = 
   minus money is shown in red. New reports only add a definition in `packages/shared/src/reports.ts` and a builder in the backend.
 * Report print (`/print/reports/:key`) is A4, landscape when more than 6 columns, navy table header and `<PrintFooter />`.
   Excel, CSV and PDF exports carry the same footer text.
+
+## WhatsApp & printing (Phase 8)
+* Send from anywhere with `SendWhatsAppDialog` (`features/whatsapp`): template select, green chat-bubble preview, amber warnings,
+  "Open WhatsApp" (manual) and gold "Send now (Cloud API)".
+* Message status badges: Queued = `warning`, Sent = `info`, Delivered / Read = `success` (double tick), Failed = `danger`;
+  channel badge Cloud API = `gold`, Manual = `outline`.
+* A4 invoice: navy table header and gold title / balance strip (`print-color-exact` keeps the colours in print), `<PrintFooter />`.
+* Print pages share one toolbar: document tabs (Receipt / A4 invoice / Job card), paper width for receipts, WhatsApp, gold Print.

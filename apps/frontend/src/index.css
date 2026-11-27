@@ -81,6 +81,8 @@
   .no-print { display: none !important; }
   .print-only { display: block !important; }
   .print-footer { break-inside: avoid; }
+  /* Keep navy / gold fills on invoices (browsers drop backgrounds unless told). */
+  .print-color-exact { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
 @media screen {

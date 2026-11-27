@@ -128,6 +128,7 @@ export async function removeDemoData(prisma: PrismaService): Promise<RemoveResul
     await run('', `UPDATE orders SET "duplicatedFromId" = NULL WHERE "duplicatedFromId" = ANY($1::uuid[])`, O);
     await run('orders', `DELETE FROM orders WHERE id = ANY($1::uuid[])`, O);
     await run('', `DELETE FROM customer_ledger WHERE "customerId" = ANY($1::uuid[]) OR "referenceId" = ANY($2::uuid[])`, C, [...O, ...PAY]);
+    await run('whatsappMessages', `DELETE FROM whatsapp_messages WHERE "customerId" = ANY($1::uuid[]) OR "relatedId" = ANY($2::uuid[])`, C, [...O, ...PAY]);
     await run('measurements', `DELETE FROM customer_measurements WHERE "customerId" = ANY($1::uuid[])`, C);
     await run('customers', `DELETE FROM customers WHERE id = ANY($1::uuid[])`, C);
 
