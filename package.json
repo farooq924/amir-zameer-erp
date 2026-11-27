@@ -1,6 +1,6 @@
 {
   "name": "amir-zameer-erp",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "private": true,
   "description": "AMIR ZAMEER - Enterprise Tailoring & Fabric Management ERP",
   "packageManager": "pnpm@10.28.0",

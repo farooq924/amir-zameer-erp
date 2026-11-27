@@ -34,3 +34,11 @@ It refuses to run against a database whose name does not end in `_test`.
 * Frontend: 4 files, 15 tests passed. Playwright: new `e2e/orders.spec.ts` (customer -> measurement -> order -> status -> part delivery -> payment -> search) passed.
 * Type check and production build clean. Manual check on desktop (1366 px) and mobile (390 px): orders list, new order tabs, success modal,
   order details, dialogs, receipt (80 mm), workshop job card (A4), garments, workflow stages.
+
+## Phase 5 results (2026-11-27)
+* Backend: 17 suites, 143 tests passed. New `payroll-calc.spec.ts` (monthly with absences, mid-month joiner, daily wage, per piece,
+  fixed + incentive, overtime / bonus / deductions, advance caps, employed days) and `test/payroll.e2e-spec.ts` (employee codes, CNIC
+  duplicates, optimistic locking, salary history, daily attendance + register, leave approval into attendance, overtime approval,
+  production limits, idempotent advances, payroll calculation, draft edits, stale-figures check on approve, month lock, reopen,
+  part / full / pay-all payments with idempotency, salary payments immutable, payslip, role access).
+* Frontend: 5 files, 17 tests. Playwright: `e2e/employees.spec.ts` passed.

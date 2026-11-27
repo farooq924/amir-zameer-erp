@@ -278,3 +278,103 @@ export interface PurchaseDetail {
   returns: { id: string; returnNo: string; returnDate: string; totalAmount: string; reason: string | null; items: { fabric: { id: string; code: string; name: string; unit: string }; quantity: string; rate: string; amount: string }[] }[];
   payments: { id: string; paymentNo: string; paymentDate: string; amount: string; method: string; reference: string | null }[];
 }
+
+// ------------------------------------------------------------------ Phase 5: Employees & Payroll
+export interface SalaryInfo {
+  id: string; salaryType: string; monthlySalary: string; dailyWage: string; perPieceRate: string; overtimeRatePerHour: string;
+  effectiveFrom: string; effectiveTo: string | null; isCurrent: boolean; reason: string | null; createdAt: string;
+}
+
+export interface Employee {
+  id: string; code: string; name: string; fatherName: string | null; contactNumber: string | null; address: string | null; cnic: string | null;
+  joiningDate: string; leavingDate: string | null; designation: string | null; employeeType: string; employmentType: string;
+  bankName: string | null; bankAccountTitle: string | null; bankAccountNumber: string | null; status: string; notes: string | null; version: number;
+  createdAt: string; updatedAt: string; salary: SalaryInfo | null; todayAttendance?: string | null; advanceBalance?: string;
+}
+
+export interface EmployeeDetail extends Employee {
+  salaryHistory: SalaryInfo[];
+  thisMonth: { periodKey: string; present: number; halfDay: number; absent: number; leave: number; holiday: number };
+  unpaidProduction: { pieces: number; amount: string };
+  advanceBalance: string;
+  advances: Advance[];
+  production: { id: string; workDate: string; orderId: string; orderNumber: string; garmentName: string; taskType: string; quantity: number; pieceRate: string; amount: string; paid: boolean }[];
+  overtime: OvertimeRow[];
+  leaves: { id: string; leaveType: string; fromDate: string; toDate: string; days: string; reason: string | null; status: string }[];
+  payslips: { id: string; periodKey: string; payrollId: string; payrollNo: string; payrollStatus: string; grossAmount: string; netAmount: string; paidAmount: string }[];
+  history: { id: string; changeType: string; fromValue: string | null; toValue: string | null; effectiveDate: string; notes: string | null; createdAt: string }[];
+}
+
+export interface EmployeeOption {
+  id: string; code: string; name: string; designation: string | null; employeeType: string; status: string;
+  salaryType: string | null; perPieceRate: string; overtimeRatePerHour: string;
+}
+
+export interface EmployeeSummary {
+  active: number; onLeave: number; inactive: number;
+  today: { date: string; present: number; absent: number; leave: number; marked: number };
+  openAdvances: { count: number; balance: string }; monthlySalaries: string;
+  currentPayroll: { id: string; periodKey: string; status: string; totalNet: string; totalPaid: string } | null;
+  pendingLeaves: number; pendingOvertime: number;
+}
+
+export interface Advance {
+  id: string; advanceNo: string; advanceDate: string; amount: string; recoveredAmount: string; balanceAmount: string; installmentAmount: string;
+  paymentMethod: string; status: string; reason: string | null; employee?: Ref;
+  recoveries?: { id: string; amount: string; recoveryDate: string; payrollItemId: string | null }[];
+}
+
+export interface DailyAttendance {
+  date: string; locked: boolean; isFuture: boolean;
+  rows: { employee: { id: string; code: string; name: string; designation: string | null; employeeType: string; status: string }; attendance: { id: string; status: string; checkIn: string | null; checkOut: string | null; lateMinutes: number; notes: string | null } | null }[];
+  totals: { employees: number; marked: number; present: number; halfDay: number; absent: number; leave: number; holiday: number };
+}
+
+export interface MonthlyAttendance {
+  month: string; start: string; end: string; days: number; locked: boolean;
+  rows: { employee: { id: string; code: string; name: string; designation: string | null }; joiningDate: string; leavingDate: string | null; marks: Record<string, string>; totals: { present: number; halfDay: number; absent: number; leave: number; holiday: number } }[];
+}
+
+export interface LeaveRow { id: string; employee: Ref; leaveType: string; fromDate: string; toDate: string; days: string; reason: string | null; status: string; approvedAt: string | null; createdAt: string }
+export interface OvertimeRow { id: string; employee?: Ref; date: string; hours: string; ratePerHour: string; amount: string; status: string; paid: boolean; notes: string | null }
+
+export interface ProductionRow {
+  id: string; workDate: string; employee: Ref; taskType: string; orderId: string; orderNumber: string; customerName: string; garmentName: string;
+  quantity: number; pieceRate: string; amount: string; paid: boolean; notes: string | null; createdAt: string;
+}
+
+export interface OrderItemLookup {
+  id: string; orderNumber: string; customerName: string; lifecycle: string;
+  items: { id: string; lineNo: number; garmentName: string; quantity: number; pieceRate: string; done: Record<string, number> }[];
+}
+
+export interface PayrollRun {
+  id: string; payrollNo: string; periodKey: string; periodStart: string; periodEnd: string; status: string; employees: number;
+  totalGross: string; totalDeductions: string; totalNet: string; totalPaid: string; approvedAt: string | null; createdAt: string;
+}
+
+export interface PayrollLine {
+  id: string; employee: { id: string; code: string; name: string; designation: string | null; employeeType: string }; periodKey: string; salaryType: string;
+  basicAmount: string; presentDays: string; absentDays: string; completedPieces: number; pieceAmount: string; overtimeAmount: string;
+  incentives: string; bonus: string; absenceDeduction: string; advanceDeduction: string; otherDeductions: string;
+  grossAmount: string; netAmount: string; paidAmount: string; balance: string; notes: string | null;
+}
+
+export interface PayrollDetail {
+  id: string; payrollNo: string; periodKey: string; periodLabel: string; periodStart: string; periodEnd: string; status: string; notes: string | null;
+  approvedBy: string | null; approvedAt: string | null; createdAt: string;
+  totals: { gross: string; deductions: string; net: string; paid: string; balance: string };
+  items: PayrollLine[];
+}
+
+export interface SalaryPaymentRow { id: string; paymentNo: string; paymentDate: string; employee: { code: string; name: string }; amount: string; method: string; reference: string | null; payrollItemId: string }
+
+export interface Payslip extends PayrollLine {
+  payroll: { id: string; payrollNo: string; periodKey: string; periodLabel: string; status: string; periodStart: string; periodEnd: string };
+  employeeDetail: { id: string; code: string; name: string; fatherName: string | null; cnic: string | null; designation: string | null; employeeType: string; joiningDate: string; bankName: string | null; bankAccountTitle: string | null; bankAccountNumber: string | null; contactNumber: string | null };
+  payments: { id: string; paymentNo: string; paymentDate: string; amount: string; method: string; reference: string | null }[];
+  overtime: { date: string; hours: string; ratePerHour: string; amount: string }[];
+  recoveries: { advanceNo: string; amount: string }[];
+  production: { workDate: string; orderNumber: string; garmentName: string; taskType: string; quantity: number; pieceRate: string; amount: string }[];
+  advanceBalanceAfter: string;
+}

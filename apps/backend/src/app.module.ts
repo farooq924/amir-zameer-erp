@@ -12,6 +12,10 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { AttendanceModule } from './modules/attendance/attendance.module';
+import { EmployeesModule } from './modules/employees/employees.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
+import { ProductionModule } from './modules/production/production.module';
 import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthController } from './modules/health/health.controller';
@@ -38,6 +42,10 @@ import { UsersModule } from './modules/users/users.module';
     InventoryModule,
     SuppliersModule,
     PurchasesModule,
+    EmployeesModule,
+    AttendanceModule,
+    ProductionModule,
+    PayrollModule,
   ],
   controllers: [HealthController],
   providers: [

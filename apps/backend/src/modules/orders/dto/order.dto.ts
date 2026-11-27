@@ -82,10 +82,10 @@ class OrderFieldsDto {
   @ApiPropertyOptional({ enum: ORDER_TYPE_KEYS }) @IsOptional() @IsIn(ORDER_TYPE_KEYS)
   orderType?: (typeof ORDER_TYPE_KEYS)[number];
 
-  @ApiPropertyOptional({ example: '2026-11-27' }) @IsOptional() @Matches(DATE_RE)
+  @ApiPropertyOptional({ example: '2026-11-27' }) @IsOptional() @Matches(DATE_RE, { message: 'Date must be like 2026-11-27' })
   orderDate?: string;
 
-  @ApiPropertyOptional({ example: '2026-12-04' }) @IsOptional() @Matches(DATE_RE)
+  @ApiPropertyOptional({ example: '2026-12-04' }) @IsOptional() @Matches(DATE_RE, { message: 'Date must be like 2026-11-27' })
   expectedDeliveryDate?: string | null;
 
   @ApiPropertyOptional() @IsOptional() @Transform(trim) @IsString() @MaxLength(2000)
@@ -141,8 +141,8 @@ export class OrderQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: ORDER_TYPE_KEYS }) @IsOptional() @IsIn(ORDER_TYPE_KEYS)
   orderType?: (typeof ORDER_TYPE_KEYS)[number];
 
-  @ApiPropertyOptional() @IsOptional() @Transform(emptyToUndefined) @Matches(DATE_RE) from?: string;
-  @ApiPropertyOptional() @IsOptional() @Transform(emptyToUndefined) @Matches(DATE_RE) to?: string;
+  @ApiPropertyOptional() @IsOptional() @Transform(emptyToUndefined) @Matches(DATE_RE, { message: 'Date must be like 2026-11-27' }) from?: string;
+  @ApiPropertyOptional() @IsOptional() @Transform(emptyToUndefined) @Matches(DATE_RE, { message: 'Date must be like 2026-11-27' }) to?: string;
 
   @ApiPropertyOptional({ enum: ['orderDate', 'expectedDeliveryDate', 'orderNumber', 'createdAt', 'balanceAmount'] })
   @IsOptional() @IsIn(['orderDate', 'expectedDeliveryDate', 'orderNumber', 'createdAt', 'balanceAmount'])

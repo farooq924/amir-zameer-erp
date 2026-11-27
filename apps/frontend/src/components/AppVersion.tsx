@@ -10,6 +10,18 @@ export const BUILD_DATE = __BUILD_DATE__;
 
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
+  {
+    version: '1.5.0', title: 'Employees, Attendance & Payroll',
+    notes: [
+      'Employees with codes, CNIC, bank details, job history and salary history',
+      'Salary types: monthly, daily wage, per piece, and fixed + per piece',
+      'Daily attendance in one tap, monthly register, leave with approval and overtime',
+      'Production: record pieces finished by each tailor for per-piece wages',
+      'Salary advances with monthly instalments, recovered automatically',
+      'Monthly payroll: calculate, adjust bonus / deductions, approve, pay, and print payslips',
+      'Approved months are locked so paid salaries never change',
+    ],
+  },
   { version: '1.4.1', title: 'Print footer', notes: ['Software developer details at the bottom of every print (receipts, job cards, measurement sheets and printed pages)'] },
   {
     version: '1.4.0', title: 'Fabric Inventory & Suppliers',
