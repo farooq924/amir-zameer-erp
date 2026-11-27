@@ -76,3 +76,19 @@ The backend tests use the `amir_zameer_erp_test` database with user `az_erp` / p
 | `password authentication failed` | Check user/password in `DATABASE_URL` |
 | Port 4000 or 5173 already in use | Close the other PowerShell window running the app |
 | `OWNER_EMAIL and OWNER_PASSWORD must be set` | Fill them in `apps\backend\.env`, run the seed again |
+
+## Updating to a new version (zip with changed files)
+1. Stop the running ERP (press `Ctrl + C` in both PowerShell windows).
+2. Unzip the update zip and copy its contents into `D:\Claude-AI\amir-zameer-erp`. Choose **Replace the files in the destination**.
+3. In PowerShell:
+```powershell
+cd D:\Claude-AI\amir-zameer-erp
+pnpm install
+pnpm --filter @az/shared build
+pnpm --filter @az/backend exec prisma generate
+pnpm db:migrate
+pnpm db:seed
+```
+4. Start again with `pnpm dev:backend` and (second window) `pnpm dev:frontend`.
+
+`prisma generate` must run before migrate/seed; without it you get "Cannot find module '.prisma/client/default'".
