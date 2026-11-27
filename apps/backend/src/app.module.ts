@@ -9,6 +9,9 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { GarmentsModule } from './modules/garments/garments.module';
 import { MeasurementsModule } from './modules/measurements/measurements.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { PurchasesModule } from './modules/purchases/purchases.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthController } from './modules/health/health.controller';
@@ -32,6 +35,9 @@ import { UsersModule } from './modules/users/users.module';
     MeasurementsModule,
     GarmentsModule,
     OrdersModule,
+    InventoryModule,
+    SuppliersModule,
+    PurchasesModule,
   ],
   controllers: [HealthController],
   providers: [

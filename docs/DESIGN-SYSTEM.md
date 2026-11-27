@@ -48,3 +48,7 @@ Dark mode: every token has a `.dark` value. Users switch it from the profile men
 | Delivered | `success` |
 | Cancelled | `secondary` |
 Payment: Unpaid = `danger`, Partly paid = `warning`, Paid = `success`, Credit = `info`. Overdue = solid red pill.
+
+## Printing
+* Every printed document ends with the developer footer: `<PrintFooter />` from `@/components/PrintFooter`
+  (`variant="receipt"` on 58/80 mm thermal receipts). App pages printed with `window.print()` get it from the layout automatically.

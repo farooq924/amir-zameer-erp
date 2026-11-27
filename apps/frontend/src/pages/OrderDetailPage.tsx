@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
+import { formatQty } from '@/features/inventory/shared';
 import { LifecycleBadge, METHOD_LABEL, ORDER_TYPE_LABEL, OverdueBadge, PaymentBadge, StageBadge } from '@/features/orders/badges';
 import { AdjustmentDialog, AssignDialog, CancelOrderDialog, DeliverDialog, PaymentDialog, StageDialog } from '@/features/orders/OrderActionDialogs';
 import { useCan } from '@/hooks/use-permission';
@@ -176,7 +177,14 @@ export function OrderDetailPage() {
                   <CardTitle className="flex flex-wrap items-center gap-2">{i.lineNo}. {i.garmentName} <span className="font-normal text-muted-foreground">x {i.quantity}</span> <StageBadge stage={i.stage} /></CardTitle>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {i.fabricSource === 'SHOP' ? 'Shop fabric' : "Customer's fabric"}{i.fabricDescription ? `: ${i.fabricDescription}` : ''}
-                    {Number(i.fabricQuantity) ? ` · ${Number(i.fabricQuantity)} m` : ''}
+                    {Number(i.fabricQuantity) ? ` · ${formatQty(i.fabricQuantity, i.fabric?.unit ?? 'METER')}` : ''}
+                    {i.stock && (
+                      <span className="ml-1.5 inline-flex align-middle">
+                        {i.stock.status === 'ACTIVE' && <Badge variant="info" title="Kept aside in stock for this garment">Reserved {formatQty(Number(i.stock.reserved) - Number(i.stock.issued), i.fabric?.unit ?? 'METER')}</Badge>}
+                        {i.stock.status === 'CONSUMED' && <Badge variant="success" title="Taken from stock on delivery">Issued from stock</Badge>}
+                        {i.stock.status === 'RELEASED' && <Badge variant="secondary" title="Given back to stock">Released</Badge>}
+                      </span>
+                    )}
                     {i.deliveredQuantity > 0 && ` · ${i.deliveredQuantity} delivered`}
                     {i.assignedEmployee && ` · Tailor: ${i.assignedEmployee.name}`}
                   </p>

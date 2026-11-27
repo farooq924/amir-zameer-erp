@@ -115,3 +115,27 @@ describe('Login rate limit (e2e)', () => {
     }
   });
 });
+
+describe('Behind an HTTPS tunnel (e2e)', () => {
+  it('marks cookies Secure only for HTTPS requests from a trusted proxy', async () => {
+    process.env.TRUST_PROXY = 'true';
+    const { resetEnvCache } = await import('../src/config/env');
+    resetEnvCache();
+    const { app, prisma } = await bootApp();
+    try {
+      const server = app.getHttpServer();
+      const body = { identifier: 'owner', password: 'OwnerPass123' };
+      const viaTunnel = await request(server).post('/api/auth/login').set('X-Forwarded-Proto', 'https').send(body).expect(200);
+      const tunnelCookies = viaTunnel.headers['set-cookie'] as unknown as string[];
+      expect(tunnelCookies.every((c) => /;\s*Secure/i.test(c))).toBe(true);
+      const local = await request(server).post('/api/auth/login').send(body).expect(200);
+      const localCookies = local.headers['set-cookie'] as unknown as string[];
+      expect(localCookies.some((c) => /;\s*Secure/i.test(c))).toBe(false);
+    } finally {
+      process.env.TRUST_PROXY = 'false';
+      resetEnvCache();
+      await app.close();
+      await prisma.$disconnect();
+    }
+  });
+});

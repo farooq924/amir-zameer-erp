@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { FieldError, Label } from '@/components/ui/label';
 import { api, errorMessage } from '@/services/api';
+import { newId } from '@/utils/id';
 import type { Measurement, MeasurementTemplate } from '@/types';
 
 type Unit = 'INCH' | 'CM';
@@ -64,7 +65,7 @@ export function MeasurementFormDialog({ open, onOpenChange, customerId, template
   // Reset whenever the dialog opens.
   useEffect(() => {
     if (!open) return;
-    requestId.current = crypto.randomUUID();
+    requestId.current = newId();
     const id = templateId ?? templates.find((t) => t.isActive)?.id ?? '';
     setTplId(id);
     prefill(id);

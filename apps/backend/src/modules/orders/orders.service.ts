@@ -10,6 +10,9 @@ import { RequestContext } from '../../common/types/auth-user';
 import { karachiToday } from '../../common/utils/date-range';
 import { dec, money, moneyString } from '../../common/utils/money';
 import { presentGarment } from '../garments/garments.service';
+import { FabricPickerQueryDto } from '../inventory/dto/inventory.dto';
+import { FabricsService } from '../inventory/fabrics.service';
+import { StockService } from '../inventory/stock.service';
 import { SettingsService } from '../settings/settings.service';
 import {
   AdjustmentDto, AssignDto, CancelOrderDto, ChangeStageDto, CreateOrderDto, DeliverDto, OrderItemDto, OrderQueryDto, PaymentInputDto,
@@ -33,6 +36,8 @@ const detailInclude = {
       stage: { select: stageSelect },
       assignedEmployee: { select: { id: true, code: true, name: true } },
       garmentType: { select: { id: true, code: true, name: true, measurementTemplateId: true } },
+      fabric: { select: { id: true, code: true, name: true, unit: true, color: true } },
+      reservations: { select: { quantity: true, consumed: true, status: true } },
       measurement: true,
       _count: { select: { assignments: true, productionRecords: true } },
     },
@@ -59,10 +64,18 @@ function addDays(date: string, days: number): string {
 
 interface SnapshotValue { key: string; label: string; value: string | null; text: string | null }
 
+/** Stock status of shop fabric on one item: reserved (waiting), issued (used on delivery) or released (cancelled). */
+function stockState(rows: { quantity: Prisma.Decimal; consumed: Prisma.Decimal; status: string }[]) {
+  const r = rows.find((x) => x.status !== 'RELEASED') ?? rows[0];
+  if (!r) return null;
+  return { status: r.status, reserved: dec(r.quantity).toFixed(3), issued: dec(r.consumed).toFixed(3) };
+}
+
 function presentItem(i: ItemRow) {
   return {
     id: i.id, lineNo: i.lineNo, garmentTypeId: i.garmentTypeId, garmentType: i.garmentType, garmentName: i.garmentName, quantity: i.quantity,
     deliveredQuantity: i.deliveredQuantity, fabricSource: i.fabricSource, fabricDescription: i.fabricDescription,
+    fabricId: i.fabricId, fabric: i.fabric, stock: stockState(i.reservations),
     fabricQuantity: i.fabricQuantity.toFixed(3), fabricPerPiece: i.fabricPerPiece.toFixed(3), fabricRate: moneyString(i.fabricRate),
     fabricAmount: moneyString(i.fabricAmount), stitchingPrice: moneyString(i.stitchingPrice), stitchingAmount: moneyString(i.stitchingAmount),
     additionalCharges: moneyString(i.additionalCharges), lineTotal: moneyString(i.lineTotal), notes: i.notes,
@@ -113,7 +126,14 @@ export class OrdersService {
     private readonly audit: AuditService,
     private readonly sequences: SequenceService,
     private readonly settings: SettingsService,
+    private readonly stock: StockService,
+    private readonly fabrics: FabricsService,
   ) {}
+
+  /** Fabrics in stock for the order form (works for roles without Inventory access). */
+  fabricOptions(q: FabricPickerQueryDto) {
+    return this.fabrics.picker(q);
+  }
 
   // ================================================================ queries
 
@@ -243,6 +263,7 @@ export class OrdersService {
     if (expected && expected < orderDate) throw new BadRequestException('Delivery date cannot be before the order date');
 
     const garments = await this.loadGarments(dto.items);
+    const fabrics = await this.loadFabrics(dto.items, orderType);
     const lines = dto.items.map((i) => this.lineFor(i, orderType));
     const totals = orderAmounts(lines, dto.additionalCharges, dto.discount);
     if (totals.discount.gt(totals.subtotal)) throw new BadRequestException('Discount cannot be more than the order amount');
@@ -270,7 +291,7 @@ export class OrdersService {
         },
       });
       for (const [idx, item] of dto.items.entries()) {
-        await this.createItem(tx, order.id, customer.id, idx + 1, item, lines[idx], garments, orderType, newStage.id, item.measurementId);
+        await this.createItem(tx, order.id, customer.id, idx + 1, item, lines[idx], garments, fabrics, orderType, newStage.id, item.measurementId);
       }
       await tx.orderStatusHistory.create({ data: { orderId: order.id, toStageId: newStage.id, notes: dto.duplicatedFromId ? 'Order booked (copied from another order)' : 'Order booked', changedById: ctx.userId } });
       if (totals.totalAmount.gt(0)) {
@@ -310,6 +331,7 @@ export class OrdersService {
     if (blocked) throw new BadRequestException(`${blocked.garmentName} is already delivered or in production and cannot be removed`);
 
     const garments = await this.loadGarments(dto.items);
+    const fabrics = await this.loadFabrics(dto.items, orderType, before.items.map((i) => i.fabricId));
     const lines = dto.items.map((i) => this.lineFor(i, orderType));
     const totals = orderAmounts(lines, dto.additionalCharges ?? before.additionalCharges, dto.discount ?? before.discount);
     if (totals.discount.gt(totals.subtotal)) throw new BadRequestException('Discount cannot be more than the order amount');
@@ -330,19 +352,23 @@ export class OrdersService {
         },
       });
       if (res.count !== 1) throw new ConflictException('This order was changed by someone else. Reload and try again.');
-      for (const r of removed) await tx.orderItem.delete({ where: { id: r.id } });
+      for (const r of removed) {
+        await this.stock.dropItemReservations(tx, r.id);
+        await tx.orderItem.delete({ where: { id: r.id } });
+      }
       let nextLine = Math.max(0, ...before.items.map((i) => i.lineNo)) + 1;
       for (const [idx, item] of dto.items.entries()) {
         const l = lines[idx];
         if (!item.id) {
-          await this.createItem(tx, id, before.customer.id, nextLine++, item, l, garments, orderType, before.stage.id, item.measurementId);
+          await this.createItem(tx, id, before.customer.id, nextLine++, item, l, garments, fabrics, orderType, before.stage.id, item.measurementId);
           continue;
         }
         const old = existing.get(item.id)!;
-        await tx.orderItem.update({
+        const updated = await tx.orderItem.update({
           where: { id: item.id },
-          data: { ...this.itemData(item, l, garments, orderType), version: { increment: 1 } },
+          data: { ...this.itemData(item, l, garments, fabrics, orderType), version: { increment: 1 } },
         });
+        await this.stock.syncItemReservation(tx, updated);
         const garmentChanged = (item.garmentTypeId ?? null) !== (old.garmentTypeId ?? null);
         const pickChanged = !!item.measurementId && item.measurementId !== old.measurement?.sourceMeasurementId;
         if (item.refreshMeasurement || garmentChanged || pickChanged) {
@@ -468,6 +494,7 @@ export class OrdersService {
         if (!add) continue;
         const full = delivered === item.quantity;
         await tx.orderItem.update({ where: { id: item.id }, data: { deliveredQuantity: delivered, ...(full ? { stageId: deliveredStage.id } : {}), version: { increment: 1 } } });
+        await this.stock.consumeForDelivery(tx, item, delivered, delivery.id, o.orderNumber, ctx);
         if (full && item.stageId !== deliveredStage.id) {
           await tx.orderStatusHistory.create({ data: { orderId: id, orderItemId: item.id, fromStageId: item.stageId, toStageId: deliveredStage.id, notes: `Delivery ${deliveryNo}`, changedById: ctx.userId } });
         }
@@ -515,6 +542,7 @@ export class OrdersService {
         },
       });
       await tx.orderItem.updateMany({ where: { orderId: id }, data: { stageId: cancelled.id } });
+      await this.stock.releaseOrder(tx, id);
       await tx.orderStatusHistory.create({ data: { orderId: id, fromStageId: o.stageId, toStageId: cancelled.id, notes: dto.reason, changedById: ctx.userId } });
       if (effective.gt(0)) {
         await tx.customerLedger.create({
@@ -585,6 +613,27 @@ export class OrdersService {
     return new Map(rows.map((g) => [g.id, g]));
   }
 
+  /**
+   * Shop fabric chosen from stock: checks the fabric, and fills the rate (sale price) and
+   * description when the form left them empty.
+   */
+  private async loadFabrics(items: OrderItemDto[], orderType: string, alreadyOnOrder: (string | null)[] = []) {
+    for (const i of items) if (this.fabricSource(i, orderType) !== 'SHOP') i.fabricId = null;
+    const ids = [...new Set(items.map((i) => i.fabricId).filter((v): v is string => !!v))];
+    const rows = ids.length ? await this.prisma.fabric.findMany({ where: { id: { in: ids }, deletedAt: null } }) : [];
+    if (rows.length !== ids.length) throw new BadRequestException('One of the selected fabrics was not found');
+    const map = new Map(rows.map((f) => [f.id, f]));
+    for (const i of items) {
+      if (!i.fabricId) continue;
+      const f = map.get(i.fabricId)!;
+      if (!f.isActive && !alreadyOnOrder.includes(f.id)) throw new BadRequestException(`${f.name} (${f.code}) is inactive and cannot be used on new orders`);
+      if (!i.fabricQuantity || dec(i.fabricQuantity).lte(0)) throw new BadRequestException(`${i.garmentName}: enter how much fabric is needed`);
+      if (i.fabricRate === undefined || i.fabricRate === '') i.fabricRate = moneyString(f.salePrice);
+      if (!i.fabricDescription) i.fabricDescription = [f.name, f.color].filter(Boolean).join(' - ') + ` (${f.code})`;
+    }
+    return map;
+  }
+
   private lineFor(i: OrderItemDto, orderType: string): LineAmounts {
     const source = this.fabricSource(i, orderType);
     return lineAmounts({ quantity: i.quantity, stitchingPrice: i.stitchingPrice, fabricQuantity: i.fabricQuantity, fabricRate: i.fabricRate, additionalCharges: i.additionalCharges, chargeFabric: source === 'SHOP' });
@@ -595,8 +644,10 @@ export class OrdersService {
     return i.fabricSource ?? (orderType === 'STITCHING_WITH_FABRIC' ? 'SHOP' : 'CUSTOMER');
   }
 
-  private itemData(i: OrderItemDto, l: LineAmounts, garments: Map<string, { id: string; name: string }>, orderType: string) {
+  private itemData(i: OrderItemDto, l: LineAmounts, garments: Map<string, { id: string; name: string }>, fabrics: Map<string, unknown>, orderType: string) {
+    const source = this.fabricSource(i, orderType);
     return {
+      fabricId: source === 'SHOP' && i.fabricId && fabrics.has(i.fabricId) ? i.fabricId : null,
       garmentTypeId: i.garmentTypeId ?? null, garmentName: i.garmentName || garments.get(i.garmentTypeId ?? '')?.name || 'Garment',
       quantity: i.quantity, fabricSource: this.fabricSource(i, orderType), fabricDescription: i.fabricDescription || null,
       fabricPerPiece: l.fabricPerPiece, fabricQuantity: l.fabricQuantity, fabricRate: l.fabricRate, fabricAmount: l.fabricAmount,
@@ -607,9 +658,10 @@ export class OrdersService {
 
   private async createItem(
     tx: PrismaTx, orderId: string, customerId: string, lineNo: number, item: OrderItemDto, l: LineAmounts,
-    garments: Map<string, { id: string; name: string; measurementTemplateId: string | null }>, orderType: string, stageId: string, measurementId?: string,
+    garments: Map<string, { id: string; name: string; measurementTemplateId: string | null }>, fabrics: Map<string, unknown>, orderType: string, stageId: string, measurementId?: string,
   ) {
-    const created = await tx.orderItem.create({ data: { orderId, lineNo, stageId, ...this.itemData(item, l, garments, orderType) } });
+    const created = await tx.orderItem.create({ data: { orderId, lineNo, stageId, ...this.itemData(item, l, garments, fabrics, orderType) } });
+    await this.stock.syncItemReservation(tx, created);
     await this.snapshot(tx, created.id, customerId, garments.get(item.garmentTypeId ?? '')?.measurementTemplateId ?? null, orderType, measurementId);
     return created;
   }

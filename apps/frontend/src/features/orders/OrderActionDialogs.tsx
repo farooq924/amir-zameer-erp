@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { FieldError, Label } from '@/components/ui/label';
 import { api, errorMessage } from '@/services/api';
+import { newId } from '@/utils/id';
 import type { EmployeeRef, OrderDetail, StageRef } from '@/types';
 import { cn } from '@/utils/cn';
 import { formatPKR } from '@/utils/format';
@@ -96,7 +97,7 @@ export function PaymentDialog({ order, open, onOpenChange }: Base) {
   const [notes, setNotes] = useState('');
   const [key, setKey] = useState('');
   const [touched, setTouched] = useState(false);
-  useEffect(() => { if (open) { setAmount(Number(balance) > 0 ? balance : ''); setMethod('CASH'); setReference(''); setNotes(''); setTouched(false); setKey(crypto.randomUUID()); } }, [open, balance]);
+  useEffect(() => { if (open) { setAmount(Number(balance) > 0 ? balance : ''); setMethod('CASH'); setReference(''); setNotes(''); setTouched(false); setKey(newId()); } }, [open, balance]);
   const error = !MONEY.test(amount.trim()) || toPaisa(amount) <= 0 ? 'Enter an amount like 1500' : toPaisa(amount) > toPaisa(balance) ? `Balance is only ${formatPKR(balance)}` : undefined;
   const m = useOrderMutation<object>(order, 'payments', 'Payment received', () => onOpenChange(false));
   return (

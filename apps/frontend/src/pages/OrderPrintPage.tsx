@@ -4,6 +4,7 @@ import { Printer } from 'lucide-react';
 import { useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { ErrorState } from '@/components/common';
+import { PrintFooter } from '@/components/PrintFooter';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { METHOD_LABEL, ORDER_TYPE_LABEL } from '@/features/orders/badges';
@@ -74,6 +75,7 @@ export function OrderPrintPage() {
             </section>
           ))}
           <footer className="mt-10 flex justify-between text-xs"><span>Cutting: ________ Stitching: ________ Checked: ________</span><span>Printed {formatDateTime(new Date())}</span></footer>
+          <PrintFooter />
         </article>
       </div>
     );
@@ -128,6 +130,7 @@ export function OrderPrintPage() {
         <Dash />
         <p className="text-center">{String(printing.invoiceFooter || 'Thank you.')}</p>
         <p className="mt-1 text-center text-[10px]">Printed {formatDateTime(new Date())}</p>
+        <PrintFooter variant="receipt" />
       </article>
     </div>
   );

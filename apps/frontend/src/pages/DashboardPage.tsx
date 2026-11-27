@@ -63,7 +63,7 @@ export function DashboardPage() {
     can('orders', 'CREATE') && { to: '/orders/new', label: 'New Order', icon: Plus },
     can('customers', 'CREATE') && { to: '/customers?new=1', label: 'Add Customer', icon: UserPlus },
     can('measurements', 'VIEW') && { to: '/measurements', label: 'Measurements', icon: Ruler },
-    can('inventory', 'CREATE') && { to: '/inventory', label: 'Receive Fabric', icon: PackagePlus },
+    can('purchases', 'CREATE') && { to: '/purchases/new', label: 'Receive Fabric', icon: PackagePlus },
     can('production', 'VIEW') && { to: '/production', label: 'Production', icon: Scissors },
     can('payments', 'CREATE') && { to: '/payments', label: 'Receive Payment', icon: FileText },
   ].filter(Boolean) as { to: string; label: string; icon: LucideIcon }[];
@@ -99,8 +99,15 @@ export function DashboardPage() {
             <StatCard compact label="Ready Orders" value={String(c?.completedOrders ?? 0)} icon={CheckCircle2} tile="blue" loading={l} />
             <StatCard compact label="Delivered" value={String(c?.deliveredOrders ?? 0)} icon={PackageCheck} tile="purple" loading={l} />
             <StatCard compact label="Outstanding" value={formatPKR(c?.customerOutstanding)} icon={Wallet} tile="rose" loading={l} />
-            <StatCard compact label="Fabric Stock" value={formatPKR(c?.fabricStockValue)} icon={c?.lowStockItems ? AlertTriangle : Layers} tile="slate" loading={l}
-              hint={c?.lowStockItems ? `${c.lowStockItems} low stock` : undefined} />
+            {can('inventory', 'VIEW') ? (
+              <Link to={c?.lowStockItems ? '/inventory?stock=low' : '/inventory'} className="block">
+                <StatCard compact label="Fabric Stock" value={formatPKR(c?.fabricStockValue)} icon={c?.lowStockItems ? AlertTriangle : Layers} tile={c?.lowStockItems ? 'rose' : 'slate'} loading={l}
+                  hint={c?.lowStockItems ? `${c.lowStockItems} low stock` : undefined} className="h-full hover:border-primary" />
+              </Link>
+            ) : (
+              <StatCard compact label="Fabric Stock" value={formatPKR(c?.fabricStockValue)} icon={c?.lowStockItems ? AlertTriangle : Layers} tile="slate" loading={l}
+                hint={c?.lowStockItems ? `${c.lowStockItems} low stock` : undefined} />
+            )}
           </div>
         </>
       )}

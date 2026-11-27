@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ClipboardList, 
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { AppVersion } from '@/components/AppVersion';
 import { BrandLogo, SewingMachineMark, TailorArt } from '@/components/brand';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -12,6 +13,7 @@ import { api } from '@/services/api';
 import { useAuth } from '@/store/auth';
 import { useUi } from '@/store/ui';
 import type { SettingsMap } from '@/types';
+import { PrintFooter } from '@/components/PrintFooter';
 import { cn } from '@/utils/cn';
 import { initials } from '@/utils/format';
 import { GlobalSearch } from './GlobalSearch';
@@ -80,15 +82,16 @@ export function AppLayout() {
           {sidebarCollapsed ? <SewingMachineMark className="h-7 w-9 text-gold" /> : <BrandLogo name={businessName} stacked />}
         </Link>
         {navList(sidebarCollapsed)}
-        <div className={cn('relative z-10 shrink-0', !sidebarCollapsed && 'h-28')}>
-          {!sidebarCollapsed && <TailorArt className="pointer-events-none absolute -left-6 bottom-0 w-64 opacity-90" />}
-          <div className="absolute inset-x-0 bottom-0 p-3">
+        <div className={cn('relative z-10 shrink-0', !sidebarCollapsed && 'h-36')}>
+          {!sidebarCollapsed && <TailorArt className="pointer-events-none absolute -left-6 bottom-8 w-64 opacity-90" />}
+          <div className="absolute inset-x-0 bottom-0 space-y-1.5 p-3">
             <button onClick={toggleSidebar} aria-label="Toggle sidebar"
               className={cn('flex w-full items-center justify-center gap-2 rounded-lg bg-black/30 px-3 py-2 text-xs font-medium text-sidebar-foreground backdrop-blur hover:bg-black/45 hover:text-white', sidebarCollapsed && 'static')}>
               {sidebarCollapsed ? <ChevronsRight className="h-4 w-4" /> : (<><ChevronsLeft className="h-4 w-4" /><span className="flex-1 text-left">Collapse</span></>)}
             </button>
+            <AppVersion collapsed={sidebarCollapsed} />
           </div>
-          {sidebarCollapsed && <div className="h-14" />}
+          {sidebarCollapsed && <div className="h-[84px]" />}
         </div>
       </aside>
 
@@ -107,8 +110,9 @@ export function AppLayout() {
               <ChevronRight className="h-4 w-4 text-white/60" />
             </button>
             {navList(false, () => setMobileNav(false))}
-            <div className="border-t border-white/10 p-3">
+            <div className="space-y-1 border-t border-white/10 p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
               <button onClick={doLogout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-rose-400 hover:bg-white/10"><LogOut className="h-[18px] w-[18px]" /> Logout</button>
+              <AppVersion className="px-3" />
             </div>
           </aside>
         </div>
@@ -131,7 +135,7 @@ export function AppLayout() {
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 pb-28 pt-5 lg:px-6 lg:pb-8 lg:pt-6">
-          <div className="mx-auto max-w-7xl"><Outlet /></div>
+          <div className="mx-auto max-w-7xl"><Outlet /><PrintFooter printOnly /></div>
         </main>
 
         {/* Mobile bottom navigation */}

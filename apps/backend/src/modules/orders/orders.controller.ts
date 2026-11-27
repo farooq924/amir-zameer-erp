@@ -7,6 +7,7 @@ import {
   AdjustmentDto, AssignDto, CancelOrderDto, ChangeStageDto, CreateOrderDto, DeliverDto, OrderQueryDto, RecordPaymentDto, RefreshMeasurementDto,
   ReorderStagesDto, StageDto, UpdateOrderDto, UpdateStageDto,
 } from './dto/order.dto';
+import { FabricPickerQueryDto } from '../inventory/dto/inventory.dto';
 import { OrdersService } from './orders.service';
 import { WorkflowService } from './workflow.service';
 
@@ -34,6 +35,13 @@ export class OrdersController {
   @ApiOperation({ summary: 'Active garments, stages, employees and order settings for the order form' })
   formOptions() {
     return this.orders.formOptions();
+  }
+
+  @Get('fabric-options')
+  @RequirePermissions('orders', 'VIEW')
+  @ApiOperation({ summary: 'Shop fabrics with the stock that is free to use (for the order form)' })
+  fabricOptions(@Query() q: FabricPickerQueryDto) {
+    return this.orders.fabricOptions(q);
   }
 
   @Get('customer-measurements/:customerId')

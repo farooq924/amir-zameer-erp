@@ -175,6 +175,8 @@ export interface EmployeeRef { id: string; code: string; name: string; designati
 export interface OrderItem {
   id: string; lineNo: number; garmentTypeId: string | null; garmentType: { id: string; code: string; name: string; measurementTemplateId: string | null } | null;
   garmentName: string; quantity: number; deliveredQuantity: number; fabricSource: 'SHOP' | 'CUSTOMER'; fabricDescription: string | null;
+  fabricId: string | null; fabric: { id: string; code: string; name: string; unit: string; color: string | null } | null;
+  stock: { status: 'ACTIVE' | 'CONSUMED' | 'RELEASED'; reserved: string; issued: string } | null;
   fabricQuantity: string; fabricPerPiece: string; fabricRate: string; fabricAmount: string; stitchingPrice: string; stitchingAmount: string;
   additionalCharges: string; lineTotal: string; notes: string | null; stage: StageRef; assignedEmployee: EmployeeRef | null; canRemove: boolean;
   measurement: { id: string; sourceMeasurementId: string | null; templateName: string; unit: 'INCH' | 'CM'; notes: string | null; takenAt: string; values: SnapshotValue[] } | null;
@@ -210,3 +212,69 @@ export interface OrderFormOptions {
 }
 
 export interface CustomerMeasurementRef { id: string; templateId: string; templateName: string; versionNo: number; isLatest: boolean; takenAt: string; unit: 'INCH' | 'CM' }
+
+// ---------------------------------------------------------------- Phase 4: inventory, suppliers & purchases
+
+export type StockLevel = 'OUT' | 'LOW' | 'OK';
+export interface Ref { id: string; code: string; name: string }
+
+export interface Fabric {
+  id: string; code: string; name: string; brand: string | null; category: { id: string; name: string } | null;
+  color: string | null; design: string | null; quality: string | null; supplier: Ref | null; unit: string; location: string | null;
+  isActive: boolean; version: number; purchasePrice: string; salePrice: string; minimumStock: string; currentStock: string;
+  reservedStock: string; availableStock: string; averageCost: string; stockValue: string; level: StockLevel; createdAt: string; updatedAt: string;
+}
+
+export interface FabricDetail extends Fabric {
+  reservations: { id: string; orderId: string; orderNumber: string; customerName: string; expectedDeliveryDate: string | null; garment: string; quantity: string; consumed: string; remaining: string }[];
+  lastPurchase: { purchaseId: string; purchaseNo: string; date: string; supplier: string; rate: string; quantity: string } | null;
+}
+
+export interface FabricOption {
+  id: string; code: string; name: string; brand: string | null; color: string | null; design: string | null; unit: string; isActive: boolean;
+  salePrice: string; purchasePrice: string; currentStock: string; availableStock: string; level: StockLevel; category: string | null;
+}
+
+export interface FabricCategory { id: string; name: string; description: string | null; isActive: boolean; fabrics: number }
+
+export interface InventorySummary {
+  activeFabrics: number; stockValue: string; lowStock: number; outOfStock: number; reservedQuantity: string; lowStockItems: Fabric[];
+}
+
+export interface StockMovement {
+  id: string; movementNo: string; fabric: { id: string; code: string; name: string; unit: string }; type: string; direction: 'IN' | 'OUT';
+  quantity: string; unitCost: string; totalCost: string; balanceAfter: string; referenceType: string | null; referenceId: string | null;
+  reason: string | null; movementDate: string; createdBy: { id: string; fullName: string } | null;
+}
+
+export interface Supplier {
+  id: string; code: string; name: string; contactNumber: string | null; whatsapp: string | null; address: string | null; city: string | null;
+  notes: string | null; status: 'ACTIVE' | 'INACTIVE'; openingBalance: string; balance: string; version: number; fabrics?: number;
+}
+
+export interface SupplierDetail extends Omit<Supplier, 'fabrics'> {
+  totalPurchased: string; purchaseCount: number;
+  purchases: { id: string; purchaseNo: string; purchaseDate: string; supplierInvoiceNo: string | null; items: number; totalAmount: string; paidAmount: string; balanceAmount: string; status: string }[];
+  payments: { id: string; paymentNo: string; paymentDate: string; amount: string; method: string; reference: string | null; purchaseNo: string | null; notes: string | null }[];
+  fabrics: { id: string; code: string; name: string; unit: string; currentStock: string }[];
+}
+
+export interface SupplierLedger {
+  supplier: Ref;
+  entries: { id: string; date: string; entryType: string; description: string | null; debit: string; credit: string; balance: string }[];
+  totals: { debit: string; credit: string; balance: string };
+}
+
+export interface PurchaseListRow {
+  id: string; purchaseNo: string; supplier: Ref; supplierInvoiceNo: string | null; purchaseDate: string; fabrics: string; lines: number;
+  totalAmount: string; paidAmount: string; balanceAmount: string; status: string;
+}
+
+export interface PurchaseDetail {
+  id: string; purchaseNo: string; supplier: Ref & { contactNumber: string | null; city: string | null }; supplierInvoiceNo: string | null;
+  purchaseDate: string; subtotal: string; discount: string; otherCharges: string; totalAmount: string; returnsTotal: string;
+  paidAmount: string; balanceAmount: string; status: string; notes: string | null; createdAt: string;
+  items: { id: string; fabric: { id: string; code: string; name: string; unit: string; color: string | null }; quantity: string; rate: string; amount: string; returnedQuantity: string; returnableQuantity: string }[];
+  returns: { id: string; returnNo: string; returnDate: string; totalAmount: string; reason: string | null; items: { fabric: { id: string; code: string; name: string; unit: string }; quantity: string; rate: string; amount: string }[] }[];
+  payments: { id: string; paymentNo: string; paymentDate: string; amount: string; method: string; reference: string | null }[];
+}
