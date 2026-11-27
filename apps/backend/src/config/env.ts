@@ -17,6 +17,8 @@ const EnvSchema = z.object({
   LOGIN_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
   SWAGGER_ENABLED: bool.optional(),
   TRUST_PROXY: bool.default(false),
+  /** Folder of the built web app served on the API port. Default: apps/frontend/dist. */
+  FRONTEND_DIST: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;

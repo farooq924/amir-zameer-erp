@@ -43,16 +43,9 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          charts: ['recharts'],
-          vendor: ['@tanstack/react-query', 'zustand', 'zod', 'react-hook-form', '@hookform/resolvers', 'sonner'],
-          ui: ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-checkbox', '@radix-ui/react-tabs', '@radix-ui/react-label', '@radix-ui/react-slot', 'lucide-react'],
-        },
-      },
-    },
+    chunkSizeWarningLimit: 1500,
+    // No manualChunks: splitting React into its own chunk broke the production build at runtime
+    // ("Cannot set properties of undefined (setting 'Children')"). Vite's default splitting is used instead.
   },
   test: {
     environment: 'jsdom',

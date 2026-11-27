@@ -12,7 +12,6 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "db:migrate": "pnpm --filter @az/backend db:migrate",
-    "db:seed": "pnpm --filter @az/backend db:seed",
-    "share": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/share-online.ps1"
+    "db:seed": "pnpm --filter @az/backend db:seed"
   }
 }
