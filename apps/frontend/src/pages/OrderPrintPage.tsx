@@ -95,7 +95,8 @@ export function OrderPrintPage() {
           {biz.phone ? <p>{String(biz.phone)}</p> : null}
         </header>
         <Dash />
-        <p className="text-center font-bold">{payment ? `PAYMENT RECEIPT ${payment.receiptNo}` : 'ORDER RECEIPT'}</p>
+        <p className="text-center font-bold">{payment ? `${payment.type === 'REFUND' ? 'REFUND' : 'PAYMENT'} RECEIPT ${payment.receiptNo}` : 'ORDER RECEIPT'}</p>
+        {payment?.status === 'REVERSED' && <p className="text-center font-bold">*** REVERSED ***</p>}
         <Dash />
         <Line l="Order" r={o.orderNumber} />
         <Line l="Date" r={formatDate(o.orderDate)} />
@@ -119,12 +120,12 @@ export function OrderPrintPage() {
         {payment ? (
           <>
             <Dash />
-            <Line l="Received now" r={formatPKR(payment.amount)} bold />
+            <Line l={payment.type === 'REFUND' ? 'Refunded' : 'Received now'} r={formatPKR(payment.amount)} bold />
             <Line l="Method" r={METHOD_LABEL[payment.method] ?? payment.method} />
             {payment.reference && <Line l="Ref" r={payment.reference} />}
             <Line l="On" r={formatDateTime(payment.paymentDate)} />
           </>
-        ) : o.payments.map((p) => <Line key={p.id} l={`Paid ${p.receiptNo}`} r={amount(p.amount)} />)}
+        ) : o.payments.filter((p) => p.status !== 'REVERSED').map((p) => <Line key={p.id} l={`${p.type === 'REFUND' ? 'Refund' : 'Paid'} ${p.receiptNo}`} r={`${p.type === 'REFUND' ? '-' : ''}${amount(p.amount)}`} />)}
         <Line l="Total paid" r={formatPKR(o.paidAmount)} />
         <Line l={Number(o.balanceAmount) < 0 ? 'CREDIT' : 'BALANCE'} r={formatPKR(Math.abs(Number(o.balanceAmount)))} bold />
         <Dash />

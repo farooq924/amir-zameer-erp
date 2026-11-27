@@ -69,7 +69,7 @@ describe('Settings, audit log, dashboard & database rules (e2e)', () => {
         stitchingTotal: '2500.00', fabricTotal: '4000.50', subtotal: '6500.50', totalAmount: '6500.50', balanceAmount: '6500.50',
       },
     });
-    const category = await prisma.expenseCategory.create({ data: { name: 'Electricity' } });
+    const category = await prisma.expenseCategory.create({ data: { name: 'Electricity (test)' } });
     await prisma.expense.create({
       data: { expenseNo: 'EXP-T1', expenseDate: new Date(`${pkToday}T00:00:00Z`), categoryId: category.id, description: 'Bill', amount: '1200.25', paymentMethod: 'CASH', idempotencyKey: 'exp-t1' },
     });
@@ -116,7 +116,9 @@ describe('Settings, audit log, dashboard & database rules (e2e)', () => {
       .rejects.toThrow();
     // dashboard net profit now reflects the posted revenue
     const res = await owner.agent.get('/api/dashboard/summary?preset=custom&from=2026-11-01&to=2026-11-30').expect(200);
-    expect(res.body.cards.netProfit).toBe('100.00');
+    // approved expenses are posted to the books automatically (Phase 6), so this month's expense of 1200.25 counts too
+    const pkMonth = new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 7);
+    expect(Number(res.body.cards.netProfit)).toBeCloseTo(100 - (pkMonth === '2026-11' ? 1200.25 : 0), 2);
   });
 
   it('stock cannot go negative and inventory movements are append-only', async () => {

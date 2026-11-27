@@ -1,6 +1,6 @@
 {
   "name": "@az/backend",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "scripts": {
     "build": "nest build && tsc -p tsconfig.seed.json",
@@ -14,7 +14,11 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
-    "db:seed:prod": "node dist-seed/seed.js"
+    "db:seed:prod": "node dist-seed/seed.js",
+    "demo:load": "node dist/demo/cli.js load",
+    "demo:remove": "node dist/demo/cli.js remove",
+    "demo:status": "node dist/demo/cli.js status",
+    "demo:dev": "ts-node --transpile-only src/demo/cli.ts"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"

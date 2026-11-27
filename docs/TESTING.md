@@ -42,3 +42,10 @@ It refuses to run against a database whose name does not end in `_test`.
   production limits, idempotent advances, payroll calculation, draft edits, stale-figures check on approve, month lock, reopen,
   part / full / pay-all payments with idempotency, salary payments immutable, payslip, role access).
 * Frontend: 5 files, 17 tests. Playwright: `e2e/employees.spec.ts` passed.
+
+## Phase 6 results (2026-11-27)
+* Backend: 157 tests passed. New `posting.spec.ts` (line building, cash account by method, Karachi dates) and
+  `test/phase6-finance.e2e-spec.ts` (automatic posting of orders, receipts, purchases, payroll and expenses; sync runs twice without
+  duplicates; refunds and reversals; expense approval, rejection and cancel; recurring bills; manual journals and reversal; trial balance,
+  P&L and balance sheet in balance; month close / reopen / lock; role access; journal clean-up for demo data).
+* Frontend: 5 files, 17 tests; type check and production build clean.
