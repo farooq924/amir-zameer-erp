@@ -1,13 +1,13 @@
 /* eslint-disable no-console */
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { DEFAULT_MEASUREMENT_TEMPLATES, DEFAULT_ROLES, MODULES, expandRoleGrants, permissionCode } from '@az/shared';
+import { DEFAULT_GARMENTS, DEFAULT_MEASUREMENT_TEMPLATES, DEFAULT_ROLES, MODULES, expandRoleGrants, permissionCode } from '@az/shared';
 
 /**
  * Idempotent seed: safe to run on every deployment.
  *  - syncs the permission catalogue and the default role -> permission matrix
  *  - creates the first Owner account ONLY if no owner exists
- *  - creates default workflow stages (never overwrites user edits)
+ *  - creates default workflow stages, measurement templates and garments (never overwrites user edits)
  */
 const WORKFLOW_STAGES = [
   { code: 'NEW', name: 'New Order', color: 'slate' },
@@ -105,6 +105,18 @@ export async function seed(prisma: PrismaClient, opts: { log?: boolean } = {}): 
     });
   }
   log(`Measurement templates: ${await prisma.measurementTemplate.count()}`);
+
+  // 6. Garments: created once, linked to the matching measurement template. Prices start at 0
+  //    so the owner sets real shop prices in Garments.
+  for (const g of DEFAULT_GARMENTS) {
+    const exists = await prisma.garmentType.findUnique({ where: { code: g.code } });
+    if (exists) continue;
+    const template = await prisma.measurementTemplate.findUnique({ where: { code: g.template } });
+    await prisma.garmentType.create({
+      data: { code: g.code, name: g.name, category: g.category, measurementTemplateId: template?.id ?? null, defaultFabricConsumption: g.fabric },
+    });
+  }
+  log(`Garments: ${await prisma.garmentType.count()}`);
 }
 
 if (require.main === module) {

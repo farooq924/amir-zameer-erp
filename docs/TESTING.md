@@ -22,3 +22,15 @@ It refuses to run against a database whose name does not end in `_test`.
 * Playwright: 3 passed (new customer + measurement workflow).
 * Type check (`pnpm -r typecheck`) and production build (`pnpm build`) clean.
 * Manual browser check on desktop (1366 px) and mobile (390 px): customers list, profile tabs, measurement card, new-version form, templates list and editor, recent measurements, print sheet.
+
+## Phase 3 results (2026-11-27)
+* Backend: 14 suites, 110 tests passed (20 new: 4 order-maths unit tests, 16 orders/garments e2e).
+  Orders e2e covers: garment prices, booking with totals + measurement snapshot + advance receipt + ledger, idempotent create, validation,
+  blocked customers, frozen snapshots (database trigger), revision with optimistic locking and ledger difference, configurable stages and
+  per-garment status, custom stage, assignment, idempotent payments, concurrent payments (only one succeeds), overpayment refused,
+  append-only adjustments, partial and full delivery, cancel with ledger reversal and customer credit, duplicate / alteration orders,
+  search and filters, concurrent order numbers, role permissions (receptionist / tailor).
+* e2e suites now run in alphabetical order (`test/sequencer.js`) because they share one test database.
+* Frontend: 4 files, 15 tests passed. Playwright: new `e2e/orders.spec.ts` (customer -> measurement -> order -> status -> part delivery -> payment -> search) passed.
+* Type check and production build clean. Manual check on desktop (1366 px) and mobile (390 px): orders list, new order tabs, success modal,
+  order details, dialogs, receipt (80 mm), workshop job card (A4), garments, workflow stages.

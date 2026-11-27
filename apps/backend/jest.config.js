@@ -1,5 +1,7 @@
 /** @type {import('jest').Config} */
 module.exports = {
+  // e2e suites share one database: run them in a fixed (alphabetical) order.
+  "testSequencer": "<rootDir>/test/sequencer.js",
   "projects": [
     {
       "moduleFileExtensions": [

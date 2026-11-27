@@ -37,3 +37,14 @@ Dark mode: every token has a `.dark` value. Users switch it from the profile men
 2. Primary action is the gold button, placed top right of the page header.
 3. Status always uses `Badge` with the mapping above, never plain text colour.
 4. No fake numbers or trends: cards show only real data.
+
+## Order status colours (Phase 3, `features/orders/badges.tsx`)
+| Stage | Badge |
+|---|---|
+| New Order, Measurement Completed | `danger` (pink "Pending") |
+| Fabric Allocated, Cutting, Stitching, Quality Check, Trial, custom stages | `warning` (amber "In production") |
+| Alteration | `gold` |
+| Ready | `info` |
+| Delivered | `success` |
+| Cancelled | `secondary` |
+Payment: Unpaid = `danger`, Partly paid = `warning`, Paid = `success`, Credit = `info`. Overdue = solid red pill.

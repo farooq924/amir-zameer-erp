@@ -60,7 +60,7 @@ export function DashboardPage() {
   if (otherStages) statusRows.push({ label: 'Other', color: '#5b6b8c', value: otherStages });
 
   const actions = [
-    can('orders', 'CREATE') && { to: '/orders', label: 'New Order', icon: Plus },
+    can('orders', 'CREATE') && { to: '/orders/new', label: 'New Order', icon: Plus },
     can('customers', 'CREATE') && { to: '/customers?new=1', label: 'Add Customer', icon: UserPlus },
     can('measurements', 'VIEW') && { to: '/measurements', label: 'Measurements', icon: Ruler },
     can('inventory', 'CREATE') && { to: '/inventory', label: 'Receive Fabric', icon: PackagePlus },
