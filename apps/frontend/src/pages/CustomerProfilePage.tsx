@@ -1,6 +1,6 @@
 import { formatPhone, whatsappLink } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Ban, Banknote, ClipboardList, Receipt, Wallet, CheckCircle2, MessageCircle, MoreHorizontal, Pencil, Phone, Trash2, UserX } from 'lucide-react';
+import { ArrowLeft, Ban, Banknote, ClipboardList, Receipt, Wallet, CheckCircle2, MessageCircle, MoreHorizontal, Pencil, Phone, Plus, Trash2, UserX } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -17,6 +17,7 @@ import { CustomerStatusBadge, CustomerTypeBadge } from '@/features/customers/bad
 import { CustomerFormDialog } from '@/features/customers/CustomerFormDialog';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { CustomerMeasurements } from '@/features/measurements/CustomerMeasurements';
+import { StageBadge } from '@/features/orders/badges';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
 import type { CustomerProfile, CustomerStatus, LedgerResponse, Paginated } from '@/types';
@@ -33,19 +34,24 @@ function Loading() {
   return <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>;
 }
 
-function OrdersTab({ id }: { id: string }) {
+function OrdersTab({ id, status }: { id: string; status: CustomerStatus }) {
+  const can = useCan();
+  const navigate = useNavigate();
   const q = useQuery({ queryKey: ['customer', id, 'orders'], queryFn: () => api.get<Paginated<OrderRow>>(`/customers/${id}/orders`, { pageSize: 50 }) });
   if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
   if (q.isLoading) return <Loading />;
-  if (!q.data!.data.length) return <EmptyState title="No orders yet" description="Orders for this customer will appear here once the Orders module is in use." />;
+  if (!q.data!.data.length) {
+    return <EmptyState icon={<ClipboardList />} title="No orders yet" description="Orders booked for this customer will appear here."
+      action={can('orders', 'CREATE') && status !== 'BLOCKED' ? <Button onClick={() => navigate(`/orders/new?customerId=${id}`)}><Plus /> New order</Button> : undefined} />;
+  }
   return (
     <Table>
       <THead><TR><TH>Order</TH><TH>Date</TH><TH className="hidden sm:table-cell">Delivery</TH><TH>Status</TH><TH className="text-right">Total</TH><TH className="text-right">Balance</TH></TR></THead>
       <TBody>{q.data!.data.map((o) => (
-        <TR key={o.id}>
-          <TD className="font-mono text-xs">{o.orderNumber}</TD><TD>{formatDate(o.orderDate)}</TD>
+        <TR key={o.id} className="cursor-pointer" onClick={() => navigate(`/orders/${o.id}`)}>
+          <TD className="whitespace-nowrap font-semibold"><Link to={`/orders/${o.id}`} onClick={(e) => e.stopPropagation()}>{o.orderNumber}</Link></TD><TD className="whitespace-nowrap">{formatDate(o.orderDate)}</TD>
           <TD className="hidden sm:table-cell">{formatDate(o.expectedDeliveryDate)}</TD>
-          <TD><Badge variant="outline">{o.stage?.name ?? humanize(o.lifecycle)}</Badge></TD>
+          <TD>{o.stage ? <StageBadge stage={o.stage} /> : <Badge variant="outline">{humanize(o.lifecycle)}</Badge>}</TD>
           <TD className="text-right tabular-nums">{formatPKR(o.totalAmount)}</TD><TD className="text-right tabular-nums">{formatPKR(o.balanceAmount)}</TD>
         </TR>
       ))}</TBody>
@@ -57,7 +63,7 @@ function PaymentsTab({ id }: { id: string }) {
   const q = useQuery({ queryKey: ['customer', id, 'payments'], queryFn: () => api.get<Paginated<PaymentRow>>(`/customers/${id}/payments`, { pageSize: 50 }) });
   if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
   if (q.isLoading) return <Loading />;
-  if (!q.data!.data.length) return <EmptyState title="No payments yet" description="Advance and final payments will appear here once the Payments module is in use." />;
+  if (!q.data!.data.length) return <EmptyState title="No payments yet" description="Advance and order payments appear here with their receipt numbers." />;
   return (
     <Table>
       <THead><TR><TH>Receipt</TH><TH>Date</TH><TH className="hidden sm:table-cell">Order</TH><TH>Method</TH><TH className="text-right">Amount</TH></TR></THead>
@@ -182,7 +188,8 @@ export function CustomerProfilePage() {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild><a href={`tel:+${c.mobile}`}><Phone /> Call</a></Button>
             {wa && <Button variant="outline" size="sm" asChild><a href={wa} target="_blank" rel="noopener noreferrer"><MessageCircle /> WhatsApp</a></Button>}
-            {can('customers', 'EDIT') && <Button size="sm" onClick={() => setEditOpen(true)}><Pencil /> Edit</Button>}
+            {can('orders', 'CREATE') && c.status !== 'BLOCKED' && <Button size="sm" onClick={() => navigate(`/orders/new?customerId=${c.id}`)}><Plus /> New order</Button>}
+            {can('customers', 'EDIT') && <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}><Pencil /> Edit</Button>}
             {(can('customers', 'EDIT') || can('customers', 'DELETE')) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="More actions"><MoreHorizontal /></Button></DropdownMenuTrigger>
@@ -237,7 +244,7 @@ export function CustomerProfilePage() {
         <TabsContent value="measurements" className="mt-4">
           {can('measurements', 'VIEW') ? <CustomerMeasurements customerId={c.id} /> : <Card><EmptyState title="No access" description="You do not have permission to view measurements." /></Card>}
         </TabsContent>
-        <TabsContent value="orders" className="mt-4"><Card><OrdersTab id={c.id} /></Card></TabsContent>
+        <TabsContent value="orders" className="mt-4"><Card><OrdersTab id={c.id} status={c.status} /></Card></TabsContent>
         <TabsContent value="payments" className="mt-4"><Card><PaymentsTab id={c.id} /></Card></TabsContent>
         <TabsContent value="ledger" className="mt-4"><Card><LedgerTab id={c.id} /></Card></TabsContent>
         <TabsContent value="notes" className="mt-4"><Card><NotesTab id={c.id} /></Card></TabsContent>

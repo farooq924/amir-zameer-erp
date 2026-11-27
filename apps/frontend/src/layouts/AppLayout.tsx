@@ -68,7 +68,7 @@ export function AppLayout() {
     can('customers', 'CREATE') && { label: 'Add Customer', icon: UserPlus, to: '/customers?new=1' },
     can('customers', 'VIEW') && { label: 'Find Customer', icon: Users, to: '/customers' },
     can('measurements', 'VIEW') && { label: 'Measurements', icon: Ruler, to: '/measurements' },
-    can('orders', 'CREATE') && { label: 'New Order', icon: ClipboardList, to: '/orders' },
+    can('orders', 'CREATE') && { label: 'New Order', icon: ClipboardList, to: '/orders/new' },
   ].filter(Boolean) as { label: string; icon: typeof Plus; to: string }[];
 
   return (
@@ -137,14 +137,16 @@ export function AppLayout() {
         {/* Mobile bottom navigation */}
         <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end rounded-t-2xl border-t bg-card px-1 pb-[max(env(safe-area-inset-bottom),0.4rem)] pt-1.5 shadow-[0_-4px_16px_rgba(16,31,61,0.08)] lg:hidden no-print" aria-label="Quick navigation">
           <BottomLink to="/" label="Home" icon={Home} active={isActive('/')} />
-          {can('customers', 'VIEW') ? <BottomLink to="/customers" label="Customers" icon={Users} active={isActive('/customers')} /> : <span />}
+          {can('orders', 'VIEW') ? <BottomLink to="/orders" label="Orders" icon={ClipboardList} active={isActive('/orders')} />
+            : can('customers', 'VIEW') ? <BottomLink to="/customers" label="Customers" icon={Users} active={isActive('/customers')} /> : <span />}
           <div className="flex justify-center">
             <button onClick={() => setQuickOpen(true)} aria-label="Quick add" disabled={!quickActions.length}
               className="-mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-lg ring-4 ring-card disabled:opacity-50">
               <Plus className="h-7 w-7" />
             </button>
           </div>
-          {can('measurements', 'VIEW') ? <BottomLink to="/measurements" label="Measure" icon={Ruler} active={isActive('/measurements')} /> : <span />}
+          {can('orders', 'VIEW') && can('customers', 'VIEW') ? <BottomLink to="/customers" label="Customers" icon={Users} active={isActive('/customers')} />
+            : can('measurements', 'VIEW') ? <BottomLink to="/measurements" label="Measure" icon={Ruler} active={isActive('/measurements')} /> : <span />}
           <button onClick={() => setMobileNav(true)} className="flex flex-col items-center gap-0.5 py-1 text-[11px] text-muted-foreground">
             <MoreHorizontal className="h-5 w-5" />More
           </button>
