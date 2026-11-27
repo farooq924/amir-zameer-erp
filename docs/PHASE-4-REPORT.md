@@ -43,3 +43,10 @@ Version: **1.4.0** (shown at the bottom of the side menu on desktop and in the m
 
 ## Screenshots
 `docs/screenshots/phase-4/`
+
+## Update 1.4.1 - developer footer on prints
+* Every print now ends with "Software developed by Brandistan | www.brandistan.pk | 0333-2532924": order receipts (58/80 mm, two short
+  lines), payment receipts, workshop job cards, measurement sheets, and any app page printed with the Print button (e.g. purchase bills).
+* One shared component `apps/frontend/src/components/PrintFooter.tsx`. **Every new print layout must end with `<PrintFooter />`**
+  (`variant="receipt"` for thermal). Normal app pages get it automatically when printed (hidden on screen).
+* The About window (click the version in the menu) also shows the developer details.

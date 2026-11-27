@@ -13,6 +13,7 @@ import { api } from '@/services/api';
 import { useAuth } from '@/store/auth';
 import { useUi } from '@/store/ui';
 import type { SettingsMap } from '@/types';
+import { PrintFooter } from '@/components/PrintFooter';
 import { cn } from '@/utils/cn';
 import { initials } from '@/utils/format';
 import { GlobalSearch } from './GlobalSearch';
@@ -134,7 +135,7 @@ export function AppLayout() {
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 pb-28 pt-5 lg:px-6 lg:pb-8 lg:pt-6">
-          <div className="mx-auto max-w-7xl"><Outlet /></div>
+          <div className="mx-auto max-w-7xl"><Outlet /><PrintFooter printOnly /></div>
         </main>
 
         {/* Mobile bottom navigation */}

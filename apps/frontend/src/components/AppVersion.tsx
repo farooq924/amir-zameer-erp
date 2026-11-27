@@ -1,6 +1,7 @@
 import { CheckCircle2, Info } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DEVELOPER } from '@/components/PrintFooter';
 import { cn } from '@/utils/cn';
 import { formatDate } from '@/utils/format';
 
@@ -9,6 +10,7 @@ export const BUILD_DATE = __BUILD_DATE__;
 
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
+  { version: '1.4.1', title: 'Print footer', notes: ['Software developer details at the bottom of every print (receipts, job cards, measurement sheets and printed pages)'] },
   {
     version: '1.4.0', title: 'Fabric Inventory & Suppliers',
     notes: [
@@ -66,6 +68,9 @@ export function AppVersion({ collapsed, className }: { collapsed?: boolean; clas
               </section>
             ))}
           </div>
+          <p className="border-t pt-3 text-center text-xs text-muted-foreground">
+            Software developed by <a href={DEVELOPER.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline">{DEVELOPER.name}</a> · {DEVELOPER.website} · {DEVELOPER.phone}
+          </p>
         </DialogContent>
       </Dialog>
     </>

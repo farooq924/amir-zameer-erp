@@ -4,6 +4,7 @@ import { Printer } from 'lucide-react';
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { ErrorState } from '@/components/common';
+import { PrintFooter } from '@/components/PrintFooter';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, errorMessage } from '@/services/api';
@@ -78,6 +79,7 @@ export function MeasurementPrintPage() {
           <span>Cutting master: ____________________</span>
           <span>Printed {formatDateTime(new Date())}</span>
         </footer>
+        <PrintFooter />
       </article>
     </div>
   );
