@@ -19,6 +19,7 @@ const GUARDS: [string, string][] = [
   ['employment_history', 'employment_history_append_only'],
   ['salary_payments', 'salary_payments_append_only'],
   ['payroll_items', 'payroll_items_no_delete_paid'],
+  ['expenses', 'expenses_guard'],
 ];
 
 export interface RemoveResult {
@@ -76,7 +77,10 @@ export async function removeDemoData(prisma: PrismaService): Promise<RemoveResul
       ...(await ids(`SELECT id::text FROM salary_payments WHERE "payrollItemId" = ANY($1::uuid[]) OR "employeeId" = ANY($2::uuid[])`, PI, E)),
       ...(await ids(`SELECT id::text FROM employee_advances WHERE "employeeId" = ANY($1::uuid[])`, E)),
     ];
-    counts.journalEntries = await purgeJournalsFor(tx, { customerIds: C, supplierIds: S, employeeIds: E, fabricIds: F, sourceIds: [...O, ...PUR, ...PAY, ...P, ...extraSources] });
+    const X = m.expenses ?? [];
+    counts.journalEntries = await purgeJournalsFor(tx, {
+      customerIds: C, supplierIds: S, employeeIds: E, fabricIds: F, sourceIds: [...O, ...PUR, ...PAY, ...P, ...X, ...extraSources], entryIds: m.journals ?? [],
+    });
 
     for (const [t, g] of GUARDS) await tx.$executeRawUnsafe(`ALTER TABLE ${t} DISABLE TRIGGER ${g}`);
 
@@ -137,8 +141,15 @@ export async function removeDemoData(prisma: PrismaService): Promise<RemoveResul
     await run('suppliers', `DELETE FROM suppliers WHERE id = ANY($1::uuid[])`, S);
     await run('employees', `DELETE FROM employees WHERE id = ANY($1::uuid[])`, E);
 
+    // Shop expenses and repeating bills of the demo (v1.7.0).
+    const R = m.recurring ?? [];
+    await run('expenses', `DELETE FROM expenses WHERE id = ANY($1::uuid[])`, X);
+    await run('', `UPDATE expenses SET "recurringExpenseId" = NULL WHERE "recurringExpenseId" = ANY($1::uuid[])`, R);
+    await run('', `DELETE FROM recurring_expenses WHERE id = ANY($1::uuid[])`, R);
+    if (U) await run('', `DELETE FROM system_settings WHERE key = $1`, `reports.saved_filters.${U}`);
+
     // History of the demo, then the demo login itself.
-    const all = [...C, ...S, ...F, ...E, ...P, ...O, ...PUR, ...PAY];
+    const all = [...C, ...S, ...F, ...E, ...P, ...O, ...PUR, ...PAY, ...X, ...R, ...(m.journals ?? [])];
     await run('', `DELETE FROM audit_logs WHERE ($1::uuid IS NOT NULL AND "userId" = $1::uuid) OR "recordId" = ANY($2::text[])`, U, all);
     if (U) await run('users', `DELETE FROM users WHERE id = $1::uuid`, U);
     await run('', `DELETE FROM login_attempts WHERE lower(identifier) IN ($1, $2)`, DEMO_USER.username, DEMO_USER.email);

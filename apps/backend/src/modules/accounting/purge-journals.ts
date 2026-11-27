@@ -7,6 +7,8 @@ export interface PurgeScope {
   fabricIds?: string[];
   /** Any document ids (orders, payments, purchases, payrolls, movements, expenses ...). */
   sourceIds?: string[];
+  /** Journal entries removed by their own id (e.g. the demo's manual owner-capital entry). */
+  entryIds?: string[];
 }
 
 /**
@@ -23,19 +25,20 @@ export async function purgeJournalsFor(tx: PrismaTx, scope: PurgeScope): Promise
   const E = scope.employeeIds ?? [];
   const F = scope.fabricIds ?? [];
   const D = scope.sourceIds ?? [];
+  const J = scope.entryIds ?? [];
   const rows = await tx.$queryRawUnsafe<{ id: string }[]>(
     `WITH base AS (
        SELECT DISTINCT l."journalEntryId" AS id FROM journal_entry_lines l
         WHERE l."customerId" = ANY($1::uuid[]) OR l."supplierId" = ANY($2::uuid[]) OR l."employeeId" = ANY($3::uuid[])
        UNION
        SELECT j.id FROM journal_entries j
-        WHERE j."sourceId" = ANY($5::uuid[])
+        WHERE j."sourceId" = ANY($5::uuid[]) OR j.id = ANY($6::uuid[])
            OR j."sourceId" IN (SELECT m.id FROM inventory_movements m WHERE m."fabricId" = ANY($4::uuid[]) OR m."referenceId" = ANY($5::uuid[]))
      )
      SELECT id::text FROM base
      UNION
      SELECT r.id::text FROM journal_entries r WHERE r."reversalOfId" IN (SELECT id FROM base)`,
-    C, S, E, F, D,
+    C, S, E, F, D, J,
   );
   const ids = rows.map((r) => r.id);
   if (!ids.length) return 0;

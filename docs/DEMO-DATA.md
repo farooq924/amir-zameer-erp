@@ -18,6 +18,10 @@ All names, phone numbers and CNICs are made up.
 * 8 staff (master tailor, cutting master, per-piece tailors, finishing, helper, counter sales) with attendance for last month and this month, sick leave, overtime, salary advances, production (pieces) and last month's payroll approved and paid.
   The payroll is skipped when the ERP already has real employees (a demo payroll would include them).
 
+* Expenses (v1.7.0): monthly shop rent, chowkidar, StormFiber internet and K-Electric / SSGC / KW&SC bills for last month and this month, 19 day-to-day expenses (tea, rickshaw, generator diesel, buttons and thread, panaflex, tailor machine repair ...), 2 expenses waiting for approval and 3 recurring monthly bills.
+* Owner's capital (manual journal: Rs 150,000 cash and Rs 350,000 bank) so the balance sheet and cash flow have an opening.
+* 3 saved report filters for the owner (unpaid orders this month, this month's expenses, low fabric stock).
+
 Dates are spread over the past weeks so the dashboard charts look real. Every demo customer, supplier, fabric and employee note starts with `[Demo]`.
 
 ## Commands (Administrator PowerShell, in the project folder)

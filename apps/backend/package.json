@@ -1,6 +1,6 @@
 {
   "name": "@az/backend",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "scripts": {
     "build": "nest build && tsc -p tsconfig.seed.json",
@@ -35,7 +35,9 @@
     "class-transformer": "0.5.1",
     "class-validator": "0.14.2",
     "cookie-parser": "1.4.7",
+    "exceljs": "4.4.0",
     "helmet": "8.1.0",
+    "pdfkit": "0.17.2",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "zod": "3.25.76"
@@ -47,6 +49,7 @@
     "@types/express": "5.0.3",
     "@types/jest": "29.5.14",
     "@types/node": "22.18.0",
+    "@types/pdfkit": "0.17.3",
     "@types/supertest": "6.0.3",
     "jest": "29.7.0",
     "prisma": "6.19.3",
