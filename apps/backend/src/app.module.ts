@@ -6,7 +6,9 @@ import { PrismaModule } from './common/prisma/prisma.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { GarmentsModule } from './modules/garments/garments.module';
 import { MeasurementsModule } from './modules/measurements/measurements.module';
+import { OrdersModule } from './modules/orders/orders.module';
 import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthController } from './modules/health/health.controller';
@@ -28,6 +30,8 @@ import { UsersModule } from './modules/users/users.module';
     DashboardModule,
     CustomersModule,
     MeasurementsModule,
+    GarmentsModule,
+    OrdersModule,
   ],
   controllers: [HealthController],
   providers: [

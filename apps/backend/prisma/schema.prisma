@@ -921,6 +921,7 @@ model Order {
   @@index([stageId])
   @@index([lifecycle])
   @@index([expectedDeliveryDate])
+  @@index([orderNumber(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_number_trgm_idx")
   @@map("orders")
 }
 
@@ -1796,6 +1797,7 @@ model Payment {
 
   @@index([customerId, paymentDate])
   @@index([orderId])
+  @@index([orderId, status], map: "payments_order_status_idx")
   @@index([paymentDate])
   @@map("payments")
 }
