@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../src/common/prisma/prisma.service';
+import { PostingService } from '../src/modules/accounting/posting.service';
 import { DEMO_USER } from '../src/demo/demo-dataset';
 import { loadDemoData, readManifest } from '../src/demo/demo-loader';
 import { removeDemoData } from '../src/demo/demo-remover';
@@ -14,7 +15,7 @@ describe('Demo data load / remove (e2e)', () => {
     customers: await prisma.customer.count(), orders: await prisma.order.count(), payments: await prisma.payment.count(),
     fabrics: await prisma.fabric.count(), movements: await prisma.inventoryMovement.count(), employees: await prisma.employee.count(),
     attendance: await prisma.attendance.count(), payrolls: await prisma.payroll.count(), users: await prisma.user.count(),
-    ledger: await prisma.customerLedger.count(), audit: await prisma.auditLog.count(), stock: (await prisma.fabric.aggregate({ _sum: { currentStock: true } }))._sum.currentStock?.toString(),
+    ledger: await prisma.customerLedger.count(), journals: await prisma.journalEntry.count(), audit: await prisma.auditLog.count(), stock: (await prisma.fabric.aggregate({ _sum: { currentStock: true } }))._sum.currentStock?.toString(),
   });
 
   beforeAll(async () => {
@@ -26,8 +27,13 @@ describe('Demo data load / remove (e2e)', () => {
   });
 
   it('loads, is safe to run twice, and removes only demo records', async () => {
+    await app.get(PostingService).sync(); // books of the other suites' records first
     const before = await realCounts();
     const r = await loadDemoData(app);
+    // The demo is posted to the books with its own (past) dates, and the books balance.
+    expect(await prisma.journalEntry.count()).toBeGreaterThan(before.journals);
+    const tb = await prisma.journalEntryLine.aggregate({ _sum: { debit: true, credit: true } });
+    expect(tb._sum.debit?.toString()).toBe(tb._sum.credit?.toString());
     expect(r.status).toBe('loaded');
     expect(r.counts).toMatchObject({ customers: 24, suppliers: 5, fabrics: 12, employees: 8 });
     expect(r.counts.orders).toBeGreaterThan(25);

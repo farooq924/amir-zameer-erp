@@ -6,6 +6,8 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { RequestContext } from '../common/types/auth-user';
 import { karachiToday } from '../common/utils/date-range';
 import { AttendanceService } from '../modules/attendance/attendance.service';
+import { PostingService } from '../modules/accounting/posting.service';
+import { purgeJournalsFor } from '../modules/accounting/purge-journals';
 import { PasswordService } from '../modules/auth/password.service';
 import { CustomersService } from '../modules/customers/customers.service';
 import { EmployeesService } from '../modules/employees/employees.service';
@@ -598,6 +600,19 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
     for (const t of tables) await tx.$executeRawUnsafe(`ALTER TABLE ${t} ENABLE TRIGGER ${STAMP_TRIGGERS[t]}`);
   }, { timeout: 120_000 });
   for (const fix of direct) await fix();
+
+  // Accounting: the books post automatically from the ledgers and stock movements. Entries posted while the demo was
+  // loading still carry today's date, so remove them and post again now that every record has its story date.
+  const posting = get(PostingService);
+  const demoOrders = (await prisma.order.findMany({ where: { customerId: { in: manifest.customers } }, select: { id: true } })).map((o) => o.id);
+  await prisma.$transaction(async (tx) => {
+    await purgeJournalsFor(tx, {
+      customerIds: manifest.customers, supplierIds: manifest.suppliers, employeeIds: manifest.employees, fabricIds: manifest.fabrics,
+      sourceIds: [...demoOrders, ...manifest.payrolls],
+    });
+  }, { timeout: 120_000 });
+  const books = await posting.sync();
+  if (books.failed.length) notes.push(`${books.failed.length} accounting entries could not be posted (for example a closed month). See Accounting > Sync.`);
 
   manifest.complete = true;
   await saveManifest(prisma, manifest);

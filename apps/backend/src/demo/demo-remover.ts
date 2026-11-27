@@ -1,4 +1,5 @@
 import { PrismaService, PrismaTx } from '../common/prisma/prisma.service';
+import { purgeJournalsFor } from '../modules/accounting/purge-journals';
 import { DEMO_SETTING_KEY, DEMO_USER } from './demo-dataset';
 import { readManifest } from './demo-loader';
 
@@ -67,6 +68,15 @@ export async function removeDemoData(prisma: PrismaService): Promise<RemoveResul
     if (realUse.length) {
       throw new Error(`Real records use demo fabric, so nothing was removed: ${realUse.map((r) => r.what).join(', ')}. Change those records to a real fabric first.`);
     }
+
+    // Automatic journal entries of the demo (Phase 6 accounting), before the records they point to are deleted.
+    // This also locks the journal tables until the removal commits, so the background posting cannot add new ones meanwhile.
+    const extraSources = [
+      ...(await ids(`SELECT id::text FROM supplier_payments WHERE "supplierId" = ANY($1::uuid[])`, S)),
+      ...(await ids(`SELECT id::text FROM salary_payments WHERE "payrollItemId" = ANY($1::uuid[]) OR "employeeId" = ANY($2::uuid[])`, PI, E)),
+      ...(await ids(`SELECT id::text FROM employee_advances WHERE "employeeId" = ANY($1::uuid[])`, E)),
+    ];
+    counts.journalEntries = await purgeJournalsFor(tx, { customerIds: C, supplierIds: S, employeeIds: E, fabricIds: F, sourceIds: [...O, ...PUR, ...PAY, ...P, ...extraSources] });
 
     for (const [t, g] of GUARDS) await tx.$executeRawUnsafe(`ALTER TABLE ${t} DISABLE TRIGGER ${g}`);
 

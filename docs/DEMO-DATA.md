@@ -37,5 +37,7 @@ production, salary payments, audit entries), in one transaction. Append-only rul
 Customers created with the demo login are treated as demo too. If a real record uses demo data (for example a real order
 with a demo fabric) nothing is removed and the message names the record. Document numbers (order, receipt) are not reused after removal.
 
-Future modules that post their own records for orders, payments, purchases or payroll (for example Phase 6 journal entries)
-must extend `apps/backend/src/demo/demo-remover.ts` so those records are removed too.
+Accounting (Phase 6): the demo is posted to the books with its own past dates (journals posted while loading are re-posted
+after the dates are set). Removal deletes the demo's journal entries with `purgeJournalsFor` before anything else.
+Future modules that post their own records for orders, payments, purchases or payroll must extend
+`apps/backend/src/demo/demo-remover.ts` so those records are removed too.
