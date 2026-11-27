@@ -11,6 +11,19 @@ export const BUILD_DATE = __BUILD_DATE__;
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
   {
+    version: '1.6.0', title: 'Payments, Expenses & Accounting',
+    notes: [
+      'Payments page: every receipt in one place, receive payment for any order, reverse a wrong receipt',
+      'Refunds for cancelled or overpaid orders, with refund receipts',
+      'Supplier and salary payments listed with monthly money in / money out',
+      'Expenses with categories, approval for staff entries, cancel with reversal, recurring bills and printable vouchers',
+      'Automatic double-entry books: orders, receipts, purchases, stock used, payroll, salaries, advances and expenses',
+      'Profit & Loss, Balance Sheet, Cash Flow, Trial Balance, journal and account ledgers',
+      'Chart of accounts (cash, bank, JazzCash / Easypaisa) and manual journal entries',
+      'Month closing and locking so past figures cannot change',
+    ],
+  },
+  {
     version: '1.5.0', title: 'Employees, Attendance & Payroll',
     notes: [
       'Employees with codes, CNIC, bank details, job history and salary history',

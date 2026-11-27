@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { DecimalLike, dec, moneyString } from '../../common/utils/money';
 import { ResolvedRange, dateColumnFilter, timestampFilter } from '../../common/utils/date-range';
+import { PostingService } from '../accounting/posting.service';
 
 const ACTIVE_ORDER = { deletedAt: null, lifecycle: { not: 'CANCELLED' as const } };
 
@@ -33,9 +34,10 @@ function dayKeys(from: string, to: string): string[] {
  */
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly posting: PostingService) {}
 
   async summary(range: ResolvedRange) {
+    await this.posting.syncQuietly(); // profit figures come from the books: post anything new first
     const dates = dateColumnFilter(range);
     const times = timestampFilter(range);
 
