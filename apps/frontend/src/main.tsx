@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { App } from './App';
+import { setupPwa } from './offline/pwa';
 import { ApiError, setUnauthorizedHandler } from './services/api';
 import { useAuth } from './store/auth';
 import './index.css';
@@ -25,6 +26,8 @@ setUnauthorizedHandler(() => {
     useAuth.getState().clear();
   }
 });
+
+setupPwa();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

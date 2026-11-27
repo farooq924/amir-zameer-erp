@@ -46,7 +46,12 @@ export async function removeDemoData(prisma: PrismaService): Promise<RemoveResul
     const ids = async (sql: string, ...params: unknown[]) => (await tx.$queryRawUnsafe<{ id: string }[]>(sql, ...params)).map((r) => r.id);
 
     const U = m.userId;
-    const C = [...new Set([...m.customers, ...(U ? await ids(`SELECT id::text FROM customers WHERE "createdById" = $1::uuid`, U) : [])])];
+    // Customers made by the demo login, including ones saved from a demo sync conflict ("Keep both").
+    const C = [...new Set([
+      ...m.customers,
+      ...(U ? await ids(`SELECT id::text FROM customers WHERE "createdById" = $1::uuid`, U) : []),
+      ...(U ? await ids(`SELECT c.id::text FROM customers c JOIN sync_operations s ON s."entityId" = c.id WHERE s."userId" = $1::uuid AND s."entityType" = 'customer' AND s.operation = 'CREATE'`, U) : []),
+    ])];
     const S = m.suppliers;
     const F = m.fabrics;
     const E = m.employees;
@@ -152,6 +157,8 @@ export async function removeDemoData(prisma: PrismaService): Promise<RemoveResul
     // History of the demo, then the demo login itself.
     const all = [...C, ...S, ...F, ...E, ...P, ...O, ...PUR, ...PAY, ...X, ...R, ...(m.journals ?? [])];
     await run('', `DELETE FROM audit_logs WHERE ($1::uuid IS NOT NULL AND "userId" = $1::uuid) OR "recordId" = ANY($2::text[])`, U, all);
+    // Offline sync history of the demo login (Phase 9); its conflicts are deleted with it.
+    if (U) await run('syncEntries', `DELETE FROM sync_operations WHERE "userId" = $1::uuid`, U);
     if (U) await run('users', `DELETE FROM users WHERE id = $1::uuid`, U);
     await run('', `DELETE FROM login_attempts WHERE lower(identifier) IN ($1, $2)`, DEMO_USER.username, DEMO_USER.email);
     await run('', `DELETE FROM system_settings WHERE key = $1`, DEMO_SETTING_KEY);

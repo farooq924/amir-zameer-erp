@@ -11,6 +11,21 @@ export const BUILD_DATE = __BUILD_DATE__;
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
   {
+    version: '1.9.0', title: 'Offline App & Sync',
+    notes: [
+      'Install the ERP as an app on phones, tablets and PCs (Install app button, or Add to Home Screen)',
+      'Opens and works without internet once it has been opened online on that device',
+      'New Offline Desk: add customers, edit customer details, take measurements, book orders and receive payments with no internet',
+      'Work saved offline stays on the device and syncs to the server automatically when the internet returns',
+      'Online / Offline pill in the top bar with the number of entries waiting to sync',
+      'New Sync Center: entries waiting on this device, retry or discard, and the full sync history of every device',
+      'Conflict review: when a customer was changed on two devices, choose field by field what to keep',
+      'Possible duplicate customers from a device are held for review: use the existing customer or save a new one',
+      'Safe to sync more than once: the same entry is never saved twice',
+      'Warning before logout when offline work has not reached the server yet',
+    ],
+  },
+  {
     version: '1.8.0', title: 'WhatsApp & Printing',
     notes: [
       'New WhatsApp page: every message with its status (queued, sent, delivered, read, failed), search and filters',

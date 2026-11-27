@@ -58,6 +58,8 @@ function serveFrontend(app: NestExpressApplication, configured: string | undefin
     setHeaders: (res, filePath) => {
       // Hashed bundles never change; index.html must always be fresh after an update.
       if (/[\\/]assets[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      // The offline app (service worker + manifest) must be re-checked on every visit so updates arrive.
+      else if (/(sw\.js|registerSW\.js|workbox-[\w-]+\.js|manifest\.webmanifest)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
     },
   });
   app.use((req: Request, res: Response, next: NextFunction) => {

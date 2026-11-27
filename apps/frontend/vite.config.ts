@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 /**
  * Hosts allowed to open the app besides localhost.
@@ -27,7 +28,51 @@ const buildDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', y
 const apiProxy = { '/api': { target: 'http://127.0.0.1:4000', changeOrigin: false } };
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Phase 9: installable offline app. The service worker keeps the app screens on the device;
+    // business data is kept in IndexedDB (src/offline) and API calls are never cached here.
+    VitePWA({
+      registerType: 'prompt',
+      injectRegister: false,
+      includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
+      manifest: {
+        name: 'AMIR ZAMEER ERP',
+        short_name: 'AZ ERP',
+        description: 'AMIR ZAMEER - Tailoring & Fabric Management ERP',
+        theme_color: '#101f3d',
+        background_color: '#101f3d',
+        display: 'standalone',
+        orientation: 'any',
+        start_url: '/',
+        scope: '/',
+        icons: [
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        shortcuts: [
+          { name: 'Offline Desk', url: '/offline', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Sync Center', url: '/sync', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api(\/|$)/],
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com',
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'google-fonts', expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 } },
+          },
+        ],
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
   define: {
     __APP_VERSION__: JSON.stringify(rootPackage.version),
     __BUILD_DATE__: JSON.stringify(buildDate),
@@ -52,7 +97,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     sourcemap: false,
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 2000,
     // No manualChunks: splitting React into its own chunk broke the production build at runtime
     // ("Cannot set properties of undefined (setting 'Children')"). Vite's default splitting is used instead.
   },

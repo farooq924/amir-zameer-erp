@@ -15,7 +15,7 @@ describe('Demo data load / remove (e2e)', () => {
     customers: await prisma.customer.count(), orders: await prisma.order.count(), payments: await prisma.payment.count(),
     fabrics: await prisma.fabric.count(), movements: await prisma.inventoryMovement.count(), employees: await prisma.employee.count(),
     attendance: await prisma.attendance.count(), payrolls: await prisma.payroll.count(), users: await prisma.user.count(),
-    ledger: await prisma.customerLedger.count(), whatsapp: await prisma.whatsAppMessage.count(), journals: await prisma.journalEntry.count(), audit: await prisma.auditLog.count(), stock: (await prisma.fabric.aggregate({ _sum: { currentStock: true } }))._sum.currentStock?.toString(),
+    ledger: await prisma.customerLedger.count(), whatsapp: await prisma.whatsAppMessage.count(), journals: await prisma.journalEntry.count(), syncOps: await prisma.syncOperation.count(), conflicts: await prisma.syncConflict.count(), audit: await prisma.auditLog.count(), stock: (await prisma.fabric.aggregate({ _sum: { currentStock: true } }))._sum.currentStock?.toString(),
   });
 
   beforeAll(async () => {
@@ -52,6 +52,15 @@ describe('Demo data load / remove (e2e)', () => {
     expect(dash.body).toBeDefined();
     const orders = await demo.agent.get('/api/orders?pageSize=5').expect(200);
     expect(orders.body.meta.total).toBeGreaterThan(25);
+
+    // Offline sync history (v1.9.0): applied entries from two devices, one rejected, two conflicts to review.
+    expect(r.counts.syncEntries).toBeGreaterThan(10);
+    const conflicts = (await demo.agent.get('/api/sync/conflicts').expect(200)).body as { id: string; kind: string }[];
+    expect(conflicts.map((c) => c.kind).sort()).toEqual(['DUPLICATE', 'VERSION']);
+    const log = await demo.agent.get('/api/sync/operations?status=REJECTED').expect(200);
+    expect(log.body.meta.total).toBe(1);
+    // "Keep both" makes a new customer from the demo conflict; removal must still clean it up.
+    await demo.agent.post(`/api/sync/conflicts/${conflicts.find((c) => c.kind === 'DUPLICATE')!.id}/resolve`).set('X-CSRF-Token', demo.csrf).send({ resolution: 'KEEP_BOTH' }).expect(200);
 
     expect((await loadDemoData(app)).status).toBe('already-loaded');
 
