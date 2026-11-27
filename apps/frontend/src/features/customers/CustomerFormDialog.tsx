@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { formatPhone, normalizePhone } from '@az/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
@@ -99,14 +99,14 @@ export function CustomerFormDialog({ open, onOpenChange, customer, onSaved }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${customer!.code}` : 'Add customer'}</DialogTitle>
+          <DialogTitle><UserPlus className="h-5 w-5 text-primary" />{editing ? `Edit ${customer!.code}` : 'Add customer'}</DialogTitle>
           <DialogDescription>{editing ? 'Changes are saved to the audit log.' : 'A customer code is generated automatically.'}</DialogDescription>
         </DialogHeader>
         <form className="space-y-3" noValidate onSubmit={(e) => { e.preventDefault(); void submit(false); }}>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="c-name">Customer name</Label>
+            <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="c-name" required>Customer name</Label>
               <Input id="c-name" autoFocus {...form.register('name', { onBlur: checkDuplicates })} aria-invalid={!!err.name} /><FieldError message={err.name?.message} /></div>
-            <div className="space-y-1.5"><Label htmlFor="c-mobile">Mobile number</Label>
+            <div className="space-y-1.5"><Label htmlFor="c-mobile" required>Mobile number</Label>
               <Input id="c-mobile" inputMode="tel" placeholder="0300-1234567" {...form.register('mobile', { onBlur: checkDuplicates })} aria-invalid={!!err.mobile} /><FieldError message={err.mobile?.message} /></div>
             <div className="space-y-1.5"><Label htmlFor="c-wa">WhatsApp number</Label>
               <Input id="c-wa" inputMode="tel" placeholder="Same as mobile" {...form.register('whatsapp', { onBlur: checkDuplicates })} /><FieldError message={err.whatsapp?.message} /></div>

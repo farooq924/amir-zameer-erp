@@ -12,7 +12,7 @@ test('customer and measurement workflow', async ({ page }) => {
   await page.getByLabel('Username or email').fill(OWNER);
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Good (Morning|Afternoon|Evening)/ })).toBeVisible();
 
   // Create a customer
   await page.goto('/customers');

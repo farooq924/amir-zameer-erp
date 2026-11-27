@@ -19,3 +19,12 @@ describe('formatting', () => {
     expect(buildQuery({ a: 1, b: '', c: undefined, d: 'x y' })).toBe('?a=1&d=x+y');
   });
 });
+
+describe('initials', () => {
+  it('uses the first letters of the first two words', async () => {
+    const { initials } = await import('@/utils/format');
+    expect(initials('Amir Zameer Khan')).toBe('AZ');
+    expect(initials('  ali ')).toBe('A');
+    expect(initials('')).toBe('?');
+  });
+});

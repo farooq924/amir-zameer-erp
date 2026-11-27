@@ -1,3 +1,4 @@
+import { KeyRound } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -37,7 +38,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Change password</DialogTitle>
+          <DialogTitle><KeyRound className="h-5 w-5 text-primary" />Change password</DialogTitle>
           <DialogDescription>Use at least 10 characters with upper and lower case letters and a number.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3" noValidate>

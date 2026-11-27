@@ -1,6 +1,6 @@
 import { formatPhone, whatsappLink } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Ban, CheckCircle2, MessageCircle, MoreHorizontal, Pencil, Phone, Trash2, UserX } from 'lucide-react';
+import { ArrowLeft, Ban, Banknote, ClipboardList, Receipt, Wallet, CheckCircle2, MessageCircle, MoreHorizontal, Pencil, Phone, Trash2, UserX } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CustomerStatusBadge, CustomerTypeBadge } from '@/features/customers/badges';
 import { CustomerFormDialog } from '@/features/customers/CustomerFormDialog';
+import { StatCard } from '@/features/dashboard/StatCard';
 import { CustomerMeasurements } from '@/features/measurements/CustomerMeasurements';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
@@ -27,17 +28,6 @@ interface OrderRow {
 }
 interface PaymentRow { id: string; receiptNo: string; paymentDate: string; amount: string; method: string; type: string; status: string; reference: string | null; order: { orderNumber: string } | null }
 interface NoteRow { id: string; note: string; createdAt: string }
-
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'danger' }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={`mt-1 text-lg font-semibold tabular-nums ${tone === 'danger' ? 'text-red-700 dark:text-red-400' : ''}`}>{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function Loading() {
   return <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>;
@@ -209,10 +199,10 @@ export function CustomerProfilePage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Total orders" value={`${s.totalOrders}${s.openOrders ? ` (${s.openOrders} open)` : ''}`} />
-        <Stat label="Total billed" value={formatPKR(s.totalBilled)} />
-        <Stat label="Total paid" value={formatPKR(s.totalPaid)} />
-        <Stat label="Outstanding" value={formatPKR(s.outstanding)} tone={Number(s.outstanding) > 0 ? 'danger' : undefined} />
+        <StatCard compact label="Total orders" value={String(s.totalOrders)} hint={s.openOrders ? `${s.openOrders} open` : undefined} icon={ClipboardList} tile="green" />
+        <StatCard compact label="Total billed" value={formatPKR(s.totalBilled)} icon={Receipt} tile="gold" />
+        <StatCard compact label="Total paid" value={formatPKR(s.totalPaid)} icon={Wallet} tile="blue" />
+        <StatCard compact label="Outstanding" value={formatPKR(s.outstanding)} icon={Banknote} tile="rose" tone={Number(s.outstanding) > 0 ? 'negative' : undefined} />
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
