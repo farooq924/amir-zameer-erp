@@ -16,6 +16,9 @@ import { AttendanceModule } from './modules/attendance/attendance.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { ProductionModule } from './modules/production/production.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthController } from './modules/health/health.controller';
@@ -46,6 +49,9 @@ import { UsersModule } from './modules/users/users.module';
     AttendanceModule,
     ProductionModule,
     PayrollModule,
+    AccountingModule,
+    ExpensesModule,
+    PaymentsModule,
   ],
   controllers: [HealthController],
   providers: [

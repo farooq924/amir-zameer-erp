@@ -259,7 +259,7 @@ export function OrderDetailPage() {
                   <TR key={p.id}>
                     <TD className="font-mono text-xs">{p.receiptNo}</TD><TD className="whitespace-nowrap">{formatDateTime(p.paymentDate)}</TD>
                     <TD>{METHOD_LABEL[p.method] ?? humanize(p.method)}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</TD>
-                    <TD className="hidden sm:table-cell">{humanize(p.type)}</TD><TD className="text-right font-medium tabular-nums">{formatPKR(p.amount)}</TD>
+                    <TD className="hidden sm:table-cell">{p.status === 'REVERSED' ? 'Reversed' : humanize(p.type)}</TD><TD className="text-right font-medium tabular-nums">{formatPKR(p.amount)}</TD>
                     <TD>{can('orders', 'PRINT') && <Button variant="ghost" size="icon" asChild aria-label={`Print receipt ${p.receiptNo}`}><Link to={`/print/orders/${o.id}?receipt=${p.id}`} target="_blank"><Printer /></Link></Button>}</TD>
                   </TR>
                 ))}</TBody>

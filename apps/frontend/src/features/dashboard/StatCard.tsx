@@ -20,14 +20,14 @@ export function StatCard({ label, value, hint, icon: Icon, loading, tone, tile =
   tile?: TileTone; featured?: boolean; compact?: boolean; className?: string;
 }) {
   return (
-    <Card className={cn('flex items-center gap-3', compact ? 'p-3' : 'p-3 sm:p-4', featured && 'border-transparent bg-navy text-white dark:bg-navy-soft', className)}>
-      <div className={cn('icon-tile', compact ? 'h-10 w-10 [&_svg]:h-5 [&_svg]:w-5' : 'h-11 w-11 [&_svg]:h-6 [&_svg]:w-6', featured ? 'bg-white/10 text-gold' : TILE[tile])}>
+    <Card className={cn('flex items-center gap-2.5 sm:gap-3', compact ? 'p-3' : 'p-3 sm:p-4', featured && 'border-transparent bg-navy text-white dark:bg-navy-soft', className)}>
+      <div className={cn('icon-tile', compact ? 'h-10 w-10 [&_svg]:h-5 [&_svg]:w-5' : 'h-9 w-9 [&_svg]:h-5 [&_svg]:w-5 sm:h-11 sm:w-11 sm:[&_svg]:h-6 sm:[&_svg]:w-6', featured ? 'bg-white/10 text-gold' : TILE[tile])}>
         <Icon aria-hidden />
       </div>
       <div className="min-w-0">
         <p className={cn('text-xs font-medium leading-tight', featured ? 'text-white/75' : 'text-muted-foreground')}>{label}</p>
         {loading ? <Skeleton className="mt-1.5 h-6 w-24" /> : (
-          <p className={cn('truncate font-bold tabular-nums', compact ? 'text-base' : 'text-xl', tone === 'negative' && !featured && 'text-rose-700 dark:text-rose-400')} title={value}>{value}</p>
+          <p className={cn('truncate font-bold tabular-nums', compact ? 'text-base' : 'text-base sm:text-xl', tone === 'negative' && !featured && 'text-rose-700 dark:text-rose-400')} title={value}>{value}</p>
         )}
         {hint && <p className={cn('line-clamp-1 text-[11px]', featured ? 'text-white/60' : 'text-muted-foreground')}>{hint}</p>}
       </div>
