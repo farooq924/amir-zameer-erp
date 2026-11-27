@@ -54,6 +54,9 @@ const GROUPS: { key: string; label: string; description: string; fields: Field[]
       { key: 'customerPrefix', label: 'Customer code prefix', type: 'text' },
       { key: 'receiptPrefix', label: 'Payment receipt prefix', type: 'text' },
       { key: 'expensePrefix', label: 'Expense prefix', type: 'text' },
+      { key: 'fabricPrefix', label: 'Fabric code prefix', type: 'text' },
+      { key: 'supplierPrefix', label: 'Supplier code prefix', type: 'text' },
+      { key: 'purchasePrefix', label: 'Purchase prefix', type: 'text' },
     ],
   },
   {

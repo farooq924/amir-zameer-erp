@@ -1,4 +1,4 @@
-import { FABRIC_SOURCES, ORDER_TYPES, PAYMENT_METHODS, calculateOrderTotals, toPaisa } from '@az/shared';
+import { FABRIC_SOURCES, ORDER_TYPES, PAYMENT_METHODS, calculateOrderTotals, toPaisa, unitShort } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, ClipboardList, CopyPlus, ExternalLink, Minus, Plus, Printer, RefreshCw, Ruler, Shirt, Trash2, Wallet,
@@ -14,10 +14,13 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { FieldError, Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FabricPicker, type PickedFabric } from '@/features/inventory/FabricPicker';
+import { formatQty } from '@/features/inventory/shared';
 import { CustomerPicker, type PickedCustomer } from '@/features/orders/CustomerPicker';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
-import type { CustomerMeasurementRef, CustomerProfile, OrderDetail, OrderFormOptions } from '@/types';
+import { newId } from '@/utils/id';
+import type { CustomerMeasurementRef, CustomerProfile, FabricOption, OrderDetail, OrderFormOptions } from '@/types';
 import { cn } from '@/utils/cn';
 import { formatDate, formatPKR } from '@/utils/format';
 
@@ -32,6 +35,10 @@ interface ItemForm {
   fabricDescription: string;
   fabricQuantity: string;
   fabricRate: string;
+  /** Shop fabric picked from stock (reserved when the order is saved). */
+  fabric: PickedFabric | null;
+  /** Edit mode: fabric this item already holds in reserve (counts as free for this item). */
+  reservedHere: number;
   additionalCharges: string;
   notes: string;
   measurementId: string; // '' = latest
@@ -45,7 +52,7 @@ let keySeq = 0;
 const newKey = () => `i${++keySeq}`;
 const blankItem = (fabricSource: 'CUSTOMER' | 'SHOP'): ItemForm => ({
   key: newKey(), garmentTypeId: '', garmentName: '', quantity: 1, stitchingPrice: '', fabricSource, fabricDescription: '', fabricQuantity: '',
-  fabricRate: '', additionalCharges: '', notes: '', measurementId: '', refreshMeasurement: false,
+  fabricRate: '', fabric: null, reservedHere: 0, additionalCharges: '', notes: '', measurementId: '', refreshMeasurement: false,
 });
 const addDays = (date: string, days: number) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const clean = (v: string) => (v.trim() === '' ? undefined : v.trim());
@@ -56,7 +63,10 @@ function itemFromOrder(i: OrderDetail['items'][number], keepId: boolean, alterat
     quantity: alteration ? Math.max(1, i.deliveredQuantity || i.quantity) : i.quantity,
     stitchingPrice: alteration ? '' : Number(i.stitchingPrice) ? i.stitchingPrice : '', fabricSource: alteration ? 'CUSTOMER' : i.fabricSource,
     fabricDescription: i.fabricDescription ?? '', fabricQuantity: alteration ? '' : Number(i.fabricQuantity) ? String(Number(i.fabricQuantity)) : '',
-    fabricRate: alteration ? '' : Number(i.fabricRate) ? i.fabricRate : '', additionalCharges: alteration ? '' : Number(i.additionalCharges) ? i.additionalCharges : '',
+    fabricRate: alteration ? '' : Number(i.fabricRate) ? i.fabricRate : '',
+    fabric: !alteration && i.fabricSource === 'SHOP' && i.fabric ? { ...i.fabric, salePrice: i.fabricRate, purchasePrice: '0', availableStock: '0' } : null,
+    reservedHere: keepId && i.stock?.status === 'ACTIVE' ? Number(i.stock.reserved) - Number(i.stock.issued) : 0,
+    additionalCharges: alteration ? '' : Number(i.additionalCharges) ? i.additionalCharges : '',
     notes: keepId ? i.notes ?? '' : '', measurementId: keepId ? i.measurement?.sourceMeasurementId ?? '' : '', refreshMeasurement: false,
     currentMeasurement: keepId ? i.measurement?.templateName ?? null : undefined,
   };
@@ -80,7 +90,7 @@ export function OrderFormPage() {
   const preCustomerId = params.get('customerId');
   const preCustomer = useQuery({ queryKey: ['customer', preCustomerId], queryFn: () => api.get<CustomerProfile>(`/customers/${preCustomerId}`), enabled: !!preCustomerId && !editId && !fromId });
 
-  const [clientId] = useState(() => crypto.randomUUID());
+  const [clientId] = useState(() => newId());
   const [tab, setTab] = useState('details');
   const [ready, setReady] = useState(false);
   const [customer, setCustomer] = useState<PickedCustomer | null>(null);
@@ -125,6 +135,21 @@ export function OrderFormPage() {
     queryKey: ['order-measurements', customer?.id], queryFn: () => api.get<CustomerMeasurementRef[]>(`/orders/customer-measurements/${customer!.id}`), enabled: !!customer,
   });
 
+  // Live stock of fabrics already on the order being revised or copied.
+  const sourceFabricIds = useMemo(() => [...new Set((source.data?.items ?? []).map((i) => i.fabricId).filter((v): v is string => !!v))].join(','), [source.data]);
+  const liveFabrics = useQuery({
+    queryKey: ['fabric-options', 'orders', 'ids', sourceFabricIds], enabled: !!sourceFabricIds,
+    queryFn: () => api.get<FabricOption[]>('/orders/fabric-options', { ids: sourceFabricIds }),
+  });
+  const liveFabric = useMemo(() => new Map((liveFabrics.data ?? []).map((f) => [f.id, f])), [liveFabrics.data]);
+  const pickedFabric = (i: ItemForm): PickedFabric | null => (i.fabric ? { ...i.fabric, ...(liveFabric.get(i.fabric.id) ?? {}), salePrice: liveFabric.get(i.fabric.id)?.salePrice ?? i.fabric.salePrice } : null);
+  const freeFor = (i: ItemForm) => {
+    const f = pickedFabric(i);
+    if (!f) return 0;
+    const ownOnOrder = i.fabric && source.data?.items.find((x) => x.id === i.id)?.fabricId === f.id ? i.reservedHere : 0;
+    return Number(f.availableStock) + ownOnOrder;
+  };
+
   const garments = useMemo(() => options.data?.garments ?? [], [options.data]);
   const garmentById = useMemo(() => new Map(garments.map((g) => [g.id, g])), [garments]);
   const fabricSale = orderType === 'FABRIC_SALE';
@@ -166,6 +191,7 @@ export function OrderFormPage() {
       if (!fabricSale && !MONEY.test(i.stitchingPrice.trim())) e[`${i.key}.price`] = 'Enter the stitching price (0 if free)';
       if (fabricSale && i.stitchingPrice && !MONEY.test(i.stitchingPrice.trim())) e[`${i.key}.price`] = 'Enter a valid amount';
       if (i.fabricQuantity && !QTY.test(i.fabricQuantity.trim())) e[`${i.key}.fqty`] = 'Use a number like 4.5';
+      else if ((fabricSale || i.fabricSource === 'SHOP') && i.fabric && !(Number(i.fabricQuantity) > 0)) e[`${i.key}.fqty`] = 'Enter how much fabric is needed';
       if ((fabricSale || i.fabricSource === 'SHOP') && i.fabricRate && !MONEY.test(i.fabricRate.trim())) e[`${i.key}.rate`] = 'Enter a valid rate';
       if (i.additionalCharges && !MONEY.test(i.additionalCharges.trim())) e[`${i.key}.extra`] = 'Enter a valid amount';
     });
@@ -195,6 +221,7 @@ export function OrderFormPage() {
         items: items.map((i) => ({
           id: i.id, garmentTypeId: i.garmentTypeId || undefined, garmentName: i.garmentName.trim(), quantity: i.quantity,
           stitchingPrice: clean(i.stitchingPrice) ?? '0', fabricSource: fabricSale ? 'SHOP' : i.fabricSource, fabricDescription: i.fabricDescription.trim() || undefined,
+          fabricId: (fabricSale || i.fabricSource === 'SHOP') && i.fabric ? i.fabric.id : null,
           fabricQuantity: clean(i.fabricQuantity), fabricRate: (fabricSale || i.fabricSource === 'SHOP') ? clean(i.fabricRate) : undefined,
           additionalCharges: clean(i.additionalCharges), notes: i.notes.trim() || undefined,
           measurementId: i.measurementId || undefined, refreshMeasurement: i.refreshMeasurement || undefined,
@@ -351,17 +378,31 @@ export function OrderFormPage() {
                       <div className="space-y-1.5 sm:col-span-6"><Label>Fabric</Label>
                         <div className="flex gap-2">
                           {FABRIC_SOURCES.map((f) => (
-                            <button key={f.key} type="button" aria-pressed={i.fabricSource === f.key} onClick={() => setItem(i.key, { fabricSource: f.key, ...(f.key === 'CUSTOMER' ? { fabricRate: '' } : {}) })}
+                            <button key={f.key} type="button" aria-pressed={i.fabricSource === f.key} onClick={() => setItem(i.key, { fabricSource: f.key, ...(f.key === 'CUSTOMER' ? { fabricRate: '', fabric: null } : {}) })}
                               className={cn('h-9 rounded-full border px-3 text-xs font-semibold', i.fabricSource === f.key ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:border-primary')}>{f.label}</button>
                           ))}
                         </div></div>
                     )}
-                    <div className="space-y-1.5 sm:col-span-2"><Label htmlFor={`${i.key}-fd`}>Fabric details</Label>
-                      <Input id={`${i.key}-fd`} maxLength={200} placeholder="e.g. Italian wool, navy" value={i.fabricDescription} onChange={(e) => setItem(i.key, { fabricDescription: e.target.value })} /></div>
-                    <div className="space-y-1.5 sm:col-span-2"><Label htmlFor={`${i.key}-fq`}>Fabric (meters)</Label>
+                    {shop && (
+                      <div className="space-y-1.5 sm:col-span-6"><Label>Fabric from stock</Label>
+                        <FabricPicker source="orders" value={pickedFabric(i)} extraFree={pickedFabric(i) ? freeFor(i) - Number(pickedFabric(i)!.availableStock) : 0}
+                          disabled={!!(i.id && source.data?.items.find((x) => x.id === i.id)?.stock?.issued && Number(source.data.items.find((x) => x.id === i.id)!.stock!.issued) > 0)}
+                          placeholder="Search shop fabric (leave empty if not in stock)"
+                          onChange={(f) => setItem(i.key, f
+                            ? { fabric: f, fabricRate: Number(f.salePrice) ? String(Number(f.salePrice)) : i.fabricRate, fabricDescription: '' }
+                            : { fabric: null })} />
+                        {i.fabric && Number(i.fabricQuantity) > freeFor(i) && (
+                          <p className="text-xs font-medium text-rose-700 dark:text-rose-400">Only {formatQty(freeFor(i), i.fabric.unit)} is free in stock. Buy more or choose another fabric.</p>
+                        )}
+                        {i.fabric && <p className="text-[11px] text-muted-foreground">This fabric is reserved when you save, and taken from stock when the garment is delivered.</p>}
+                      </div>
+                    )}
+                    {!(shop && i.fabric) && <div className="space-y-1.5 sm:col-span-2"><Label htmlFor={`${i.key}-fd`}>Fabric details</Label>
+                      <Input id={`${i.key}-fd`} maxLength={200} placeholder="e.g. Italian wool, navy" value={i.fabricDescription} onChange={(e) => setItem(i.key, { fabricDescription: e.target.value })} /></div>}
+                    <div className="space-y-1.5 sm:col-span-2"><Label htmlFor={`${i.key}-fq`} required={!!(shop && i.fabric)}>Fabric ({i.fabric ? unitShort(i.fabric.unit) : 'meters'})</Label>
                       <Input id={`${i.key}-fq`} inputMode="decimal" placeholder={g && Number(g.defaultFabricConsumption) ? `${Number(g.defaultFabricConsumption) * (i.quantity || 1)}` : '0'} value={i.fabricQuantity} onChange={(e) => setItem(i.key, { fabricQuantity: e.target.value })} aria-invalid={!!err(`${i.key}.fqty`)} />
                       <FieldError message={err(`${i.key}.fqty`)} /></div>
-                    {shop && <div className="space-y-1.5 sm:col-span-2"><Label htmlFor={`${i.key}-fr`}>Fabric rate (per meter)</Label>
+                    {shop && <div className="space-y-1.5 sm:col-span-2"><Label htmlFor={`${i.key}-fr`}>Fabric rate (per {i.fabric ? unitShort(i.fabric.unit) : 'meter'})</Label>
                       <Input id={`${i.key}-fr`} inputMode="decimal" placeholder="0" value={i.fabricRate} onChange={(e) => setItem(i.key, { fabricRate: e.target.value })} aria-invalid={!!err(`${i.key}.rate`)} />
                       <FieldError message={err(`${i.key}.rate`)} /></div>}
                     <div className="space-y-1.5 sm:col-span-6"><Label htmlFor={`${i.key}-nt`}>Notes for the tailor</Label>

@@ -1,0 +1,73 @@
+import { CheckCircle2, Info } from 'lucide-react';
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/utils/cn';
+import { formatDate } from '@/utils/format';
+
+export const APP_VERSION = __APP_VERSION__;
+export const BUILD_DATE = __BUILD_DATE__;
+
+/** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
+export const RELEASES = [
+  {
+    version: '1.4.0', title: 'Fabric Inventory & Suppliers',
+    notes: [
+      'Fabric stock with codes, categories, minimum stock alerts and stock value',
+      'Stock ledger: every change is recorded and cannot be edited',
+      'Suppliers with balance, ledger and payments',
+      'Purchases (supplier bills) and returns to supplier',
+      'Shop fabric on orders is reserved from stock and issued on delivery',
+      'App version shown in the side menu',
+    ],
+  },
+  { version: '1.3.0', title: 'Orders & Garments', notes: ['Orders, workflow stages, deliveries, payments and receipts', 'Always online with auto-start'] },
+  { version: '1.2.0', title: 'Customers & Measurements', notes: ['Customer profiles, measurement templates and versions', 'Navy and gold theme'] },
+  { version: '1.1.0', title: 'Foundation', notes: ['Login, users, roles, audit log, settings and dashboard'] },
+] as const;
+
+/** Version line at the bottom of the side menu. Click opens "About" with what is new. */
+export function AppVersion({ collapsed, className }: { collapsed?: boolean; className?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title={`AMIR ZAMEER ERP v${APP_VERSION} (built ${formatDate(BUILD_DATE)})`}
+        aria-label={`Version ${APP_VERSION}. Show what is new`}
+        className={cn(
+          'group flex w-full items-center gap-2 rounded-lg px-2 py-1 text-[11px] leading-tight text-sidebar-foreground/80 transition-colors hover:bg-white/5 hover:text-white',
+          collapsed && 'justify-center px-0',
+          className,
+        )}
+      >
+        <span className="rounded-md border border-gold/40 bg-gold/10 px-1.5 py-0.5 font-semibold tracking-wide text-gold">v{APP_VERSION}</span>
+        {!collapsed && <span className="truncate">Build {formatDate(BUILD_DATE)}</span>}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle><Info className="h-5 w-5 text-primary" /> About AMIR ZAMEER ERP</DialogTitle>
+            <DialogDescription>Version {APP_VERSION} · built {formatDate(BUILD_DATE)}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {RELEASES.map((r, i) => (
+              <section key={r.version} className={cn('rounded-xl border p-3', i === 0 && 'border-primary/40 bg-gold-soft/40')}>
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className={cn('rounded-md px-1.5 py-0.5 text-xs font-semibold', i === 0 ? 'bg-primary text-white' : 'bg-muted text-foreground')}>v{r.version}</span>
+                  <span className="text-sm font-semibold">{r.title}</span>
+                  {i === 0 && <span className="ml-auto text-xs font-medium text-primary">Current</span>}
+                </div>
+                <ul className="space-y-1">
+                  {r.notes.map((n) => (
+                    <li key={n} className="flex gap-2 text-xs text-muted-foreground"><CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0 text-primary" />{n}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

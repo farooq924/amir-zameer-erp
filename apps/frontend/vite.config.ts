@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
@@ -18,11 +19,19 @@ function allowedHosts(mode: string): string[] {
   return ['.trycloudflare.com', ...extra];
 }
 
+/** App version comes from the root package.json, so every release shows its own number in the side menu. */
+const rootPackage = JSON.parse(readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8')) as { version: string };
+const buildDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
 // Only one public address is needed: the browser calls /api on the same address and Vite forwards it.
 const apiProxy = { '/api': { target: 'http://127.0.0.1:4000', changeOrigin: false } };
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(rootPackage.version),
+    __BUILD_DATE__: JSON.stringify(buildDate),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

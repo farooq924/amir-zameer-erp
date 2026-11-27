@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { DEFAULT_GARMENTS, DEFAULT_MEASUREMENT_TEMPLATES, DEFAULT_ROLES, MODULES, expandRoleGrants, permissionCode } from '@az/shared';
+import { DEFAULT_FABRIC_CATEGORIES, DEFAULT_GARMENTS, DEFAULT_MEASUREMENT_TEMPLATES, DEFAULT_ROLES, MODULES, expandRoleGrants, permissionCode } from '@az/shared';
 
 /**
  * Idempotent seed: safe to run on every deployment.
@@ -117,6 +117,12 @@ export async function seed(prisma: PrismaClient, opts: { log?: boolean } = {}): 
     });
   }
   log(`Garments: ${await prisma.garmentType.count()}`);
+
+  // 7. Fabric categories: only when there are none yet (the owner manages them in Fabric Inventory).
+  if ((await prisma.fabricCategory.count()) === 0) {
+    await prisma.fabricCategory.createMany({ data: DEFAULT_FABRIC_CATEGORIES.map((name) => ({ name })), skipDuplicates: true });
+  }
+  log(`Fabric categories: ${await prisma.fabricCategory.count()}`);
 }
 
 if (require.main === module) {

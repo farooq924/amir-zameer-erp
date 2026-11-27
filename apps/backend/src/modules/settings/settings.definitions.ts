@@ -38,8 +38,14 @@ export const SETTING_GROUPS = {
       customerPrefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Use 1-6 capital letters'),
       receiptPrefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Use 1-6 capital letters'),
       expensePrefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Use 1-6 capital letters'),
+      fabricPrefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Use 1-6 capital letters'),
+      supplierPrefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Use 1-6 capital letters'),
+      purchasePrefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Use 1-6 capital letters'),
     }),
-    defaults: { orderPrefix: 'AZ', customerPrefix: 'AZC', receiptPrefix: 'RCP', expensePrefix: 'EXP' },
+    defaults: {
+      orderPrefix: 'AZ', customerPrefix: 'AZC', receiptPrefix: 'RCP', expensePrefix: 'EXP',
+      fabricPrefix: 'AZF', supplierPrefix: 'AZS', purchasePrefix: 'PUR',
+    },
   },
   orders: {
     label: 'Orders',

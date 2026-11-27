@@ -12,6 +12,13 @@ import { CustomersPage } from '@/pages/CustomersPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { MeasurementPrintPage } from '@/pages/MeasurementPrintPage';
 import { GarmentsPage } from '@/pages/GarmentsPage';
+import { FabricDetailPage } from '@/pages/FabricDetailPage';
+import { InventoryPage } from '@/pages/InventoryPage';
+import { PurchaseDetailPage } from '@/pages/PurchaseDetailPage';
+import { PurchaseFormPage } from '@/pages/PurchaseFormPage';
+import { PurchasesPage } from '@/pages/PurchasesPage';
+import { SupplierDetailPage } from '@/pages/SupplierDetailPage';
+import { SuppliersPage } from '@/pages/SuppliersPage';
 import { MeasurementsPage } from '@/pages/MeasurementsPage';
 import { OrderDetailPage } from '@/pages/OrderDetailPage';
 import { OrderFormPage } from '@/pages/OrderFormPage';
@@ -38,7 +45,7 @@ function RequirePermission({ module, action = 'VIEW', children }: { module: stri
   return hasPermission(user, module, action) ? <>{children}</> : <ForbiddenPage />;
 }
 
-const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments']);
+const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers']);
 
 /** Remount the order form on every navigation so "Book another order" starts clean. */
 function OrderFormRoute() {
@@ -68,6 +75,13 @@ export function App() {
         <Route path="orders/:id" element={<RequirePermission module="orders"><OrderDetailPage /></RequirePermission>} />
         <Route path="orders/:id/edit" element={<RequirePermission module="orders" action="EDIT"><OrderFormRoute /></RequirePermission>} />
         <Route path="garments" element={<RequirePermission module="garments"><GarmentsPage /></RequirePermission>} />
+        <Route path="inventory" element={<RequirePermission module="inventory"><InventoryPage /></RequirePermission>} />
+        <Route path="inventory/fabrics/:id" element={<RequirePermission module="inventory"><FabricDetailPage /></RequirePermission>} />
+        <Route path="suppliers" element={<RequirePermission module="suppliers"><SuppliersPage /></RequirePermission>} />
+        <Route path="suppliers/:id" element={<RequirePermission module="suppliers"><SupplierDetailPage /></RequirePermission>} />
+        <Route path="purchases" element={<RequirePermission module="purchases"><PurchasesPage /></RequirePermission>} />
+        <Route path="purchases/new" element={<RequirePermission module="purchases" action="CREATE"><PurchaseFormPage /></RequirePermission>} />
+        <Route path="purchases/:id" element={<RequirePermission module="purchases"><PurchaseDetailPage /></RequirePermission>} />
         <Route path="audit-logs" element={<RequirePermission module="audit_logs"><AuditLogsPage /></RequirePermission>} />
         {MODULES.filter((m) => !IMPLEMENTED.has(m.key) && !m.hidden).map((m) => (
           <Route key={m.key} path={`${m.path.slice(1)}/*`} element={<RequirePermission module={m.key}><PlannedModulePage /></RequirePermission>} />

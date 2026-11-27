@@ -1,6 +1,9 @@
 <#
   AMIR ZAMEER ERP - apply an update. Paste the update zip into the project folder (Replace),
-  then double-click UPDATE-ERP.cmd. Stops the background ERP, rebuilds, updates the database
+  then in an Administrator PowerShell run:
+    Get-ChildItem -Recurse -File | Unblock-File
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\update-erp.ps1
+  (Windows Smart App Control may block double-clicking UPDATE-ERP.cmd.) Stops the background ERP, rebuilds, updates the database
   and starts it again. The Cloudflare Tunnel keeps running; the link stays the same.
 #>
 $ErrorActionPreference = 'Stop'

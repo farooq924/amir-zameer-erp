@@ -37,6 +37,10 @@ export class OrderItemDto {
   @ApiPropertyOptional({ enum: FABRIC_SOURCE_KEYS }) @IsOptional() @IsIn(FABRIC_SOURCE_KEYS)
   fabricSource?: (typeof FABRIC_SOURCE_KEYS)[number];
 
+  @ApiPropertyOptional({ description: 'Fabric from stock (shop fabric). It is reserved until the garment is delivered.' })
+  @IsOptional() @Transform(({ value }) => (value === '' ? null : value)) @IsUUID()
+  fabricId?: string | null;
+
   @ApiPropertyOptional() @IsOptional() @Transform(trim) @IsString() @MaxLength(200)
   fabricDescription?: string;
 
