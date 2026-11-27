@@ -1,6 +1,6 @@
 import { GARMENT_CATEGORIES } from '@az/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, LayoutList, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -77,7 +77,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${template!.name}` : 'New measurement template'}</DialogTitle>
+          <DialogTitle><LayoutList className="h-5 w-5 text-primary" />{editing ? `Edit ${template!.name}` : 'New measurement template'}</DialogTitle>
           <DialogDescription>
             Fields are shown in this order when taking measurements. Turning a field off hides it for new measurements; old measurements keep their values.
           </DialogDescription>

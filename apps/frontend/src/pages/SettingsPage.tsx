@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Save, ShieldCheck, UserCog } from 'lucide-react';
+import { Building2, ChevronRight, ClipboardList, Globe2, Hash, Printer, Save, ShieldCheck, UserCog, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -10,6 +10,7 @@ import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/utils/cn';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
 import type { SettingsMap } from '@/types';
@@ -19,6 +20,8 @@ type Field =
   | { key: string; label: string; type: 'number'; min?: number; max?: number }
   | { key: string; label: string; type: 'select'; options: { value: string; label: string }[]; locked?: boolean }
   | { key: string; label: string; type: 'boolean' };
+
+const GROUP_ICONS: Record<string, LucideIcon> = { business: Building2, regional: Globe2, numbering: Hash, orders: ClipboardList, printing: Printer };
 
 const GROUPS: { key: string; label: string; description: string; fields: Field[] }[] = [
   {
@@ -128,26 +131,37 @@ export function SettingsPage() {
   return (
     <div>
       <PageHeader title="Settings" description="Business profile, defaults and access control." />
-      {can('users', 'VIEW') && (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2">
-          {[{ to: '/settings/users', icon: UserCog, title: 'Users', text: 'Create staff logins, activate or deactivate accounts' },
-            { to: '/settings/roles', icon: ShieldCheck, title: 'Roles & Permissions', text: 'Control what each role can view, create, edit or approve' }].map((l) => (
-            <Link key={l.to} to={l.to} className="flex items-center gap-3 rounded-lg border bg-background p-4 shadow-sm hover:bg-muted/40">
-              <l.icon className="h-5 w-5 text-muted-foreground" />
-              <span className="flex-1"><span className="block text-sm font-medium">{l.title}</span><span className="block text-xs text-muted-foreground">{l.text}</span></span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </Link>
-          ))}
-        </div>
-      )}
       {settings.isError ? <ErrorState message={errorMessage(settings.error)} onRetry={() => settings.refetch()} /> : settings.isLoading ? <Skeleton className="h-80 w-full" /> : (
-        <Tabs defaultValue="business">
-          <TabsList>{GROUPS.map((g) => <TabsTrigger key={g.key} value={g.key}>{g.label}</TabsTrigger>)}</TabsList>
-          {GROUPS.map((g) => (
-            <TabsContent key={g.key} value={g.key} className="mt-3">
-              <GroupForm group={g} values={settings.data![g.key] ?? {}} canEdit={canEdit} />
-            </TabsContent>
-          ))}
+        <Tabs defaultValue="business" orientation="vertical" className="grid gap-4 lg:grid-cols-[230px_1fr]">
+          <Card className="h-fit p-2">
+            <TabsList className="flex h-auto w-full flex-row flex-wrap items-stretch gap-1 border-0 bg-transparent p-0 shadow-none lg:flex-col">
+              {GROUPS.map((g) => {
+                const Icon = GROUP_ICONS[g.key] ?? Building2;
+                return (
+                  <TabsTrigger key={g.key} value={g.key}
+                    className="h-9 justify-start gap-2.5 px-3 data-[state=active]:bg-gold-soft data-[state=active]:text-foreground data-[state=active]:shadow-none lg:w-full">
+                    <Icon className="h-4 w-4 text-primary" />{g.label}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+            {can('users', 'VIEW') && (
+              <div className="mt-1 border-t pt-1">
+                {[{ to: '/settings/users', icon: UserCog, title: 'Users' }, { to: '/settings/roles', icon: ShieldCheck, title: 'Roles & Permissions' }].map((l) => (
+                  <Link key={l.to} to={l.to} className={cn('flex h-9 items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground')}>
+                    <l.icon className="h-4 w-4 text-primary" /><span className="flex-1">{l.title}</span><ChevronRight className="h-4 w-4" />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Card>
+          <div className="min-w-0">
+            {GROUPS.map((g) => (
+              <TabsContent key={g.key} value={g.key} className="mt-0">
+                <GroupForm group={g} values={settings.data![g.key] ?? {}} canEdit={canEdit} />
+              </TabsContent>
+            ))}
+          </div>
         </Tabs>
       )}
     </div>

@@ -1,3 +1,4 @@
+import { GitCompare } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorState } from '@/components/common';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -23,7 +24,7 @@ export function CompareDialog({ fromId, toId, onClose }: { fromId: string | null
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Compare measurements</DialogTitle>
+          <DialogTitle><GitCompare className="h-5 w-5 text-primary" />Compare measurements</DialogTitle>
           <DialogDescription>
             {d ? `Version ${d.from.versionNo} (${formatDate(d.from.takenAt)}) vs version ${d.to.versionNo} (${formatDate(d.to.takenAt)}). Values shown in ${d.unit === 'CM' ? 'centimetres' : 'inches'}.` : 'Loading...'}
           </DialogDescription>

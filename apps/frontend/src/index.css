@@ -3,37 +3,76 @@
 @tailwind utilities;
 
 @layer base {
+  /* AMIR ZAMEER brand: navy + gold. All screens use these tokens. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 220 33% 97%;
+    --foreground: 220 58% 14%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 220 58% 14%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 222 47% 11%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 42%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    --popover-foreground: 220 58% 14%;
+    --primary: 41 55% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 30% 95%;
+    --secondary-foreground: 220 58% 14%;
+    --muted: 220 27% 95%;
+    --muted-foreground: 220 14% 42%;
+    --accent: 42 70% 94%;
+    --accent-foreground: 220 58% 14%;
     --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 88%;
-    --ring: 222 47% 11%;
-    --sidebar: 210 40% 98%;
-    --sidebar-foreground: 222 47% 11%;
-    --radius: 0.5rem;
-    /* chart series (validated reference palette, light) */
-    --series-1: #257de0;
-    --series-2: #f47230;
-    --chart-grid: #e5e7eb;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 22% 89%;
+    --input: 220 20% 85%;
+    --ring: 41 55% 48%;
+    --navy: 220 58% 14%;
+    --navy-foreground: 0 0% 100%;
+    --navy-soft: 220 45% 22%;
+    --gold: 41 55% 48%;
+    --gold-soft: 43 75% 92%;
+    --sidebar: 220 58% 14%;
+    --sidebar-foreground: 220 25% 88%;
+    --radius: 0.625rem;
+    --series-1: #2c4f9a;
+    --series-2: #a97c1c;
+    --chart-grid: #e6e9ef;
+  }
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 220 25% 92%;
+    --card: 221 44% 11%;
+    --card-foreground: 220 25% 92%;
+    --popover: 221 44% 11%;
+    --popover-foreground: 220 25% 92%;
+    --primary: 42 60% 55%;
+    --primary-foreground: 222 47% 9%;
+    --secondary: 221 35% 17%;
+    --secondary-foreground: 220 25% 92%;
+    --muted: 221 35% 15%;
+    --muted-foreground: 220 15% 65%;
+    --accent: 221 35% 18%;
+    --accent-foreground: 220 25% 92%;
+    --destructive: 0 65% 55%;
+    --border: 221 30% 20%;
+    --input: 221 30% 24%;
+    --ring: 42 60% 55%;
+    --navy: 221 50% 13%;
+    --navy-soft: 221 40% 20%;
+    --gold: 42 60% 55%;
+    --gold-soft: 42 35% 18%;
+    --sidebar: 222 50% 9%;
+    --series-1: #6f93dc;
+    --series-2: #b88b2a;
+    --chart-grid: #26334d;
   }
   * { @apply border-border; }
   html, body, #root { height: 100%; }
-  body { @apply bg-muted/40 text-foreground antialiased; font-feature-settings: 'cv11', 'ss01'; }
+  body { @apply bg-background text-foreground antialiased; font-feature-settings: 'cv11', 'ss01'; }
+  h1, h2, h3 { @apply text-foreground; }
+}
+
+@layer components {
+  /* Coloured icon tile used on stat cards, quick actions and dialogs. */
+  .icon-tile { @apply flex shrink-0 items-center justify-center rounded-xl; }
 }
 
 @media print {

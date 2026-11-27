@@ -11,7 +11,7 @@ export const DropdownMenuContent = React.forwardRef<React.ElementRef<typeof DM.C
       <DM.Content
         ref={ref}
         sideOffset={sideOffset}
-        className={cn('z-50 min-w-[10rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md', className)}
+        className={cn('z-50 min-w-[10rem] overflow-hidden rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg', className)}
         {...props}
       />
     </DM.Portal>
@@ -23,7 +23,7 @@ export const DropdownMenuItem = React.forwardRef<React.ElementRef<typeof DM.Item
   ({ className, ...props }, ref) => (
     <DM.Item
       ref={ref}
-      className={cn('relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4', className)}
+      className={cn('relative flex cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 py-2 text-sm outline-none focus:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4', className)}
       {...props}
     />
   ),

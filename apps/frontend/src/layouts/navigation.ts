@@ -17,5 +17,3 @@ export function visibleNavItems(user: AuthUser | null): ModuleDefinition[] {
   return MODULES.filter((m) => !m.hidden && hasPermission(user, m.key, 'VIEW'));
 }
 
-/** Items shown in the mobile bottom bar. */
-export const MOBILE_PRIMARY = ['dashboard', 'customers', 'orders', 'payments'];

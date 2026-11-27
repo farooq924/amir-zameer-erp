@@ -1,6 +1,6 @@
 import { CM_PER_INCH } from '@az/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Ruler, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -140,7 +140,7 @@ export function MeasurementFormDialog({ open, onOpenChange, customerId, template
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{previous ? 'New measurement version' : 'Take measurement'}</DialogTitle>
+          <DialogTitle><Ruler className="h-5 w-5 text-primary" />{previous ? 'New measurement version' : 'Take measurement'}</DialogTitle>
           <DialogDescription>
             {previous
               ? `Prefilled from version ${previous.versionNo}. Saving creates version ${previous.versionNo + 1}; earlier versions are kept unchanged.`
@@ -166,7 +166,7 @@ export function MeasurementFormDialog({ open, onOpenChange, customerId, template
           <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
             {fields.map((f) => (
               <div key={f.id} className="space-y-1">
-                <Label htmlFor={`m-${f.key}`}>{f.label}{f.isRequired && <span className="text-destructive"> *</span>}</Label>
+                <Label htmlFor={`m-${f.key}`} required={f.isRequired}>{f.label}</Label>
                 <div className="relative">
                   <Input
                     id={`m-${f.key}`} inputMode="decimal" autoComplete="off" className="pr-9"

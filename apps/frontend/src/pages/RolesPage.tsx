@@ -80,7 +80,7 @@ export function RolesPage() {
                 <li key={r.id} className="shrink-0">
                   <button
                     onClick={() => setSelectedId(r.id)}
-                    className={cn('flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted', selected?.id === r.id && 'bg-muted font-medium')}
+                    className={cn('flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted', selected?.id === r.id && 'bg-gold-soft font-semibold hover:bg-gold-soft')}
                   >
                     <span className="truncate">{r.name}</span>
                     <span className="text-xs text-muted-foreground">{r.userCount}</span>

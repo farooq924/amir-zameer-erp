@@ -4,9 +4,11 @@ import { cn } from '@/utils/cn';
 
 export const Label = React.forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <LabelPrimitive.Root ref={ref} className={cn('text-sm font-medium leading-none', className)} {...props} />
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> & { required?: boolean }
+>(({ className, required, children, ...props }, ref) => (
+  <LabelPrimitive.Root ref={ref} className={cn('text-sm font-medium leading-none text-foreground', className)} {...props}>
+    {children}{required && <span className="ml-0.5 text-destructive" aria-hidden>*</span>}
+  </LabelPrimitive.Root>
 ));
 Label.displayName = 'Label';
 

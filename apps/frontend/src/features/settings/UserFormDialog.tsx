@@ -1,3 +1,4 @@
+import { UserCog } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -61,7 +62,7 @@ export function UserFormDialog({ open, onOpenChange, roles, user }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{editing ? 'Edit user' : 'Add user'}</DialogTitle>
+          <DialogTitle><UserCog className="h-5 w-5 text-primary" />{editing ? 'Edit user' : 'Add user'}</DialogTitle>
           <DialogDescription>Users only see and use the modules their roles allow.</DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit((v) => save.mutate(v))} className="space-y-3" noValidate>

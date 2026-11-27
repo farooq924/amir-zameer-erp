@@ -2,7 +2,7 @@ import { formatPhone } from '@az/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Plus, Search, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -15,7 +15,7 @@ import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
 import type { Customer, Paginated } from '@/types';
 import { cn } from '@/utils/cn';
-import { formatPKR } from '@/utils/format';
+import { formatPKR, initials } from '@/utils/format';
 
 function useDebounced<T>(value: T, ms = 300): T {
   const [v, setV] = useState(value);
@@ -26,12 +26,21 @@ function useDebounced<T>(value: T, ms = 300): T {
 export function CustomersPage() {
   const can = useCan();
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
+  const [params, setParams] = useSearchParams();
+  const [search, setSearch] = useState(() => params.get('search') ?? '');
   const [status, setStatus] = useState('');
   const [type, setType] = useState('');
   const [sort, setSort] = useState('createdAt:desc');
   const [page, setPage] = useState(1);
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(() => params.get('new') === '1' && can('customers', 'CREATE'));
+  // Links such as the header search and "Add Customer" quick action pass ?search= / ?new=1.
+  useEffect(() => {
+    const s = params.get('search');
+    if (s !== null) setSearch(s);
+    if (params.get('new') === '1' && can('customers', 'CREATE')) setFormOpen(true);
+    if (s !== null || params.has('new')) setParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
   const q = useDebounced(search);
   const [sortBy, sortOrder] = sort.split(':');
 
@@ -49,18 +58,18 @@ export function CustomersPage() {
         actions={can('customers', 'CREATE') && <Button onClick={() => setFormOpen(true)}><Plus /> Add customer</Button>}
       />
       <Card>
-        <div className="flex flex-wrap items-center gap-2 border-b p-3">
-          <div className="relative w-full sm:w-72">
+        <div className="grid grid-cols-2 items-center gap-2 border-b p-3 sm:flex sm:flex-wrap">
+          <div className="relative col-span-2 w-full sm:w-72">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input className="pl-8" placeholder="Name, code or mobile" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} aria-label="Search customers" />
           </div>
-          <NativeSelect aria-label="Status" className="w-36" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+          <NativeSelect aria-label="Status" className="sm:w-36" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="BLOCKED">Blocked</option>
           </NativeSelect>
-          <NativeSelect aria-label="Customer type" className="w-36" value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
+          <NativeSelect aria-label="Customer type" className="sm:w-36" value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
             <option value="">All types</option><option value="REGULAR">Regular</option><option value="WALK_IN">Walk-in</option><option value="VIP">VIP</option><option value="CORPORATE">Corporate</option>
           </NativeSelect>
-          <NativeSelect aria-label="Sort" className="w-40" value={sort} onChange={(e) => setSort(e.target.value)}>
+          <NativeSelect aria-label="Sort" className="col-span-2 sm:w-40" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="createdAt:desc">Newest first</option><option value="createdAt:asc">Oldest first</option>
             <option value="name:asc">Name A-Z</option><option value="name:desc">Name Z-A</option><option value="code:asc">Code</option>
           </NativeSelect>
@@ -72,6 +81,24 @@ export function CustomersPage() {
             description={q ? 'Check the spelling or search by mobile number.' : 'Add your first customer to start taking measurements and orders.'}
             action={can('customers', 'CREATE') && !q ? <Button size="sm" onClick={() => setFormOpen(true)}><Plus /> Add customer</Button> : undefined} />
         ) : (
+          <>
+          {/* Phones: card list */}
+          <ul className="divide-y sm:hidden">
+            {customers.data!.data.map((c) => (
+              <li key={c.id}>
+                <button type="button" onClick={() => navigate(`/customers/${c.id}`)} className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-accent/50">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-soft text-sm font-semibold text-[#8a6a1f] dark:text-gold">{initials(c.name)}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{c.name}</span>
+                    <span className="block text-xs text-muted-foreground">{c.code} · {formatPhone(c.mobile)}</span>
+                    <span className={cn('block text-xs tabular-nums', Number(c.outstanding) > 0 ? 'font-medium text-rose-700 dark:text-rose-400' : 'text-muted-foreground')}>Balance {formatPKR(c.outstanding)}</span>
+                  </span>
+                  <CustomerStatusBadge status={c.status} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden sm:block">
           <Table>
             <THead><TR><TH>Code</TH><TH>Name</TH><TH>Mobile</TH><TH className="hidden md:table-cell">City</TH><TH className="hidden md:table-cell">Type</TH><TH>Status</TH><TH className="text-right">Outstanding</TH></TR></THead>
             <TBody>
@@ -88,6 +115,8 @@ export function CustomersPage() {
               ))}
             </TBody>
           </Table>
+          </div>
+          </>
         )}
         {customers.data && customers.data.meta.total > 0 && (
           <div className="flex items-center justify-between border-t p-3 text-sm">

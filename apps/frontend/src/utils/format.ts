@@ -32,3 +32,7 @@ export function formatMonth(key: string): string {
 export function humanize(code: string): string {
   return code.toLowerCase().split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
+
+export function initials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || '?';
+}
