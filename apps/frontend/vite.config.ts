@@ -1,9 +1,27 @@
 /// <reference types="vitest/config" />
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
-export default defineConfig({
+/**
+ * Hosts allowed to open the app besides localhost.
+ * - Every *.trycloudflare.com address (Cloudflare Quick Tunnel, used by `pnpm share`).
+ * - Extra hosts from ERP_ALLOWED_HOSTS (comma separated), e.g. erp.example.com for a named tunnel.
+ *   Read from the environment or from apps/frontend/.env.local.
+ */
+function allowedHosts(mode: string): string[] {
+  const fileEnv = loadEnv(mode, __dirname, 'ERP_');
+  const extra = (process.env.ERP_ALLOWED_HOSTS ?? fileEnv.ERP_ALLOWED_HOSTS ?? '')
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
+  return ['.trycloudflare.com', ...extra];
+}
+
+// Only one public address is needed: the browser calls /api on the same address and Vite forwards it.
+const apiProxy = { '/api': { target: 'http://127.0.0.1:4000', changeOrigin: false } };
+
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   resolve: {
     alias: {
@@ -14,20 +32,20 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: { '/api': { target: 'http://localhost:4000', changeOrigin: false } },
+    allowedHosts: allowedHosts(mode),
+    proxy: apiProxy,
+  },
+  preview: {
+    port: 5173,
+    strictPort: true,
+    allowedHosts: allowedHosts(mode),
+    proxy: apiProxy,
   },
   build: {
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          charts: ['recharts'],
-          vendor: ['@tanstack/react-query', 'zustand', 'zod', 'react-hook-form', '@hookform/resolvers', 'sonner'],
-          ui: ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-checkbox', '@radix-ui/react-tabs', '@radix-ui/react-label', '@radix-ui/react-slot', 'lucide-react'],
-        },
-      },
-    },
+    chunkSizeWarningLimit: 1500,
+    // No manualChunks: splitting React into its own chunk broke the production build at runtime
+    // ("Cannot set properties of undefined (setting 'Children')"). Vite's default splitting is used instead.
   },
   test: {
     environment: 'jsdom',
@@ -35,4 +53,4 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
   },
-});
+}));

@@ -10,8 +10,12 @@ import { AuthService } from './auth.service';
 import { ChangePasswordDto, LoginDto } from './dto/login.dto';
 import { CSRF_COOKIE, SESSION_COOKIE, SessionService } from './session.service';
 
-function cookieBase(): CookieOptions {
-  return { secure: env().COOKIE_SECURE, sameSite: 'strict', path: '/' };
+/**
+ * Cookies are marked Secure when COOKIE_SECURE=true, or automatically when the request arrived over HTTPS
+ * through a trusted proxy (TRUST_PROXY=true), e.g. a Cloudflare Tunnel. Plain http://localhost keeps working.
+ */
+function cookieBase(req: Request): CookieOptions {
+  return { secure: env().COOKIE_SECURE || req.secure, sameSite: 'strict', path: '/' };
 }
 
 @ApiTags('Authentication')
@@ -28,9 +32,9 @@ export class AuthController {
     const ctx = buildRequestContext(req);
     const session = await this.auth.login(dto.identifier, dto.password, ctx);
     const maxAge = session.expiresAt.getTime() - Date.now();
-    res.cookie(SESSION_COOKIE, session.token, { ...cookieBase(), httpOnly: true, maxAge });
+    res.cookie(SESSION_COOKIE, session.token, { ...cookieBase(req), httpOnly: true, maxAge });
     // Readable by the SPA (double-submit CSRF token); useless to other origins thanks to SameSite + same-origin policy.
-    res.cookie(CSRF_COOKIE, session.csrfToken, { ...cookieBase(), httpOnly: false, maxAge });
+    res.cookie(CSRF_COOKIE, session.csrfToken, { ...cookieBase(req), httpOnly: false, maxAge });
     const validated = await this.sessions.validate(session.token);
     return { user: validated?.user, csrfToken: session.csrfToken, expiresAt: session.expiresAt };
   }
@@ -39,10 +43,15 @@ export class AuthController {
   @HttpCode(200)
   @ApiCookieAuth()
   @ApiOperation({ summary: 'End the current session' })
-  async logout(@CurrentUser() user: AuthUser, @ReqContext() ctx: RequestContext, @Res({ passthrough: true }) res: Response) {
+  async logout(
+    @CurrentUser() user: AuthUser,
+    @ReqContext() ctx: RequestContext,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     await this.auth.logout(user, ctx);
-    res.clearCookie(SESSION_COOKIE, cookieBase());
-    res.clearCookie(CSRF_COOKIE, cookieBase());
+    res.clearCookie(SESSION_COOKIE, cookieBase(req));
+    res.clearCookie(CSRF_COOKIE, cookieBase(req));
     return { success: true };
   }
 
