@@ -43,7 +43,7 @@ export class CreatePurchaseDto {
   @ApiPropertyOptional({ example: 'INV-4471', description: "Supplier's bill number" }) @IsOptional() @Transform(trim) @IsString() @MaxLength(60)
   supplierInvoiceNo?: string;
 
-  @ApiPropertyOptional({ example: '2026-11-27' }) @IsOptional() @Matches(DATE_RE)
+  @ApiPropertyOptional({ example: '2026-11-27' }) @IsOptional() @Matches(DATE_RE, { message: 'Date must be like 2026-11-27' })
   purchaseDate?: string;
 
   @ApiProperty({ type: [PurchaseLineDto] }) @IsArray() @ArrayMinSize(1, { message: 'Add at least one fabric' }) @ArrayMaxSize(100)
@@ -94,9 +94,9 @@ export class PurchaseQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: ['unpaid', 'paid', 'all'] }) @IsOptional() @IsIn(['unpaid', 'paid', 'all'])
   payment?: 'unpaid' | 'paid' | 'all';
 
-  @ApiPropertyOptional() @IsOptional() @Matches(DATE_RE)
+  @ApiPropertyOptional() @IsOptional() @Matches(DATE_RE, { message: 'Date must be like 2026-11-27' })
   from?: string;
 
-  @ApiPropertyOptional() @IsOptional() @Matches(DATE_RE)
+  @ApiPropertyOptional() @IsOptional() @Matches(DATE_RE, { message: 'Date must be like 2026-11-27' })
   to?: string;
 }

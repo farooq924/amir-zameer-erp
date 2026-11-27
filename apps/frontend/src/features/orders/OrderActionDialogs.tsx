@@ -278,7 +278,7 @@ export function AssignDialog({ order, open, onOpenChange, employees, itemId }: B
             <option value="">Not assigned</option>
             {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.designation ? ` (${e.designation})` : ''}</option>)}
           </NativeSelect>
-        ) : <p className="rounded-md bg-muted p-3 text-sm">No employees yet. Employees are added in the Employees module (Phase 5); after that you can assign work here.</p>}
+        ) : <p className="rounded-md bg-muted p-3 text-sm">No employees yet. Add employees on the Employees page first, then assign work here.</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button disabled={!employees.length} loading={m.isPending} onClick={() => m.mutate({ employeeId: employeeId || null, itemIds: item ? [item.id] : undefined })}>Save</Button>

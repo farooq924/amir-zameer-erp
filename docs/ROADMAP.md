@@ -35,7 +35,7 @@ flowchart LR
 | 2 Customers | Customer CRUD, auto codes, duplicate detection, profile tabs, measurement templates (7 garment types + custom fields), versioned measurements, comparison, print sheet | 1 | **Done** |
 | 3 Orders & Garments | Order numbers AZ-YYYY-NNNNN, multi-garment orders, measurement snapshots, configurable workflow, status history, assignment, partial delivery, cancel/alter/revise/duplicate, receipts | 2 | **Done** |
 | 4 Inventory & Suppliers | Fabric master, purchases/returns, stock ledger with idempotent movements, reservations, allocation/consumption/reversal, low stock, valuation, suppliers & ledger | 1 (3 for allocation) | **Done - awaiting review** (v1.4.0) |
-| 5 Employees & Payroll | Employees, salary history, attendance, leave, overtime, advances, production records, payroll (monthly/daily/per-piece/fixed+incentive), slips | 1, 3 | Planned |
+| 5 Employees & Payroll | Employees, salary history, attendance, leave, overtime, advances, production records, payroll (monthly/daily/per-piece/fixed+incentive), slips | 1, 3 | **Done (v1.5.0)** |
 | 6 Finance & Accounting | Customer payments & ledger, refunds, expenses + approvals, supplier payments, chart of accounts, automatic double-entry posting, periods, P&L, balance sheet, cash flow | 3, 4, 5 | Planned |
 | 7 Reports | All 30 reports with filters, pagination, sorting, column visibility, Excel/CSV/PDF export, print | 6 | Planned |
 | 8 WhatsApp & Printing | Meta Cloud API (templates, webhooks, status, retries, opt-in), manual fallback, A4 invoices, 58/80 mm receipts | 3, 6 | Planned |

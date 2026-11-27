@@ -62,7 +62,7 @@ export class SupplierPaymentDto {
   @ApiPropertyOptional({ description: 'Pay against one purchase. Default: oldest unpaid purchases first.' }) @IsOptional() @IsUUID()
   purchaseId?: string;
 
-  @ApiPropertyOptional({ example: '2026-11-27' }) @IsOptional() @Matches(DATE_RE)
+  @ApiPropertyOptional({ example: '2026-11-27' }) @IsOptional() @Matches(DATE_RE, { message: 'Date must be like 2026-11-27' })
   paymentDate?: string;
 
   @ApiPropertyOptional({ description: 'Cheque number, transaction id ...' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(100)

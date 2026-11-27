@@ -5,7 +5,14 @@ import { type ReactNode, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { hasPermission } from '@/hooks/use-permission';
 import { AppLayout } from '@/layouts/AppLayout';
+import { AttendancePage } from '@/pages/AttendancePage';
 import { AuditLogsPage } from '@/pages/AuditLogsPage';
+import { EmployeeDetailPage } from '@/pages/EmployeeDetailPage';
+import { EmployeesPage } from '@/pages/EmployeesPage';
+import { PayrollDetailPage } from '@/pages/PayrollDetailPage';
+import { PayrollPage } from '@/pages/PayrollPage';
+import { PayrollPrintPage, PayslipPrintPage } from '@/pages/PayslipPrintPage';
+import { ProductionPage } from '@/pages/ProductionPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { CustomerProfilePage } from '@/pages/CustomerProfilePage';
 import { CustomersPage } from '@/pages/CustomersPage';
@@ -45,7 +52,7 @@ function RequirePermission({ module, action = 'VIEW', children }: { module: stri
   return hasPermission(user, module, action) ? <>{children}</> : <ForbiddenPage />;
 }
 
-const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers']);
+const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers', 'employees', 'attendance', 'payroll', 'production']);
 
 /** Remount the order form on every navigation so "Book another order" starts clean. */
 function OrderFormRoute() {
@@ -62,6 +69,8 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/print/measurements/:id" element={<RequireAuth><RequirePermission module="measurements"><MeasurementPrintPage /></RequirePermission></RequireAuth>} />
       <Route path="/print/orders/:id" element={<RequireAuth><RequirePermission module="orders" action="PRINT"><OrderPrintPage /></RequirePermission></RequireAuth>} />
+      <Route path="/print/payslips/:id" element={<RequireAuth><RequirePermission module="payroll" action="PRINT"><PayslipPrintPage /></RequirePermission></RequireAuth>} />
+      <Route path="/print/payroll/:id" element={<RequireAuth><RequirePermission module="payroll" action="PRINT"><PayrollPrintPage /></RequirePermission></RequireAuth>} />
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<RequirePermission module="dashboard"><DashboardPage /></RequirePermission>} />
         <Route path="settings" element={<RequirePermission module="settings"><SettingsPage /></RequirePermission>} />
@@ -82,6 +91,12 @@ export function App() {
         <Route path="purchases" element={<RequirePermission module="purchases"><PurchasesPage /></RequirePermission>} />
         <Route path="purchases/new" element={<RequirePermission module="purchases" action="CREATE"><PurchaseFormPage /></RequirePermission>} />
         <Route path="purchases/:id" element={<RequirePermission module="purchases"><PurchaseDetailPage /></RequirePermission>} />
+        <Route path="employees" element={<RequirePermission module="employees"><EmployeesPage /></RequirePermission>} />
+        <Route path="employees/:id" element={<RequirePermission module="employees"><EmployeeDetailPage /></RequirePermission>} />
+        <Route path="attendance" element={<RequirePermission module="attendance"><AttendancePage /></RequirePermission>} />
+        <Route path="production" element={<RequirePermission module="production"><ProductionPage /></RequirePermission>} />
+        <Route path="payroll" element={<RequirePermission module="payroll"><PayrollPage /></RequirePermission>} />
+        <Route path="payroll/:id" element={<RequirePermission module="payroll"><PayrollDetailPage /></RequirePermission>} />
         <Route path="audit-logs" element={<RequirePermission module="audit_logs"><AuditLogsPage /></RequirePermission>} />
         {MODULES.filter((m) => !IMPLEMENTED.has(m.key) && !m.hidden).map((m) => (
           <Route key={m.key} path={`${m.path.slice(1)}/*`} element={<RequirePermission module={m.key}><PlannedModulePage /></RequirePermission>} />
