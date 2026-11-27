@@ -709,7 +709,9 @@ model Customer {
   journalLines  JournalEntryLine[]
 
   @@index([mobile])
+  @@index([whatsapp])
   @@index([name])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_name_trgm_idx")
   @@index([status])
   @@map("customers")
 }

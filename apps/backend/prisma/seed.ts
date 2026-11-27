@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { DEFAULT_ROLES, MODULES, expandRoleGrants, permissionCode } from '@az/shared';
+import { DEFAULT_MEASUREMENT_TEMPLATES, DEFAULT_ROLES, MODULES, expandRoleGrants, permissionCode } from '@az/shared';
 
 /**
  * Idempotent seed: safe to run on every deployment.
@@ -92,6 +92,19 @@ export async function seed(prisma: PrismaClient, opts: { log?: boolean } = {}): 
     });
   }
   log(`Workflow stages: ${await prisma.workflowStage.count()}`);
+
+  // 5. Measurement templates: created once; the owner's later edits are never overwritten.
+  for (const t of DEFAULT_MEASUREMENT_TEMPLATES) {
+    const exists = await prisma.measurementTemplate.findUnique({ where: { code: t.code } });
+    if (exists) continue;
+    await prisma.measurementTemplate.create({
+      data: {
+        code: t.code, name: t.name, garmentCategory: t.garmentCategory, isSystem: true,
+        fields: { create: t.fields.map((f, i) => ({ key: f.key, label: f.label, isRequired: f.required ?? false, sortOrder: (i + 1) * 10 })) },
+      },
+    });
+  }
+  log(`Measurement templates: ${await prisma.measurementTemplate.count()}`);
 }
 
 if (require.main === module) {

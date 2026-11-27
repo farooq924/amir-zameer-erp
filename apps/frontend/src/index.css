@@ -37,5 +37,7 @@
 }
 
 @media print {
+  @page { size: A4; margin: 14mm; }
+  body { background: #fff !important; }
   .no-print { display: none !important; }
 }
