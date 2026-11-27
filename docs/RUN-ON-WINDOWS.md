@@ -92,3 +92,6 @@ pnpm db:seed
 4. Start again with `pnpm dev:backend` and (second window) `pnpm dev:frontend`.
 
 `prisma generate` must run before migrate/seed; without it you get "Cannot find module '.prisma/client/default'".
+
+## Share with a client online
+See [SHARE-ONLINE.md](SHARE-ONLINE.md): double-click `SHARE-ERP-ONLINE.cmd` (or `pnpm share`) to get a public HTTPS link through a free Cloudflare Tunnel.
