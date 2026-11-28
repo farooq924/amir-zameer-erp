@@ -10,11 +10,11 @@ describe('permissions', () => {
   it('owner sees everything', () => {
     const owner = user({ isOwner: true });
     expect(hasPermission(owner, 'accounting', 'APPROVE')).toBe(true);
-    expect(visibleNavItems(owner).length).toBe(23); // 21 modules (incl. Security) + Offline Desk + Sync Center
+    expect(visibleNavItems(owner).length).toBe(24); // 21 modules (incl. Security) + Offline Desk + Sync Center + Documents
   });
   it('a cashier only sees permitted modules', () => {
     const cashier = user({ permissions: ['dashboard.view', 'payments.view', 'payments.create'] });
-    expect(visibleNavItems(cashier).map((m) => m.key)).toEqual(['dashboard', 'payments', 'offline', 'sync']);
+    expect(visibleNavItems(cashier).map((m) => m.key)).toEqual(['dashboard', 'payments', 'offline', 'sync', 'documents']);
     expect(hasPermission(cashier, 'payments', 'CREATE')).toBe(true);
     expect(hasPermission(cashier, 'payments', 'DELETE')).toBe(false);
   });

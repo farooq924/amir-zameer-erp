@@ -81,6 +81,9 @@
   .no-print { display: none !important; }
   .print-only { display: block !important; }
   .print-footer { break-inside: avoid; }
+  /* App pages scroll inside <main>; let long pages (guide, ledgers, registers) flow onto every printed page. */
+  html, body, #root { height: auto !important; overflow: visible !important; }
+  main { overflow: visible !important; }
   /* Keep navy / gold fills on invoices (browsers drop backgrounds unless told). */
   .print-color-exact { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

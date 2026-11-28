@@ -48,6 +48,7 @@ import { OfflineDeskPage } from '@/pages/OfflineDeskPage';
 import { SyncCenterPage } from '@/pages/SyncCenterPage';
 import { BackupPage } from '@/pages/BackupPage';
 import { SecurityPage } from '@/pages/SecurityPage';
+import { DocumentsPage } from '@/pages/DocumentsPage';
 import { useAuth } from '@/store/auth';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -123,6 +124,7 @@ export function App() {
         <Route path="backup" element={<RequirePermission module="backup"><BackupPage /></RequirePermission>} />
         <Route path="security" element={<SecurityPage />} />
         <Route path="sync" element={<SyncCenterPage />} />
+        <Route path="documents" element={<DocumentsPage />} />
         <Route path="audit-logs" element={<RequirePermission module="audit_logs"><AuditLogsPage /></RequirePermission>} />
         {MODULES.filter((m) => !IMPLEMENTED.has(m.key) && !m.hidden).map((m) => (
           <Route key={m.key} path={`${m.path.slice(1)}/*`} element={<RequirePermission module={m.key}><PlannedModulePage /></RequirePermission>} />
