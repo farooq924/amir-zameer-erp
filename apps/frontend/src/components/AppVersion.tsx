@@ -11,6 +11,16 @@ export const BUILD_DATE = __BUILD_DATE__;
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
   {
+    version: '1.11.0', title: 'Documents (User Guide)',
+    notes: [
+      'New Documents menu: a built-in user guide for every page and form of the ERP, written in simple Roman Urdu',
+      '34 sections in order, from login and first-time setup to backups, with step-by-step instructions and every option explained',
+      'Search the guide, jump between sections, and open the explained page in one click',
+      'Daily, monthly and yearly routine, common problems and answers, and how to update the ERP',
+      'Print one section or the full guide (with the developer footer)',
+    ],
+  },
+  {
     version: '1.10.0', title: 'Security, Backups & Deployment',
     notes: [
       'New Backup & Restore page: encrypted backup of all ERP data with one click (Back up now)',

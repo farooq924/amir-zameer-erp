@@ -1,6 +1,6 @@
 import { MODULES, type ModuleDefinition } from '@az/shared';
 import {
-  Banknote, BarChart3, Lock, BookOpen, CalendarCheck, ClipboardList, DatabaseBackup, IdCard, Layers, LayoutDashboard,
+  Banknote, BarChart3, Lock, BookOpen, CalendarCheck, ClipboardList, DatabaseBackup, FileText, IdCard, Layers, LayoutDashboard,
   MessageCircle, Receipt, RefreshCw, WifiOff, Ruler, Scissors, Settings, ShieldCheck, Shirt, ShoppingCart, Truck, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -9,7 +9,7 @@ import type { AuthUser } from '@/types';
 
 export const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard, Users, Ruler, ClipboardList, Shirt, Layers, ShoppingCart, Truck, IdCard, CalendarCheck, Wallet, Scissors,
-  Receipt, Banknote, BookOpen, BarChart3, MessageCircle, DatabaseBackup, ShieldCheck, Settings, UserCog, RefreshCw, WifiOff, Lock,
+  Receipt, Banknote, BookOpen, BarChart3, MessageCircle, DatabaseBackup, ShieldCheck, Settings, UserCog, RefreshCw, WifiOff, Lock, FileText,
 };
 
 /** Navigation items the user is allowed to see, in the order defined by the shared module list. */
@@ -21,8 +21,10 @@ export function visibleNavItems(user: AuthUser | null): ModuleDefinition[] {
     ...(offlineWork ? [{ key: 'offline', label: 'Offline Desk', path: '/offline', phase: 9, icon: 'WifiOff', actions: ['VIEW'] } as ModuleDefinition] : []),
     ...(user ? [{ key: 'sync', label: 'Sync Center', path: '/sync', phase: 9, icon: 'RefreshCw', actions: ['VIEW'] } as ModuleDefinition] : []),
   ];
+  // v1.11: Documents (built-in user guide) for every signed-in user, last in the menu.
+  const guide: ModuleDefinition[] = user ? [{ key: 'documents', label: 'Documents', path: '/documents', phase: 11, icon: 'FileText', actions: ['VIEW'] } as ModuleDefinition] : [];
   const at = items.findIndex((m) => m.key === 'security' || m.key === 'backup' || m.key === 'audit_logs' || m.key === 'settings');
-  if (at === -1) return [...items, ...extra];
-  return [...items.slice(0, at), ...extra, ...items.slice(at)];
+  if (at === -1) return [...items, ...extra, ...guide];
+  return [...items.slice(0, at), ...extra, ...items.slice(at), ...guide];
 }
 
