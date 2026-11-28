@@ -88,4 +88,16 @@ export class GarmentsService {
     });
     return presentGarment(g);
   }
+
+  async remove(id: string, ctx: RequestContext) {
+    const g = await this.prisma.garmentType.findUnique({ where: { id } });
+    if (!g) throw new NotFoundException('Garment not found');
+    const used = await this.prisma.orderItem.count({ where: { garmentTypeId: id } });
+    if (used) throw new BadRequestException(`${g.name} is used on ${used} order item(s) and cannot be deleted. Mark it inactive instead.`);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.garmentType.delete({ where: { id } });
+      await this.audit.log({ action: 'DELETE', module: 'garments', recordId: id, oldValues: { code: g.code, name: g.name } }, ctx, tx);
+    });
+    return { success: true };
+  }
 }

@@ -1,17 +1,17 @@
 import { TASK_TYPES } from '@az/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Coins, Plus, Scissors, Search, Shirt, Trash2 } from 'lucide-react';
+import { Coins, Plus, Scissors, Search, Shirt } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common';
+import { EmptyState, PageHeader } from '@/components/common';
+import { type DataColumn, DataTable, fetchAllPages } from '@/components/data-table/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { FieldError, Label } from '@/components/ui/label';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { EmployeeSelect, useEmployeeOptions } from '@/features/hr/AttendanceDialogs';
 import { TASK_LABEL, thisMonthPK, todayPK } from '@/features/hr/shared';
@@ -115,18 +115,26 @@ export function ProductionPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
-  const [removing, setRemoving] = useState<ProductionRow | null>(null);
+  const [pageSize, setPageSize] = useState(50);
+  const navigate = useNavigate();
   const s = useDebounced(search);
+  const listParams = { month, employeeId, paid, search: s };
   const list = useQuery({
-    queryKey: ['production', 'list', { month, employeeId, paid, s, page }],
-    queryFn: () => api.get<Paginated<ProductionRow> & { totals: { pieces: number; amount: string } }>('/production', { month, employeeId, paid, search: s, page, pageSize: 50 }),
+    queryKey: ['production', 'list', { month, employeeId, paid, s, page, pageSize }],
+    queryFn: () => api.get<Paginated<ProductionRow> & { totals: { pieces: number; amount: string } }>('/production', { ...listParams, page, pageSize }),
     placeholderData: keepPreviousData,
   });
-  const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/production/${id}`),
-    onSuccess: () => { toast.success('Work record removed'); void qc.invalidateQueries({ queryKey: ['production'] }); void qc.invalidateQueries({ queryKey: ['employees'] }); setRemoving(null); },
-    onError: (e) => toast.error(errorMessage(e)),
-  });
+  const columns: DataColumn<ProductionRow>[] = [
+    { id: 'date', header: 'Date', value: (p) => p.workDate, text: (p) => formatDate(p.workDate), className: 'whitespace-nowrap' },
+    { id: 'employee', header: 'Employee', value: (p) => p.employee.name, cell: (p) => <Link to={`/employees/${p.employee.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-primary">{p.employee.name}</Link> },
+    { id: 'order', header: 'Order', value: (p) => p.orderNumber, text: (p) => `${p.orderNumber} - ${p.garmentName} (${p.customerName})`,
+      cell: (p) => <><span className="font-semibold text-primary">{p.orderNumber}</span><span className="block text-xs text-muted-foreground">{p.garmentName} · {p.customerName}</span></> },
+    { id: 'work', header: 'Work', value: (p) => TASK_LABEL[p.taskType], className: 'hidden sm:table-cell' },
+    { id: 'quantity', header: 'Pieces', type: 'number', value: (p) => p.quantity },
+    { id: 'rate', header: 'Rate', type: 'money', value: (p) => p.pieceRate, cell: (p) => formatPKR(p.pieceRate), className: 'hidden md:table-cell' },
+    { id: 'amount', header: 'Amount', type: 'money', value: (p) => p.amount, cell: (p) => <span className="font-medium">{formatPKR(p.amount)}</span> },
+    { id: 'paid', header: 'Paid', value: (p) => (p.paid ? 'Paid' : 'Not yet'), cell: (p) => (p.paid ? <Badge variant="success">Paid</Badge> : <Badge variant="outline">Not yet</Badge>), className: 'hidden sm:table-cell' },
+  ];
   const reset = () => setPage(1);
   return (
     <div>
@@ -137,7 +145,26 @@ export function ProductionPage() {
         <StatCard label="Piece wages" value={formatPKR(list.data?.totals.amount)} icon={Coins} tile="gold" loading={list.isLoading} />
       </div>
       <Card>
-        <div className="grid grid-cols-2 items-center gap-2 border-b p-3 sm:flex sm:flex-wrap">
+        <DataTable
+          title="Production"
+          module="production"
+          noun="work record"
+          rows={list.data?.data}
+          columns={columns}
+          getRowId={(p) => p.id}
+          loading={list.isLoading}
+          error={list.error}
+          onRetry={() => list.refetch()}
+          pagination={{ page, pageSize, total: list.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<ProductionRow>>('/production', { ...listParams, page: pg, pageSize: size }))}
+          onView={(p) => navigate(`/orders/${p.orderId}`)}
+          deleteRow={can('production', 'DELETE') ? (p) => api.delete(`/production/${p.id}`) : undefined}
+          canRow={(act, p) => act !== 'delete' || !p.paid}
+          deleteWarning="Only work that is not yet paid in payroll can be removed."
+          onChanged={() => { void qc.invalidateQueries({ queryKey: ['production'] }); void qc.invalidateQueries({ queryKey: ['employees'] }); }}
+          footer={() => ({ employee: 'Total (all pages)', quantity: String(list.data?.totals.pieces ?? 0), amount: formatPKR(list.data?.totals.amount) })}
+          toolbar={
+            <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
           <Input type="month" aria-label="Month" className="sm:w-40" value={month} max={thisMonthPK()} onChange={(e) => { setMonth(e.target.value); reset(); }} />
           <div className="sm:w-56"><EmployeeSelect id="pr-filter-emp" value={employeeId} onChange={(v) => { setEmployeeId(v); reset(); }} options={employees.data ?? []} /></div>
           <NativeSelect aria-label="Paid" className="sm:w-36" value={paid} onChange={(e) => { setPaid(e.target.value); reset(); }}>
@@ -145,43 +172,13 @@ export function ProductionPage() {
           </NativeSelect>
           <div className="relative col-span-2 sm:w-56"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input className="pl-8" placeholder="Order no. or garment" value={search} onChange={(e) => { setSearch(e.target.value); reset(); }} aria-label="Search work" /></div>
-        </div>
-        {list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => list.refetch()} /> : list.isLoading ? <LoadingState /> : !list.data!.data.length ? (
-          <EmptyState icon={<Scissors />} title="No work recorded" description="Record the pieces each tailor finishes. Per-piece employees are paid from these records."
-            action={can('production', 'CREATE') ? <Button onClick={() => setOpen(true)}><Plus /> Record work</Button> : undefined} />
-        ) : (
-          <Table>
-            <THead><TR><TH>Date</TH><TH>Employee</TH><TH>Order</TH><TH className="hidden sm:table-cell">Work</TH><TH className="text-right">Pieces</TH><TH className="hidden md:table-cell text-right">Rate</TH><TH className="text-right">Amount</TH><TH className="hidden sm:table-cell">Paid</TH><TH className="w-10" /></TR></THead>
-            <TBody>
-              {list.data!.data.map((p) => (
-                <TR key={p.id}>
-                  <TD className="whitespace-nowrap">{formatDate(p.workDate)}</TD>
-                  <TD><Link to={`/employees/${p.employee.id}`} className="font-medium hover:text-primary">{p.employee.name}</Link></TD>
-                  <TD><Link to={`/orders/${p.orderId}`} className="font-semibold text-primary hover:underline">{p.orderNumber}</Link><span className="block text-xs text-muted-foreground">{p.garmentName} · {p.customerName}</span></TD>
-                  <TD className="hidden sm:table-cell">{TASK_LABEL[p.taskType]}</TD>
-                  <TD className="text-right tabular-nums">{p.quantity}</TD>
-                  <TD className="hidden text-right tabular-nums md:table-cell">{formatPKR(p.pieceRate)}</TD>
-                  <TD className="text-right font-medium tabular-nums">{formatPKR(p.amount)}</TD>
-                  <TD className="hidden sm:table-cell">{p.paid ? <Badge variant="success">Paid</Badge> : <Badge variant="outline">Not yet</Badge>}</TD>
-                  <TD>{!p.paid && can('production', 'DELETE') && <Button variant="ghost" size="icon" aria-label="Remove" onClick={() => setRemoving(p)}><Trash2 /></Button>}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        )}
-        {list.data && list.data.meta.totalPages > 1 && (
-          <div className="flex items-center justify-between border-t p-3 text-sm">
-            <span className="text-muted-foreground">page {list.data.meta.page} of {list.data.meta.totalPages}</span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((x) => x - 1)}>Previous</Button>
-              <Button variant="outline" size="sm" disabled={page >= list.data.meta.totalPages} onClick={() => setPage((x) => x + 1)}>Next</Button>
             </div>
-          </div>
-        )}
+          }
+          empty={<EmptyState icon={<Scissors />} title="No work recorded" description="Record the pieces each tailor finishes. Per-piece employees are paid from these records."
+            action={can('production', 'CREATE') ? <Button onClick={() => setOpen(true)}><Plus /> Record work</Button> : undefined} />}
+        />
       </Card>
       <RecordWorkDialog open={open} onOpenChange={setOpen} />
-      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} destructive title="Remove this work?" confirmLabel="Remove" loading={remove.isPending}
-        description={removing ? `${removing.quantity} piece(s) of ${removing.garmentName} by ${removing.employee.name} (${formatPKR(removing.amount)}).` : ''} onConfirm={() => removing && remove.mutate(removing.id)} />
     </div>
   );
 }

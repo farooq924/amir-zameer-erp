@@ -154,6 +154,27 @@ export class SuppliersService {
     return this.get(id);
   }
 
+  async remove(id: string, ctx: RequestContext) {
+    const s = await this.prisma.supplier.findFirst({ where: { id, deletedAt: null } });
+    if (!s) throw new NotFoundException('Supplier not found');
+    const [purchases, orders, returns, payments, ledger] = await Promise.all([
+      this.prisma.purchase.count({ where: { supplierId: id } }),
+      this.prisma.purchaseOrder.count({ where: { supplierId: id } }),
+      this.prisma.purchaseReturn.count({ where: { supplierId: id } }),
+      this.prisma.supplierPayment.count({ where: { supplierId: id } }),
+      this.prisma.supplierLedger.count({ where: { supplierId: id } }),
+    ]);
+    if (purchases || orders || returns || payments || ledger) {
+      throw new BadRequestException(`${s.name} has purchases, payments or ledger entries and cannot be deleted. Mark the supplier Inactive instead.`);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.fabric.updateMany({ where: { supplierId: id }, data: { supplierId: null } });
+      await tx.supplier.update({ where: { id }, data: { deletedAt: new Date(), status: 'INACTIVE', version: { increment: 1 } } });
+      await this.audit.log({ action: 'DELETE', module: 'suppliers', recordId: id, oldValues: { code: s.code, name: s.name } }, ctx, tx);
+    });
+    return { success: true };
+  }
+
   async ledger(id: string) {
     const s = await this.prisma.supplier.findFirst({ where: { id, deletedAt: null } });
     if (!s) throw new NotFoundException('Supplier not found');

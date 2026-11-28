@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ReqContext } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -53,6 +53,13 @@ export class SuppliersController {
   @RequirePermissions('suppliers', 'EDIT')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateSupplierDto, @ReqContext() ctx: RequestContext) {
     return this.suppliers.update(id, dto, ctx);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('suppliers', 'DELETE')
+  @ApiOperation({ summary: 'Delete a supplier with no purchases, payments or ledger entries (otherwise mark it inactive)' })
+  remove(@Param('id', ParseUUIDPipe) id: string, @ReqContext() ctx: RequestContext) {
+    return this.suppliers.remove(id, ctx);
   }
 
   @Post(':id/payments')

@@ -35,8 +35,11 @@ const TYPES = [
   { value: 'REGULAR', label: 'Regular' }, { value: 'WALK_IN', label: 'Walk-in' }, { value: 'VIP', label: 'VIP' }, { value: 'CORPORATE', label: 'Corporate' },
 ];
 
-export function CustomerFormDialog({ open, onOpenChange, customer, onSaved }: {
-  open: boolean; onOpenChange: (o: boolean) => void; customer?: Customer | null; onSaved?: (c: Customer) => void;
+export function CustomerFormDialog({ open, onOpenChange, customer, copyFrom, onSaved }: {
+  open: boolean; onOpenChange: (o: boolean) => void; customer?: Customer | null;
+  /** Duplicate: start a new customer with these details. */
+  copyFrom?: Customer | null;
+  onSaved?: (c: Customer) => void;
 }) {
   const qc = useQueryClient();
   const editing = !!customer;
@@ -46,14 +49,15 @@ export function CustomerFormDialog({ open, onOpenChange, customer, onSaved }: {
   useEffect(() => {
     if (!open) return;
     setDuplicates([]);
+    const src = customer ?? copyFrom;
     form.reset({
-      name: customer?.name ?? '', mobile: customer ? formatPhone(customer.mobile) : '',
-      whatsapp: customer?.whatsapp && customer.whatsapp !== customer.mobile ? formatPhone(customer.whatsapp) : '',
-      email: customer?.email ?? '', city: customer?.city ?? '', address: customer?.address ?? '',
-      customerType: customer?.customerType ?? 'REGULAR', registrationDate: customer?.registrationDate ?? new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' }),
-      openingBalance: '', whatsappOptIn: customer?.whatsappOptIn ?? false, notes: customer?.notes ?? '',
+      name: customer?.name ?? (copyFrom ? `${copyFrom.name} (Copy)` : ''), mobile: src ? formatPhone(src.mobile) : '',
+      whatsapp: src?.whatsapp && src.whatsapp !== src.mobile ? formatPhone(src.whatsapp) : '',
+      email: src?.email ?? '', city: src?.city ?? '', address: src?.address ?? '',
+      customerType: src?.customerType ?? 'REGULAR', registrationDate: customer?.registrationDate ?? new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' }),
+      openingBalance: '', whatsappOptIn: src?.whatsappOptIn ?? false, notes: src?.notes ?? '',
     });
-  }, [open, customer, form]);
+  }, [open, customer, copyFrom, form]);
 
   const checkDuplicates = async () => {
     const { mobile, whatsapp, name } = form.getValues();

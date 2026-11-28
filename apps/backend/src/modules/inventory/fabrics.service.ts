@@ -164,6 +164,24 @@ export class FabricsService {
     return this.get(id);
   }
 
+  async remove(id: string, ctx: RequestContext) {
+    const f = await this.prisma.fabric.findFirst({ where: { id, deletedAt: null } });
+    if (!f) throw new NotFoundException('Fabric not found');
+    const [moves, orders, purchases] = await Promise.all([
+      this.prisma.inventoryMovement.count({ where: { fabricId: id } }),
+      this.prisma.orderItem.count({ where: { fabricId: id } }),
+      this.prisma.purchaseItem.count({ where: { fabricId: id } }),
+    ]);
+    if (moves || orders || purchases || !dec(f.currentStock).isZero()) {
+      throw new BadRequestException(`${f.name} has stock or history (purchases, orders or adjustments) and cannot be deleted. Mark it inactive instead.`);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.fabric.update({ where: { id }, data: { deletedAt: new Date(), isActive: false, version: { increment: 1 } } });
+      await this.audit.log({ action: 'DELETE', module: 'inventory', recordId: id, oldValues: { code: f.code, name: f.name } }, ctx, tx);
+    });
+    return { success: true };
+  }
+
   async update(id: string, dto: UpdateFabricDto, ctx: RequestContext) {
     const before = await this.prisma.fabric.findFirst({ where: { id, deletedAt: null }, include });
     if (!before) throw new NotFoundException('Fabric not found');

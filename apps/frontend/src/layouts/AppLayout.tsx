@@ -68,7 +68,7 @@ export function AppLayout() {
   const doLogout = async () => { if (pending > 0) { setMobileNav(false); setConfirmLogout(true); } else await reallyLogout(); };
 
   const navList = (collapsed: boolean, onNavigate?: () => void) => (
-    <nav className="relative z-10 flex-1 space-y-0.5 overflow-y-auto px-3 py-1 [scrollbar-width:thin]" aria-label="Main navigation">
+    <nav className="relative z-10 flex-1 space-y-0.5 scrollbar-navy overflow-y-auto px-3 py-1" aria-label="Main navigation">
       {items.map((m) => {
         const Icon = ICONS[m.icon] ?? MoreHorizontal;
         return (

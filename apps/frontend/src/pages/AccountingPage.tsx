@@ -1,11 +1,11 @@
 import { ACCOUNT_SUBTYPES, JOURNAL_SOURCES } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle, ArrowDownLeft, ArrowUpRight, BookOpen, CheckCircle2, Landmark, Lock, LockOpen, Pencil, Plus, Printer, RefreshCw, Scale, Search, Trash2,
+  AlertTriangle, ArrowDownLeft, ArrowUpRight, BookOpen, CheckCircle2, Landmark, Lock, LockOpen, Plus, Printer, RefreshCw, Scale, Search, Trash2,
   TrendingUp, Truck, Undo2, Users, Wallet,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable, fetchAllPages } from '@/components/data-table/DataTable';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { DateRange, PeriodBadge, monthStartPK, todayPK } from '@/features/finance/shared';
@@ -203,27 +205,39 @@ function CashFlowTab() {
 }
 
 function TrialBalanceTab() {
+  const navigate = useNavigate();
   const [asOf, setAsOf] = useState(todayPK());
   const q = useQuery({ queryKey: ['accounting', 'tb', asOf], queryFn: () => api.get<TrialBalance>('/accounting/reports/trial-balance', { asOf }), enabled: !!asOf });
   return (
     <ReportCard title="Trial Balance" subtitle={q.data ? `As on ${formatDate(q.data.asOf)}` : ''}
       actions={<div className="space-y-1"><Label htmlFor="tb-date" className="text-xs">As on</Label><Input id="tb-date" type="date" className="w-40" value={asOf} onChange={(e) => setAsOf(e.target.value)} /></div>}>
-      {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.rows.length ? <EmptyState icon={<Scale />} title="No entries yet" /> : (
-        <Table>
-          <THead><TR><TH>Code</TH><TH>Account</TH><TH className="hidden sm:table-cell">Type</TH><TH className="text-right">Debit</TH><TH className="text-right">Credit</TH></TR></THead>
-          <TBody>
-            {q.data!.rows.map((r) => (
-              <TR key={r.id}>
-                <TD className="font-mono text-xs">{r.code}</TD><TD><Link to={`/accounting/accounts/${r.id}`} className="hover:text-primary">{r.name}</Link></TD>
-                <TD className="hidden sm:table-cell">{TYPE_LABEL[r.type]}</TD>
-                <TD className="text-right tabular-nums">{Number(r.debit) ? formatPKR(r.debit) : '-'}</TD><TD className="text-right tabular-nums">{Number(r.credit) ? formatPKR(r.credit) : '-'}</TD>
-              </TR>
-            ))}
-            <TR className="bg-muted/50 font-semibold"><TD colSpan={2}>Total {q.data!.totals.balanced ? <Badge variant="success" className="ml-2">Balanced</Badge> : <Badge variant="danger" className="ml-2">Not balanced</Badge>}</TD>
-              <TD className="hidden sm:table-cell" /><TD className="text-right tabular-nums">{formatPKR(q.data!.totals.debit)}</TD><TD className="text-right tabular-nums">{formatPKR(q.data!.totals.credit)}</TD></TR>
-          </TBody>
-        </Table>
-      )}
+      <div className="-mx-6 -mb-6 border-t">
+        <DataTable
+          title={`Trial Balance ${q.data ? formatDate(q.data.asOf) : ''}`}
+          module="accounting"
+          noun="account"
+          rows={q.data?.rows}
+          getRowId={(r) => r.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          defaultPageSize={100}
+          onRowClick={(r) => navigate(`/accounting/accounts/${r.id}`)}
+          onView={(r) => navigate(`/accounting/accounts/${r.id}`)}
+          columns={[
+            { id: 'code', header: 'Code', value: (r) => r.code, className: 'font-mono text-xs' },
+            { id: 'name', header: 'Account', value: (r) => r.name },
+            { id: 'type', header: 'Type', value: (r) => TYPE_LABEL[r.type], className: 'hidden sm:table-cell' },
+            { id: 'debit', header: 'Debit', type: 'money', value: (r) => r.debit, cell: (r) => (Number(r.debit) ? formatPKR(r.debit) : '-') },
+            { id: 'credit', header: 'Credit', type: 'money', value: (r) => r.credit, cell: (r) => (Number(r.credit) ? formatPKR(r.credit) : '-') },
+          ]}
+          footer={() => (q.data ? {
+            name: <>Total {q.data.totals.balanced ? <Badge variant="success" className="ml-2">Balanced</Badge> : <Badge variant="danger" className="ml-2">Not balanced</Badge>}</>,
+            debit: formatPKR(q.data.totals.debit), credit: formatPKR(q.data.totals.credit),
+          } : {})}
+          empty={<EmptyState icon={<Scale />} title="No entries yet" />}
+        />
+      </div>
     </ReportCard>
   );
 }
@@ -368,12 +382,14 @@ function JournalTab() {
   const [from, setFrom] = useState(monthStartPK());
   const [to, setTo] = useState(todayPK());
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [open, setOpen] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   useEffect(() => setPage(1), [search, source, from, to]);
+  const listParams = { search: search.trim() || undefined, sourceType: source || undefined, from: from || undefined, to: to || undefined };
   const q = useQuery({
-    queryKey: ['accounting', 'journals', { search, source, from, to, page }],
-    queryFn: () => api.get<Paginated<JournalRow>>('/accounting/journals', { search: search.trim() || undefined, sourceType: source || undefined, from: from || undefined, to: to || undefined, page, pageSize: 30 }),
+    queryKey: ['accounting', 'journals', { search, source, from, to, page, pageSize }],
+    queryFn: () => api.get<Paginated<JournalRow>>('/accounting/journals', { ...listParams, page, pageSize }),
   });
   return (
     <div className="space-y-4">
@@ -389,33 +405,30 @@ function JournalTab() {
         {can('accounting', 'CREATE') && <Button onClick={() => setManual(true)}><Plus /> New entry</Button>}
       </Card>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.data.length ? (
-          <EmptyState icon={<BookOpen />} title="No journal entries" description="Entries appear here automatically as the shop works." />
-        ) : (
-          <>
-            <Table>
-              <THead><TR><TH>Date</TH><TH>Entry</TH><TH className="hidden md:table-cell">Source</TH><TH className="text-right">Amount</TH><TH className="hidden sm:table-cell">Status</TH></TR></THead>
-              <TBody>
-                {q.data!.data.map((j) => (
-                  <TR key={j.id} className="cursor-pointer" tabIndex={0} onClick={() => setOpen(j.id)} onKeyDown={(e) => e.key === 'Enter' && setOpen(j.id)}>
-                    <TD className="whitespace-nowrap">{formatDate(j.date)}</TD>
-                    <TD><span className="font-mono text-xs font-semibold">{j.entryNo}</span><span className="block line-clamp-2 text-sm">{j.description}</span></TD>
-                    <TD className="hidden md:table-cell">{j.source}</TD>
-                    <TD className="text-right font-semibold tabular-nums">{formatPKR(j.amount)}</TD>
-                    <TD className="hidden sm:table-cell">{j.status === 'REVERSED' ? <Badge variant="secondary">Reversed</Badge> : j.isReversal ? <Badge variant="info">Reversal</Badge> : <Badge variant="success">Posted</Badge>}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-            {q.data!.meta.totalPages > 1 && (
-              <div className="flex items-center justify-end gap-2 border-t px-4 py-3 text-sm">
-                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                <span>Page {page} of {q.data!.meta.totalPages}</span>
-                <Button size="sm" variant="outline" disabled={page >= q.data!.meta.totalPages} onClick={() => setPage(page + 1)}>Next</Button>
-              </div>
-            )}
-          </>
-        )}
+        <DataTable
+          title="Journal"
+          module="accounting"
+          noun="entry"
+          rows={q.data?.data}
+          getRowId={(j) => j.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<JournalRow>>('/accounting/journals', { ...listParams, page: pg, pageSize: size }))}
+          onRowClick={(j) => setOpen(j.id)}
+          onView={(j) => setOpen(j.id)}
+          columns={[
+            { id: 'date', header: 'Date', value: (j) => j.date, text: (j) => formatDate(j.date), className: 'whitespace-nowrap' },
+            { id: 'entry', header: 'Entry', value: (j) => j.entryNo, text: (j) => `${j.entryNo} - ${j.description}`,
+              cell: (j) => <><span className="font-mono text-xs font-semibold">{j.entryNo}</span><span className="block line-clamp-2 text-sm">{j.description}</span></> },
+            { id: 'source', header: 'Source', value: (j) => j.source, className: 'hidden md:table-cell' },
+            { id: 'amount', header: 'Amount', type: 'money', value: (j) => j.amount, cell: (j) => <span className="font-semibold">{formatPKR(j.amount)}</span> },
+            { id: 'status', header: 'Status', value: (j) => (j.status === 'REVERSED' ? 'Reversed' : j.isReversal ? 'Reversal' : 'Posted'), className: 'hidden sm:table-cell',
+              cell: (j) => (j.status === 'REVERSED' ? <Badge variant="secondary">Reversed</Badge> : j.isReversal ? <Badge variant="info">Reversal</Badge> : <Badge variant="success">Posted</Badge>) },
+          ]}
+          empty={<EmptyState icon={<BookOpen />} title="No journal entries" description="Entries appear here automatically as the shop works." />}
+        />
       </Card>
       <JournalDialog id={open} onOpenChange={(o) => !o && setOpen(null)} />
       <ManualJournalDialog open={manual} onOpenChange={setManual} />
@@ -463,36 +476,36 @@ function AccountDialog({ open, onOpenChange, account }: { open: boolean; onOpenC
 
 function AccountsTab() {
   const can = useCan();
+  const navigate = useNavigate();
   const q = useQuery({ queryKey: ['accounting', 'accounts'], queryFn: () => api.get<Account[]>('/accounting/accounts') });
   const [edit, setEdit] = useState<Account | null | 'new'>(null);
   return (
     <div className="space-y-4">
       {can('accounting', 'MANAGE_SETTINGS') && <div className="flex justify-end"><Button variant="gold" onClick={() => setEdit('new')}><Plus /> Add account</Button></div>}
-      {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {(['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'] as const).map((t) => {
-            const rows = q.data!.filter((a) => a.type === t);
-            return (
-              <Card key={t}>
-                <CardHeader className="pb-2"><CardTitle className="text-base">{TYPE_LABEL[t]}</CardTitle></CardHeader>
-                <Table>
-                  <TBody>
-                    {rows.map((a) => (
-                      <TR key={a.id} className={!a.isActive ? 'opacity-50' : undefined}>
-                        <TD className="w-16 font-mono text-xs">{a.code}</TD>
-                        <TD><Link to={`/accounting/accounts/${a.id}`} className="font-medium hover:text-primary">{a.name}</Link>
-                          <span className="block text-xs text-muted-foreground">{a.subTypeLabel}{a.isSystem ? ' · used by automatic posting' : ''}</span></TD>
-                        <TD className={cn('text-right font-semibold tabular-nums', Number(a.balance) < 0 && 'text-rose-700 dark:text-rose-400')}>{formatPKR(a.balance)}</TD>
-                        <TD className="w-12">{can('accounting', 'MANAGE_SETTINGS') && <Button size="icon" variant="ghost" aria-label={`Edit ${a.name}`} onClick={() => setEdit(a)}><Pencil /></Button>}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+      <Card>
+        <DataTable
+          title="Chart of Accounts"
+          module="accounting"
+          noun="account"
+          rows={q.data}
+          getRowId={(a) => a.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          defaultPageSize={100}
+          rowClassName={(a) => (!a.isActive ? 'opacity-50' : undefined)}
+          onRowClick={(a) => navigate(`/accounting/accounts/${a.id}`)}
+          onView={(a) => navigate(`/accounting/accounts/${a.id}`)}
+          onEdit={can('accounting', 'MANAGE_SETTINGS') ? (a) => setEdit(a) : undefined}
+          columns={[
+            { id: 'code', header: 'Code', value: (a) => a.code, className: 'w-16 font-mono text-xs' },
+            { id: 'name', header: 'Account', value: (a) => a.name, text: (a) => `${a.name}${a.subTypeLabel ? ` (${a.subTypeLabel})` : ''}`,
+              cell: (a) => <><span className="font-medium">{a.name}</span><span className="block text-xs text-muted-foreground">{a.subTypeLabel}{a.isSystem ? ' · used by automatic posting' : ''}</span></> },
+            { id: 'type', header: 'Type', value: (a) => TYPE_LABEL[a.type] },
+            { id: 'balance', header: 'Balance', type: 'money', value: (a) => a.balance, cell: (a) => <span className={cn('font-semibold', Number(a.balance) < 0 && 'text-rose-700 dark:text-rose-400')}>{formatPKR(a.balance)}</span> },
+          ]}
+        />
+      </Card>
       <AccountDialog open={edit !== null} onOpenChange={(o) => !o && setEdit(null)} account={edit === 'new' ? null : edit} />
     </div>
   );
@@ -519,30 +532,30 @@ function PeriodsTab() {
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-base">Month closing</CardTitle>
         <p className="text-sm text-muted-foreground">Close a month after checking it, so nobody can change last month's figures by mistake.</p></CardHeader>
-      {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : (
-        <Table>
-          <THead><TR><TH>Month</TH><TH className="text-right">Entries</TH><TH className="hidden sm:table-cell text-right">Amount</TH><TH>Status</TH><TH className="w-48"><span className="sr-only">Actions</span></TH></TR></THead>
-          <TBody>
-            {q.data!.map((p) => (
-              <TR key={p.month}>
-                <TD className="font-medium">{p.label}{p.closedBy && <span className="block text-xs text-muted-foreground">{p.status === 'OPEN' ? '' : `${p.closedBy} · ${formatDate(p.closedAt)}`}</span>}</TD>
-                <TD className="text-right tabular-nums">{p.entries}</TD>
-                <TD className="hidden text-right tabular-nums sm:table-cell">{formatPKR(p.amount)}</TD>
-                <TD><PeriodBadge status={p.status} /></TD>
-                <TD>
-                  {can('accounting', 'APPROVE') && (
-                    <div className="flex justify-end gap-1">
-                      {p.status === 'OPEN' && <Button size="sm" variant="outline" onClick={() => setConfirm({ p, action: 'close' })}><Lock /> Close</Button>}
-                      {p.status === 'CLOSED' && <Button size="sm" variant="outline" onClick={() => setConfirm({ p, action: 'reopen' })}><LockOpen /> Reopen</Button>}
-                      {p.status === 'CLOSED' && <Button size="sm" variant="destructive" onClick={() => setConfirm({ p, action: 'lock' })}><Lock /> Lock</Button>}
-                    </div>
-                  )}
-                </TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-      )}
+      <DataTable
+        title="Month closing"
+        module="accounting"
+        noun="month"
+        rows={q.data}
+        getRowId={(p) => p.month}
+        loading={q.isLoading}
+        error={q.error}
+        onRetry={() => q.refetch()}
+        rowMenu={can('accounting', 'APPROVE') ? (p) => (
+          <>
+            {p.status === 'OPEN' && <DropdownMenuItem onSelect={() => setConfirm({ p, action: 'close' })}><Lock /> Close month</DropdownMenuItem>}
+            {p.status === 'CLOSED' && <DropdownMenuItem onSelect={() => setConfirm({ p, action: 'reopen' })}><LockOpen /> Reopen</DropdownMenuItem>}
+            {p.status === 'CLOSED' && <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirm({ p, action: 'lock' })}><Lock /> Lock for ever</DropdownMenuItem>}
+          </>
+        ) : undefined}
+        columns={[
+          { id: 'month', header: 'Month', value: (p) => p.month, text: (p) => p.label,
+            cell: (p) => <><span className="font-medium">{p.label}</span>{p.closedBy && <span className="block text-xs text-muted-foreground">{p.status === 'OPEN' ? '' : `${p.closedBy} · ${formatDate(p.closedAt)}`}</span>}</> },
+          { id: 'entries', header: 'Entries', type: 'number', value: (p) => p.entries },
+          { id: 'amount', header: 'Amount', type: 'money', value: (p) => p.amount, cell: (p) => formatPKR(p.amount), className: 'hidden sm:table-cell' },
+          { id: 'status', header: 'Status', value: (p) => p.status, cell: (p) => <PeriodBadge status={p.status} /> },
+        ]}
+      />
       <ConfirmDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)} title={text?.title ?? ''} description={text?.description ?? ''} confirmLabel={text?.label}
         destructive={confirm?.action === 'lock'} loading={set.isPending} onConfirm={() => confirm && set.mutate({ month: confirm.p.month, action: confirm.action })} />
     </Card>

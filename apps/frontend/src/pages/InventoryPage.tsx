@@ -1,38 +1,24 @@
 import { MOVEMENT_TYPES } from '@az/shared';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, Eye, FolderTree, History, Layers, PackageX, Plus, Search, ShoppingCart, Wallet } from 'lucide-react';
-import { useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Boxes, FolderTree, History, Layers, PackageX, Plus, Search, ShoppingCart, Wallet } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { EmptyState, ErrorState, PageHeader } from '@/components/common';
+import { EmptyState, PageHeader } from '@/components/common';
+import { type DataColumn, DataTable, type ServerPagination, type SortState, fetchAllPages } from '@/components/data-table/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, NativeSelect } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { FabricFormDialog, useFabricCategories } from '@/features/inventory/FabricFormDialog';
 import { MovementBadge, SignedQty, StockLevelBadge, formatQty, useDebounced } from '@/features/inventory/shared';
 import { CategoriesDialog } from '@/features/inventory/StockDialogs';
 import { useCan } from '@/hooks/use-permission';
-import { api, errorMessage } from '@/services/api';
+import { api } from '@/services/api';
 import type { Fabric, InventorySummary, Paginated, StockMovement } from '@/types';
 import { cn } from '@/utils/cn';
 import { formatDateTime, formatPKR } from '@/utils/format';
-
-function Pager({ meta, page, setPage, noun }: { meta: Paginated<unknown>['meta']; page: number; setPage: (fn: (p: number) => number) => void; noun: string }) {
-  if (!meta.total) return null;
-  return (
-    <div className="flex items-center justify-between border-t p-3 text-sm">
-      <span className="text-muted-foreground">{meta.total} {noun} · page {meta.page} of {meta.totalPages}</span>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-        <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-      </div>
-    </div>
-  );
-}
 
 function FabricsTab({ stock, setStock }: { stock: string; setStock: (s: string) => void }) {
   const can = useCan();
@@ -41,22 +27,84 @@ function FabricsTab({ stock, setStock }: { stock: string; setStock: (s: string) 
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [status, setStatus] = useState('active');
-  const [sort, setSort] = useState('name:asc');
+  const [sort, setSort] = useState<SortState | null>(null);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState<Fabric | null>(null);
+  const qc = useQueryClient();
   const q = useDebounced(search);
-  const [sortBy, sortOrder] = sort.split(':');
+  const sortBy = sort?.id ?? 'name';
+  const sortOrder = sort?.desc ? 'desc' : 'asc';
+  const listParams = { search: q, categoryId, stock, status, sortBy, sortOrder };
   const list = useQuery({
-    queryKey: ['inventory', 'fabrics', { q, categoryId, stock, status, sort, page }],
-    queryFn: () => api.get<Paginated<Fabric>>('/inventory/fabrics', { search: q, categoryId, stock, status, sortBy, sortOrder, page, pageSize: 25 }),
+    queryKey: ['inventory', 'fabrics', { q, categoryId, stock, status, sortBy, sortOrder, page, pageSize }],
+    queryFn: () => api.get<Paginated<Fabric>>('/inventory/fabrics', { ...listParams, page, pageSize }),
     placeholderData: keepPreviousData,
   });
   const reset = () => setPage(1);
   const filtered = !!(q || categoryId || stock !== 'all' || status !== 'active');
 
+  const columns: DataColumn<Fabric>[] = [
+    { id: 'code', header: 'Code', sortKey: 'code', value: (f) => f.code, cell: (f) => <span className="whitespace-nowrap font-mono text-xs font-semibold">{f.code}</span> },
+    { id: 'name', header: 'Fabric', sortKey: 'name', value: (f) => f.name, text: (f) => [f.name, f.brand, f.color, f.design].filter(Boolean).join(' · '),
+      cell: (f) => <><span className="font-medium">{f.name}</span><span className="block text-xs text-muted-foreground">{[f.brand, f.color, f.design].filter(Boolean).join(' · ') || '-'}</span></> },
+    { id: 'category', header: 'Category', value: (f) => f.category?.name, className: 'hidden lg:table-cell' },
+    { id: 'currentStock', header: 'In stock', type: 'number', sortKey: 'currentStock', value: (f) => f.currentStock, text: (f) => formatQty(f.currentStock, f.unit), cell: (f) => formatQty(f.currentStock, f.unit) },
+    { id: 'reserved', header: 'Reserved', type: 'number', value: (f) => f.reservedStock, text: (f) => formatQty(f.reservedStock, f.unit), cell: (f) => (Number(f.reservedStock) ? formatQty(f.reservedStock, f.unit) : '-'), className: 'hidden md:table-cell' },
+    { id: 'free', header: 'Free', type: 'number', value: (f) => f.availableStock, text: (f) => formatQty(f.availableStock, f.unit),
+      cell: (f) => <span className={cn('font-semibold', f.level === 'OUT' && 'text-rose-700 dark:text-rose-400', f.level === 'LOW' && 'text-amber-700 dark:text-amber-300')}>{formatQty(f.availableStock, f.unit)}</span> },
+    { id: 'salePrice', header: 'Sale price', type: 'money', value: (f) => f.salePrice, cell: (f) => formatPKR(f.salePrice), className: 'hidden lg:table-cell' },
+    { id: 'stockValue', header: 'Stock value', type: 'money', value: (f) => f.stockValue, cell: (f) => formatPKR(f.stockValue), className: 'hidden xl:table-cell' },
+    { id: 'status', header: 'Status', value: (f) => `${f.level}${f.isActive ? '' : ' / Inactive'}`, cell: (f) => <div className="flex flex-wrap gap-1"><StockLevelBadge level={f.level} />{!f.isActive && <Badge variant="secondary">Inactive</Badge>}</div> },
+  ];
+  const open = (f: Fabric) => navigate(`/inventory/fabrics/${f.id}`);
+
   return (
     <Card>
-      <div className="grid grid-cols-2 items-center gap-2 border-b p-3 sm:flex sm:flex-wrap">
+        <DataTable
+          title="Fabrics"
+          module="inventory"
+          noun="fabric"
+          rows={list.data?.data}
+          columns={columns}
+          getRowId={(f) => f.id}
+          loading={list.isLoading}
+          error={list.error}
+          onRetry={() => list.refetch()}
+          pagination={{ page, pageSize, total: list.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          sort={sort}
+          onSortChange={(st) => { setSort(st); setPage(1); }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<Fabric>>('/inventory/fabrics', { ...listParams, page: pg, pageSize: size }))}
+          onRowClick={open}
+          onView={open}
+          onEdit={can('inventory', 'EDIT') ? (f) => { setEditing(f); setAddOpen(true); } : undefined}
+          duplicateRow={can('inventory', 'CREATE') ? (f) => api.post('/inventory/fabrics', {
+            name: `${f.name} (Copy)`, brand: f.brand ?? '', categoryId: f.category?.id ?? null, color: f.color ?? '', design: f.design ?? '', quality: f.quality ?? '',
+            supplierId: f.supplier?.id ?? null, purchasePrice: f.purchasePrice, salePrice: f.salePrice, unit: f.unit, minimumStock: f.minimumStock, location: f.location ?? '', isActive: f.isActive,
+          }) : undefined}
+          deleteRow={can('inventory', 'DELETE') ? (f) => api.delete(`/inventory/fabrics/${f.id}`) : undefined}
+          deleteWarning="Only fabrics with no stock and no history can be deleted; otherwise mark them inactive."
+          onChanged={() => qc.invalidateQueries({ queryKey: ['inventory'] })}
+          importer={can('inventory', 'CREATE') ? {
+            fields: [
+              { key: 'name', label: 'Name', required: true, example: 'Wash & Wear White' },
+              { key: 'brand', label: 'Brand' }, { key: 'color', label: 'Colour', aliases: ['color'] }, { key: 'design', label: 'Design' }, { key: 'quality', label: 'Quality' },
+              { key: 'unit', label: 'Unit', example: 'METER' },
+              { key: 'purchasePrice', label: 'Purchase price', example: '850' }, { key: 'salePrice', label: 'Sale price', example: '1200' },
+              { key: 'minimumStock', label: 'Minimum stock', example: '20' }, { key: 'openingStock', label: 'Opening stock', example: '50' },
+              { key: 'location', label: 'Location' },
+            ],
+            note: 'Unit: METER, YARD, PIECE or SUIT (default METER). Opening stock is added at the purchase price.',
+            createRow: (d) => api.post('/inventory/fabrics', {
+              name: d.name, brand: d.brand, color: d.color, design: d.design, quality: d.quality, location: d.location,
+              unit: (d.unit || 'METER').toUpperCase(), purchasePrice: d.purchasePrice || '0', salePrice: d.salePrice || '0', minimumStock: d.minimumStock || '0',
+              openingStock: d.openingStock && Number(d.openingStock) > 0 ? d.openingStock : undefined,
+              openingCost: d.openingStock && Number(d.openingStock) > 0 ? d.purchasePrice || undefined : undefined,
+            }),
+          } : undefined}
+          toolbar={
+            <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
         <div className="relative col-span-2 w-full sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input className="pl-8" placeholder="Code, name, brand or colour" value={search} onChange={(e) => { setSearch(e.target.value); reset(); }} aria-label="Search fabrics" />
@@ -70,24 +118,16 @@ function FabricsTab({ stock, setStock }: { stock: string; setStock: (s: string) 
         <NativeSelect aria-label="Status" className="sm:w-36" value={status} onChange={(e) => { setStatus(e.target.value); reset(); }}>
           <option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All</option>
         </NativeSelect>
-        <NativeSelect aria-label="Sort" className="sm:w-44" value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="name:asc">Name (A-Z)</option><option value="code:asc">Code</option><option value="currentStock:asc">Lowest stock first</option>
-          <option value="currentStock:desc">Highest stock first</option><option value="createdAt:desc">Newest first</option>
-        </NativeSelect>
         {filtered && <Button variant="ghost" size="sm" className="col-span-2 justify-self-start" onClick={() => { setSearch(''); setCategoryId(''); setStock('all'); setStatus('active'); reset(); }}>Clear filters</Button>}
-      </div>
-      {list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => list.refetch()} /> : list.isLoading ? (
-        <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-      ) : !list.data!.data.length ? (
-        <EmptyState icon={<Layers />} title={filtered ? 'No fabrics match these filters' : 'No fabrics yet'}
+            </div>
+          }
+          empty={
+            <EmptyState icon={<Layers />} title={filtered ? 'No fabrics match these filters' : 'No fabrics yet'}
           description={filtered ? 'Try another search or clear the filters.' : 'Add the fabrics you keep in the shop, with the stock you have today.'}
-          action={!filtered && can('inventory', 'CREATE') ? <Button onClick={() => setAddOpen(true)}><Plus /> Add fabric</Button> : undefined} />
-      ) : (
-        <>
-          <ul className="divide-y sm:hidden">
-            {list.data!.data.map((f) => (
-              <li key={f.id}>
-                <Link to={`/inventory/fabrics/${f.id}`} className="flex items-center gap-3 px-3 py-3 hover:bg-accent/50">
+          action={!filtered && can('inventory', 'CREATE') ? <Button onClick={() => { setEditing(null); setAddOpen(true); }}><Plus /> Add fabric</Button> : undefined} />
+          }
+          mobileCard={(f) => (
+            <Link to={`/inventory/fabrics/${f.id}`} className="flex items-center gap-3 px-1 py-3">
                   <span className="icon-tile h-12 w-12 shrink-0 rounded-xl bg-gold-soft text-[#8a6a1f] dark:text-gold"><Layers className="h-6 w-6" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">{f.name}</span>
@@ -96,85 +136,60 @@ function FabricsTab({ stock, setStock }: { stock: string; setStock: (s: string) 
                   </span>
                   <span className="flex flex-col items-end gap-1"><StockLevelBadge level={f.level} /><span className="text-xs text-muted-foreground">{formatPKR(f.salePrice)}</span></span>
                 </Link>
-              </li>
-            ))}
-          </ul>
-          <div className="hidden sm:block">
-            <Table>
-              <THead><TR>
-                <TH>Code</TH><TH>Fabric</TH><TH className="hidden lg:table-cell">Category</TH><TH className="text-right">In stock</TH>
-                <TH className="hidden md:table-cell text-right">Reserved</TH><TH className="text-right">Free</TH><TH className="hidden lg:table-cell text-right">Sale price</TH>
-                <TH className="hidden xl:table-cell text-right">Stock value</TH><TH>Status</TH><TH className="w-12"><span className="sr-only">Open</span></TH>
-              </TR></THead>
-              <TBody>
-                {list.data!.data.map((f) => (
-                  <TR key={f.id} className="cursor-pointer" onClick={() => navigate(`/inventory/fabrics/${f.id}`)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/inventory/fabrics/${f.id}`)}>
-                    <TD className="whitespace-nowrap font-mono text-xs font-semibold">{f.code}</TD>
-                    <TD><span className="font-medium">{f.name}</span><span className="block text-xs text-muted-foreground">{[f.brand, f.color, f.design].filter(Boolean).join(' · ') || '-'}</span></TD>
-                    <TD className="hidden lg:table-cell">{f.category?.name ?? <span className="text-muted-foreground">-</span>}</TD>
-                    <TD className="whitespace-nowrap text-right tabular-nums">{formatQty(f.currentStock, f.unit)}</TD>
-                    <TD className="hidden whitespace-nowrap text-right tabular-nums md:table-cell">{Number(f.reservedStock) ? formatQty(f.reservedStock, f.unit) : '-'}</TD>
-                    <TD className={cn('whitespace-nowrap text-right font-semibold tabular-nums', f.level === 'OUT' && 'text-rose-700 dark:text-rose-400', f.level === 'LOW' && 'text-amber-700 dark:text-amber-300')}>{formatQty(f.availableStock, f.unit)}</TD>
-                    <TD className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">{formatPKR(f.salePrice)}</TD>
-                    <TD className="hidden whitespace-nowrap text-right tabular-nums xl:table-cell">{formatPKR(f.stockValue)}</TD>
-                    <TD><div className="flex flex-wrap gap-1"><StockLevelBadge level={f.level} />{!f.isActive && <Badge variant="secondary">Inactive</Badge>}</div></TD>
-                    <TD><Button variant="ghost" size="icon" aria-label={`Open ${f.code}`} asChild><Link to={`/inventory/fabrics/${f.id}`} onClick={(e) => e.stopPropagation()}><Eye /></Link></Button></TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          </div>
-        </>
-      )}
-      {list.data && <Pager meta={list.data.meta} page={page} setPage={setPage} noun="fabrics" />}
-      <FabricFormDialog open={addOpen} onOpenChange={setAddOpen} fabric={null} onSaved={(f) => navigate(`/inventory/fabrics/${f.id}`)} />
+          )}
+        />
+        <FabricFormDialog open={addOpen} onOpenChange={setAddOpen} fabric={editing} onSaved={(f) => { if (!editing) navigate(`/inventory/fabrics/${f.id}`); }} />
     </Card>
   );
 }
 
-export function MovementsTable({ rows, showFabric = true }: { rows: StockMovement[]; showFabric?: boolean }) {
+export function MovementsTable({ rows, showFabric = true, title = 'Stock ledger', pagination, fetchAll, loading, error, onRetry, toolbar, empty }: {
+  rows: StockMovement[] | undefined; showFabric?: boolean; title?: string; pagination?: ServerPagination; fetchAll?: () => Promise<StockMovement[]>;
+  loading?: boolean; error?: unknown; onRetry?: () => void; toolbar?: ReactNode; empty?: ReactNode;
+}) {
+  const columns: DataColumn<StockMovement>[] = [
+    { id: 'date', header: 'Date', value: (m) => m.movementDate, text: (m) => formatDateTime(m.movementDate), cell: (m) => <span className="whitespace-nowrap text-xs">{formatDateTime(m.movementDate)}</span> },
+    { id: 'no', header: 'No.', value: (m) => m.movementNo, cell: (m) => <span className="whitespace-nowrap font-mono text-xs">{m.movementNo}</span> },
+    ...(showFabric ? [{ id: 'fabric', header: 'Fabric', value: (m: StockMovement) => m.fabric.name, text: (m: StockMovement) => `${m.fabric.name} (${m.fabric.code})`,
+      cell: (m: StockMovement) => <><Link className="font-medium hover:underline" to={`/inventory/fabrics/${m.fabric.id}`} onClick={(e) => e.stopPropagation()}>{m.fabric.name}</Link><span className="block font-mono text-[11px] text-muted-foreground">{m.fabric.code}</span></> }] : []),
+    { id: 'type', header: 'Type', value: (m) => m.type, cell: (m) => <MovementBadge type={m.type} direction={m.direction} /> },
+    { id: 'details', header: 'Details', value: (m) => m.reason, className: 'hidden md:table-cell',
+      cell: (m) => <span className="block max-w-[260px] truncate text-sm" title={m.reason ?? ''}>
+        {m.referenceType === 'ORDER' && m.referenceId ? <Link className="hover:underline" to={`/orders/${m.referenceId}`}>{m.reason}</Link>
+          : (m.referenceType === 'PURCHASE') && m.referenceId ? <Link className="hover:underline" to={`/purchases/${m.referenceId}`}>{m.reason}</Link> : m.reason ?? '-'}</span> },
+    { id: 'qty', header: 'Quantity', type: 'number', value: (m) => (m.direction === 'OUT' ? -Number(m.quantity) : Number(m.quantity)),
+      text: (m) => `${m.direction === 'OUT' ? '-' : '+'}${formatQty(m.quantity, m.fabric.unit)}`, cell: (m) => <SignedQty direction={m.direction} quantity={m.quantity} unit={m.fabric.unit} /> },
+    { id: 'balance', header: 'Balance', type: 'number', value: (m) => m.balanceAfter, text: (m) => formatQty(m.balanceAfter, m.fabric.unit), cell: (m) => formatQty(m.balanceAfter, m.fabric.unit) },
+    { id: 'value', header: 'Value', type: 'money', value: (m) => m.totalCost, cell: (m) => formatPKR(m.totalCost), className: 'hidden lg:table-cell' },
+    { id: 'by', header: 'By', value: (m) => m.createdBy?.fullName ?? 'System', className: 'hidden text-xs xl:table-cell' },
+  ];
   return (
-    <>
-      <ul className="divide-y sm:hidden">
-        {rows.map((m) => (
-          <li key={m.id} className="flex items-start gap-3 px-3 py-3">
-            <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-center gap-1.5"><MovementBadge type={m.type} direction={m.direction} />{showFabric && <span className="truncate text-sm font-medium">{m.fabric.name}</span>}</span>
-              {m.reason && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{m.reason}</span>}
-              <span className="block text-[11px] text-muted-foreground">{m.movementNo} · {formatDateTime(m.movementDate)}</span>
-            </span>
-            <span className="text-right text-sm tabular-nums"><SignedQty direction={m.direction} quantity={m.quantity} unit={m.fabric.unit} />
-              <span className="block text-[11px] text-muted-foreground">Balance {formatQty(m.balanceAfter, m.fabric.unit)}</span></span>
-          </li>
-        ))}
-      </ul>
-      <div className="hidden sm:block">
-        <Table>
-          <THead><TR>
-            <TH>Date</TH><TH>No.</TH>{showFabric && <TH>Fabric</TH>}<TH>Type</TH><TH className="hidden md:table-cell">Details</TH>
-            <TH className="text-right">Quantity</TH><TH className="text-right">Balance</TH><TH className="hidden lg:table-cell text-right">Value</TH><TH className="hidden xl:table-cell">By</TH>
-          </TR></THead>
-          <TBody>
-            {rows.map((m) => (
-              <TR key={m.id}>
-                <TD className="whitespace-nowrap text-xs">{formatDateTime(m.movementDate)}</TD>
-                <TD className="whitespace-nowrap font-mono text-xs">{m.movementNo}</TD>
-                {showFabric && <TD><Link className="font-medium hover:underline" to={`/inventory/fabrics/${m.fabric.id}`}>{m.fabric.name}</Link><span className="block font-mono text-[11px] text-muted-foreground">{m.fabric.code}</span></TD>}
-                <TD><MovementBadge type={m.type} direction={m.direction} /></TD>
-                <TD className="hidden max-w-[260px] truncate text-sm md:table-cell" title={m.reason ?? ''}>
-                  {m.referenceType === 'ORDER' && m.referenceId ? <Link className="hover:underline" to={`/orders/${m.referenceId}`}>{m.reason}</Link>
-                    : (m.referenceType === 'PURCHASE') && m.referenceId ? <Link className="hover:underline" to={`/purchases/${m.referenceId}`}>{m.reason}</Link> : m.reason ?? '-'}
-                </TD>
-                <TD className="whitespace-nowrap text-right tabular-nums"><SignedQty direction={m.direction} quantity={m.quantity} unit={m.fabric.unit} /></TD>
-                <TD className="whitespace-nowrap text-right tabular-nums">{formatQty(m.balanceAfter, m.fabric.unit)}</TD>
-                <TD className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">{formatPKR(m.totalCost)}</TD>
-                <TD className="hidden text-xs xl:table-cell">{m.createdBy?.fullName ?? 'System'}</TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-      </div>
-    </>
+    <DataTable
+      title={title}
+      module="inventory"
+      noun="entry"
+      rows={rows}
+      columns={columns}
+      getRowId={(m) => m.id}
+      loading={loading}
+      error={error}
+      onRetry={onRetry}
+      pagination={pagination}
+      fetchAll={fetchAll}
+      toolbar={toolbar}
+      empty={empty}
+      mobileCard={(m) => (
+        <div className="flex items-start gap-3 px-1 py-3">
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-1.5"><MovementBadge type={m.type} direction={m.direction} />{showFabric && <span className="truncate text-sm font-medium">{m.fabric.name}</span>}</span>
+            {m.reason && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{m.reason}</span>}
+            <span className="block text-[11px] text-muted-foreground">{m.movementNo} · {formatDateTime(m.movementDate)}</span>
+          </span>
+          <span className="text-right text-sm tabular-nums"><SignedQty direction={m.direction} quantity={m.quantity} unit={m.fabric.unit} />
+            <span className="block text-[11px] text-muted-foreground">Balance {formatQty(m.balanceAfter, m.fabric.unit)}</span></span>
+        </div>
+      )}
+    />
   );
 }
 
@@ -184,32 +199,39 @@ function LedgerTab() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const q = useDebounced(search);
+  const listParams = { search: q, type, from, to };
   const list = useQuery({
-    queryKey: ['inventory', 'movements', { q, type, from, to, page }],
-    queryFn: () => api.get<Paginated<StockMovement>>('/inventory/movements', { search: q, type, from, to, page, pageSize: 50 }),
+    queryKey: ['inventory', 'movements', { q, type, from, to, page, pageSize }],
+    queryFn: () => api.get<Paginated<StockMovement>>('/inventory/movements', { ...listParams, page, pageSize }),
     placeholderData: keepPreviousData,
   });
   const reset = () => setPage(1);
   return (
     <Card>
-      <div className="grid grid-cols-2 items-center gap-2 border-b p-3 sm:flex sm:flex-wrap">
-        <div className="relative col-span-2 w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Fabric, number or reason" value={search} onChange={(e) => { setSearch(e.target.value); reset(); }} aria-label="Search stock ledger" />
-        </div>
-        <NativeSelect aria-label="Type" className="col-span-2 sm:w-48" value={type} onChange={(e) => { setType(e.target.value); reset(); }}>
-          <option value="">All types</option>{MOVEMENT_TYPES.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-        </NativeSelect>
-        <Input type="date" aria-label="From date" className="sm:w-40" value={from} onChange={(e) => { setFrom(e.target.value); reset(); }} />
-        <Input type="date" aria-label="To date" className="sm:w-40" value={to} onChange={(e) => { setTo(e.target.value); reset(); }} />
-      </div>
-      {list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => list.refetch()} /> : list.isLoading ? (
-        <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-      ) : !list.data!.data.length ? (
-        <EmptyState icon={<History />} title="No stock changes" description="Opening stock, purchases, orders and adjustments appear here." />
-      ) : <MovementsTable rows={list.data!.data} />}
-      {list.data && <Pager meta={list.data.meta} page={page} setPage={setPage} noun="entries" />}
+      <MovementsTable
+        rows={list.data?.data}
+        loading={list.isLoading}
+        error={list.error}
+        onRetry={() => list.refetch()}
+        pagination={{ page, pageSize, total: list.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+        fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<StockMovement>>('/inventory/movements', { ...listParams, page: pg, pageSize: size }))}
+        empty={<EmptyState icon={<History />} title="No stock changes" description="Opening stock, purchases, orders and adjustments appear here." />}
+        toolbar={
+          <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
+            <div className="relative col-span-2 w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-8" placeholder="Fabric, number or reason" value={search} onChange={(e) => { setSearch(e.target.value); reset(); }} aria-label="Search stock ledger" />
+            </div>
+            <NativeSelect aria-label="Type" className="col-span-2 sm:w-48" value={type} onChange={(e) => { setType(e.target.value); reset(); }}>
+              <option value="">All types</option>{MOVEMENT_TYPES.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </NativeSelect>
+            <Input type="date" aria-label="From date" className="sm:w-40" value={from} onChange={(e) => { setFrom(e.target.value); reset(); }} />
+            <Input type="date" aria-label="To date" className="sm:w-40" value={to} onChange={(e) => { setTo(e.target.value); reset(); }} />
+          </div>
+        }
+      />
     </Card>
   );
 }

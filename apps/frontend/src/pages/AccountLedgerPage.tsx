@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable } from '@/components/data-table/DataTable';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { DateRange, monthStartPK, todayPK } from '@/features/finance/shared';
 import { api, errorMessage } from '@/services/api';
@@ -15,6 +15,8 @@ import { formatDate, formatPKR } from '@/utils/format';
 import { JournalDialog } from './AccountingPage';
 
 /** Statement of one account: opening balance, every posted line and the running balance. */
+type LedgerRow = AccountLedger['entries'][number];
+
 export function AccountLedgerPage() {
   const { id = '' } = useParams();
   const [from, setFrom] = useState(monthStartPK());
@@ -38,25 +40,29 @@ export function AccountLedgerPage() {
               <StatCard compact featured label="Closing balance" value={formatPKR(d.closing)} icon={BookOpen} />
             </div>
             <Card>
-              {!d.entries.length ? <EmptyState icon={<BookOpen />} title="No entries in these dates" /> : (
-                <Table>
-                  <THead><TR><TH>Date</TH><TH>Entry</TH><TH className="text-right">Debit</TH><TH className="text-right">Credit</TH><TH className="text-right">Balance</TH></TR></THead>
-                  <TBody>
-                    <TR className="bg-muted/40"><TD colSpan={4} className="font-medium">Opening balance</TD><TD className="text-right font-semibold tabular-nums">{formatPKR(d.opening)}</TD></TR>
-                    {d.entries.map((e) => (
-                      <TR key={e.id} className="cursor-pointer" tabIndex={0} onClick={() => setOpen(e.entryId)} onKeyDown={(k) => k.key === 'Enter' && setOpen(e.entryId)}>
-                        <TD className="whitespace-nowrap">{formatDate(e.date)}</TD>
-                        <TD><span className="font-mono text-xs font-semibold">{e.entryNo}</span> <span className="text-xs text-muted-foreground">{e.source}</span>
-                          <span className="block line-clamp-2 text-sm">{e.description}</span></TD>
-                        <TD className="text-right tabular-nums">{Number(e.debit) ? formatPKR(e.debit) : ''}</TD>
-                        <TD className="text-right tabular-nums">{Number(e.credit) ? formatPKR(e.credit) : ''}</TD>
-                        <TD className={cn('text-right font-medium tabular-nums', Number(e.balance) < 0 && 'text-rose-700 dark:text-rose-400')}>{formatPKR(e.balance)}</TD>
-                      </TR>
-                    ))}
-                    <TR className="bg-muted/50 font-semibold"><TD colSpan={2}>Total</TD><TD className="text-right tabular-nums">{formatPKR(d.totals.debit)}</TD><TD className="text-right tabular-nums">{formatPKR(d.totals.credit)}</TD><TD className="text-right tabular-nums">{formatPKR(d.closing)}</TD></TR>
-                  </TBody>
-                </Table>
-              )}
+              <DataTable
+                title={`${a?.code ?? ''} ${a?.name ?? 'Account'} ledger`}
+                module="accounting"
+                noun="entry"
+                rows={[{ id: 'opening', entryId: '', date: from, entryNo: '', source: '', description: 'Opening balance', debit: '0', credit: '0', balance: d.opening } as LedgerRow, ...d.entries]}
+                getRowId={(e) => e.id}
+                onRowClick={(e) => e.entryId && setOpen(e.entryId)}
+                onView={(e) => setOpen(e.entryId)}
+                canRow={(_, e) => e.id !== 'opening'}
+                rowClassName={(e) => (e.id === 'opening' ? 'bg-muted/40 font-medium' : undefined)}
+                defaultPageSize={50}
+                columns={[
+                  { id: 'date', header: 'Date', value: (e) => e.date, text: (e) => formatDate(e.date), sortable: false, className: 'whitespace-nowrap' },
+                  { id: 'entry', header: 'Entry', value: (e) => e.entryNo, text: (e) => [e.entryNo, e.source, e.description].filter(Boolean).join(' - '), sortable: false,
+                    cell: (e) => <><span className="font-mono text-xs font-semibold">{e.entryNo}</span> <span className="text-xs text-muted-foreground">{e.source}</span><span className="block line-clamp-2 text-sm">{e.description}</span></> },
+                  { id: 'debit', header: 'Debit', type: 'money', value: (e) => e.debit, sortable: false, cell: (e) => (Number(e.debit) ? formatPKR(e.debit) : '') },
+                  { id: 'credit', header: 'Credit', type: 'money', value: (e) => e.credit, sortable: false, cell: (e) => (Number(e.credit) ? formatPKR(e.credit) : '') },
+                  { id: 'balance', header: 'Balance', type: 'money', value: (e) => e.balance, sortable: false,
+                    cell: (e) => <span className={cn('font-medium', Number(e.balance) < 0 && 'text-rose-700 dark:text-rose-400')}>{formatPKR(e.balance)}</span> },
+                ]}
+                footer={() => ({ entry: 'Total', debit: formatPKR(d.totals.debit), credit: formatPKR(d.totals.credit), balance: formatPKR(d.closing) })}
+                empty={<EmptyState icon={<BookOpen />} title="No entries in these dates" />}
+              />
             </Card>
           </>
         );
