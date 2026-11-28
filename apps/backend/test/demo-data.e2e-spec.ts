@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../src/common/prisma/prisma.service';
+import { Tenant } from '../src/common/tenant';
 import { PostingService } from '../src/modules/accounting/posting.service';
 import { DEMO_USER } from '../src/demo/demo-dataset';
 import { loadDemoData, readManifest } from '../src/demo/demo-loader';
@@ -27,6 +28,12 @@ describe('Demo data load / remove (e2e)', () => {
   });
 
   it('loads, is safe to run twice, and removes only demo records', async () => {
+    // Demo data belongs to one company (the CLI picks it with --company=<code>).
+    const company = await prisma.company.findFirstOrThrow({ orderBy: { createdAt: 'asc' } });
+    await Tenant.run(company.id, () => scenario());
+  }, 180_000);
+
+  async function scenario() {
     await app.get(PostingService).sync(); // books of the other suites' records first
     const before = await realCounts();
     const r = await loadDemoData(app);
@@ -74,5 +81,5 @@ describe('Demo data load / remove (e2e)', () => {
     const disabled = await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM pg_trigger WHERE NOT tgisinternal AND tgenabled = 'D'`;
     expect(Number(disabled[0].n)).toBe(0);
     expect((await removeDemoData(app.get(PrismaService))).status).toBe('nothing-to-remove');
-  }, 180_000);
+  }
 });

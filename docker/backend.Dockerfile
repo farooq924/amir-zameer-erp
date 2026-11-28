@@ -12,7 +12,7 @@ RUN pnpm --filter @az/shared build \
  && pnpm --filter @az/backend exec prisma generate \
  && pnpm --filter @az/backend build \
  && pnpm deploy --filter @az/backend --prod --legacy /out \
- && cp -r apps/backend/dist apps/backend/dist-seed apps/backend/prisma /out/ \
+ && cp -r apps/backend/dist apps/backend/prisma /out/ \
  && cd /out && npx prisma@6.19.3 generate --schema prisma/schema.prisma
 
 # ---- runtime ----

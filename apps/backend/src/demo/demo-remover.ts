@@ -1,4 +1,5 @@
 import { PrismaService, PrismaTx } from '../common/prisma/prisma.service';
+import { Tenant } from '../common/tenant';
 import { purgeJournalsFor } from '../modules/accounting/purge-journals';
 import { DEMO_SETTING_KEY, DEMO_USER } from './demo-dataset';
 import { readManifest } from './demo-loader';
@@ -152,7 +153,8 @@ export async function removeDemoData(prisma: PrismaService): Promise<RemoveResul
     await run('expenses', `DELETE FROM expenses WHERE id = ANY($1::uuid[])`, X);
     await run('', `UPDATE expenses SET "recurringExpenseId" = NULL WHERE "recurringExpenseId" = ANY($1::uuid[])`, R);
     await run('', `DELETE FROM recurring_expenses WHERE id = ANY($1::uuid[])`, R);
-    if (U) await run('', `DELETE FROM system_settings WHERE key = $1`, `reports.saved_filters.${U}`);
+    const CID = Tenant.require();
+    if (U) await run('', `DELETE FROM system_settings WHERE "companyId" = $2::uuid AND key = $1`, `reports.saved_filters.${U}`, CID);
 
     // History of the demo, then the demo login itself.
     const all = [...C, ...S, ...F, ...E, ...P, ...O, ...PUR, ...PAY, ...X, ...R, ...(m.journals ?? [])];
@@ -160,8 +162,8 @@ export async function removeDemoData(prisma: PrismaService): Promise<RemoveResul
     // Offline sync history of the demo login (Phase 9); its conflicts are deleted with it.
     if (U) await run('syncEntries', `DELETE FROM sync_operations WHERE "userId" = $1::uuid`, U);
     if (U) await run('users', `DELETE FROM users WHERE id = $1::uuid`, U);
-    await run('', `DELETE FROM login_attempts WHERE lower(identifier) IN ($1, $2)`, DEMO_USER.username, DEMO_USER.email);
-    await run('', `DELETE FROM system_settings WHERE key = $1`, DEMO_SETTING_KEY);
+    await run('', `DELETE FROM login_attempts WHERE "companyId" = $3::uuid AND lower(identifier) IN ($1, $2)`, m.username ?? DEMO_USER.username, m.email ?? DEMO_USER.email, CID);
+    await run('', `DELETE FROM system_settings WHERE "companyId" = $2::uuid AND key = $1`, DEMO_SETTING_KEY, CID);
 
     for (const [t, g] of GUARDS) await tx.$executeRawUnsafe(`ALTER TABLE ${t} ENABLE TRIGGER ${g}`);
   }, { timeout: 180_000 });

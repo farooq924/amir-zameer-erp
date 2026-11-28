@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Tenant } from '../../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { PAYMENT_METHODS } from '@az/shared';
 import { dec } from '../../../common/utils/money';
@@ -47,7 +48,7 @@ export async function partyLedger(input: ReportInput, party: 'customer' | 'suppl
              COALESCE(SUM(CASE WHEN l."entryDate" BETWEEN ${asDay(r.fromDate)}::date AND ${asDay(r.toDate)}::date THEN l.debit END), 0) AS d,
              COALESCE(SUM(CASE WHEN l."entryDate" BETWEEN ${asDay(r.fromDate)}::date AND ${asDay(r.toDate)}::date THEN l.credit END), 0) AS c
       FROM ${table} l JOIN ${party === 'customer' ? Prisma.sql`customers` : Prisma.sql`suppliers`} p ON p.id = l.${idCol}
-      WHERE l."entryDate" <= ${asDay(r.toDate)}::date
+      WHERE l."companyId" = ${Tenant.require()}::uuid AND l."entryDate" <= ${asDay(r.toDate)}::date
       GROUP BY p.id, p.code, p.name, phone`;
     const out = rows.map((x) => {
       const opening = sign(dec(x.od), dec(x.oc));
@@ -114,8 +115,8 @@ export const customerOutstanding: ReportBuilder = async (input) => {
       (SELECT MIN(o."orderDate") FROM orders o WHERE o."customerId" = c.id AND o."deletedAt" IS NULL AND o.lifecycle <> 'CANCELLED' AND o."balanceAmount" > 0) AS oldest,
       (SELECT MAX(p."paymentDate") FROM payments p WHERE p."customerId" = c.id AND p.status = 'POSTED' AND p.type <> 'REFUND') AS "lastPay"
     FROM customers c
-    JOIN (SELECT "customerId", SUM(debit) AS d, SUM(credit) AS c, SUM(debit - credit) AS bal FROM customer_ledger GROUP BY "customerId") b ON b."customerId" = c.id
-    WHERE b.bal > 0 AND c."deletedAt" IS NULL ${filter}`;
+    JOIN (SELECT "customerId", SUM(debit) AS d, SUM(credit) AS c, SUM(debit - credit) AS bal FROM customer_ledger WHERE "companyId" = ${Tenant.require()}::uuid GROUP BY "customerId") b ON b."customerId" = c.id
+    WHERE c."companyId" = ${Tenant.require()}::uuid AND b.bal > 0 AND c."deletedAt" IS NULL ${filter}`;
   const out = rows.map((x) => {
     const oldest = ymd(x.oldest);
     return {

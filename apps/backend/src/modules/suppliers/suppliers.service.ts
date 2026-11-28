@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { Prisma, Supplier } from '@prisma/client';
 import { normalizePhone } from '@az/shared';
 import { paginate } from '../../common/dto/pagination.dto';
@@ -61,7 +62,7 @@ export class SuppliersService {
     }
     if (q.payable === 'true') {
       const owing = await this.prisma.$queryRaw<{ id: string }[]>`
-        SELECT "supplierId" AS id FROM supplier_ledger GROUP BY "supplierId" HAVING SUM(credit) - SUM(debit) > 0`;
+        SELECT "supplierId" AS id FROM supplier_ledger WHERE "companyId" = ${Tenant.require()}::uuid GROUP BY "supplierId" HAVING SUM(credit) - SUM(debit) > 0`;
       where.id = { in: owing.map((o) => o.id) };
     }
     const [rows, total] = await this.prisma.$transaction([
@@ -83,7 +84,7 @@ export class SuppliersService {
   async totals() {
     const [agg] = await this.prisma.$queryRaw<{ payable: Prisma.Decimal | null; owing: bigint }[]>`
       SELECT COALESCE(SUM(b), 0) AS payable, COUNT(*) FILTER (WHERE b > 0)::bigint AS owing
-      FROM (SELECT SUM(credit) - SUM(debit) AS b FROM supplier_ledger GROUP BY "supplierId") t WHERE b > 0`;
+      FROM (SELECT SUM(credit) - SUM(debit) AS b FROM supplier_ledger WHERE "companyId" = ${Tenant.require()}::uuid GROUP BY "supplierId") t WHERE b > 0`;
     const active = await this.prisma.supplier.count({ where: { deletedAt: null, status: 'ACTIVE' } });
     return { activeSuppliers: active, totalPayable: moneyString(agg?.payable), suppliersOwed: Number(agg?.owing ?? 0) };
   }
@@ -190,7 +191,7 @@ export class SuppliersService {
    * (when given) or to the oldest unpaid purchases first. Call inside a transaction.
    */
   async postPayment(tx: PrismaTx, supplierId: string, input: SupplierPaymentInput, idempotencyKey: string, ctx: RequestContext) {
-    await tx.$queryRaw`SELECT id FROM suppliers WHERE id = ${supplierId}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM suppliers WHERE id = ${supplierId}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
     const s = await tx.supplier.findFirst({ where: { id: supplierId, deletedAt: null } });
     if (!s) throw new NotFoundException('Supplier not found');
     const amount = money(input.amount);

@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { byCompany } from '../../common/tenant';
 import { GarmentType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -51,7 +52,7 @@ export class GarmentsService {
     await this.checkTemplate(dto.measurementTemplateId);
     await this.assertUniqueName(dto.name);
     let code = codeFrom(dto.name);
-    for (let n = 2; await this.prisma.garmentType.findUnique({ where: { code } }); n++) code = `${codeFrom(dto.name).slice(0, 30)}_${n}`;
+    for (let n = 2; await this.prisma.garmentType.findUnique({ where: { companyId_code: byCompany({ code }) } }); n++) code = `${codeFrom(dto.name).slice(0, 30)}_${n}`;
     const g = await this.prisma.$transaction(async (tx) => {
       const created = await tx.garmentType.create({
         data: {

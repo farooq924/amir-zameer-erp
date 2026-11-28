@@ -13,7 +13,7 @@ async function bootstrap(): Promise<void> {
   const config = env();
   const app = await createApp();
   await app.listen(config.PORT, '0.0.0.0');
-  Logger.log(`AMIR ZAMEER ERP API listening on port ${config.PORT}`, 'Bootstrap');
+  Logger.log(`TailoringERP API listening on port ${config.PORT}`, 'Bootstrap');
 }
 
 bootstrap().catch((err) => {

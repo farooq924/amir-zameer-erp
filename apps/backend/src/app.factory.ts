@@ -9,6 +9,7 @@ import { join, resolve } from 'path';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { Tenant } from './common/tenant';
 import { env } from './config/env';
 
 /** Shared by main.ts and e2e tests so tests exercise the real middleware stack. */
@@ -28,6 +29,8 @@ export async function createApp(): Promise<INestApplication> {
     next();
   });
   app.use(cookieParser());
+  // Every request gets its own company (tenant) context; the session guard fills it in.
+  app.use((_req: Request, _res: Response, next: NextFunction) => Tenant.runRequest(next));
   app.useBodyParser('json', { limit: '1mb' });
   app.enableCors({ origin: config.APP_URL, credentials: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -38,8 +41,8 @@ export async function createApp(): Promise<INestApplication> {
   const swaggerOn = config.SWAGGER_ENABLED ?? config.NODE_ENV !== 'production';
   if (swaggerOn) {
     const doc = new DocumentBuilder()
-      .setTitle('AMIR ZAMEER ERP API')
-      .setDescription('REST API for the AMIR ZAMEER Tailoring & Fabric Management ERP')
+      .setTitle('TailoringERP API')
+      .setDescription('REST API for TailoringERP By Brandistan (multi-company tailoring ERP)')
       .setVersion('0.1.0')
       .addCookieAuth('az_sid')
       .addApiKey({ type: 'apiKey', in: 'header', name: 'X-CSRF-Token' }, 'csrf')

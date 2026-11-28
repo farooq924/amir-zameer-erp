@@ -67,3 +67,24 @@ export function permissionCode(module: string, action: PermissionAction): string
 export function allPermissionCodes(): string[] {
   return MODULES.flatMap((m) => m.actions.map((a) => permissionCode(m.key, a)));
 }
+
+// -----------------------------------------------------------------------------
+// TailoringERP SaaS plans
+// -----------------------------------------------------------------------------
+
+/** Modules every company gets on every plan. */
+export const CORE_MODULES: readonly string[] = [
+  'dashboard', 'customers', 'measurements', 'orders', 'garments', 'payments', 'reports',
+  'security', 'audit_logs', 'settings', 'users', 'sync',
+];
+
+/** Modules a plan can switch on or off (shown as checkboxes in Super Admin > Plans). */
+export const PLAN_MODULES: readonly string[] = [
+  'inventory', 'purchases', 'suppliers', 'expenses', 'whatsapp', 'employees', 'attendance', 'production', 'payroll', 'accounting',
+];
+
+/** Modules that belong to the platform (Super Admin only), never to a company. */
+export const PLATFORM_ONLY_MODULES: readonly string[] = ['backup'];
+
+export const PRODUCT_NAME = 'TailoringERP';
+export const PRODUCT_BY = 'By Brandistan';

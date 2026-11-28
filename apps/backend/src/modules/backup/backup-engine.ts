@@ -15,7 +15,7 @@ export type TableCounts = Record<string, number>;
 
 /** Saved next to every backup as "<file>.json" so a backups folder describes itself (also on a new PC). */
 export interface BackupManifest {
-  app: 'AMIR ZAMEER ERP';
+  app: string; // 'TailoringERP' ('AMIR ZAMEER ERP' in backups made before v2.0)
   format: 1;
   id: string;
   fileName: string;
@@ -185,7 +185,7 @@ export class BackupEngine {
       const sizeBytes = statSync(target).size;
       const checksumSha256 = await sha256File(target);
       const manifest: BackupManifest = {
-        app: 'AMIR ZAMEER ERP', format: 1, id: record.id, fileName, type: opts.type, note: opts.note?.slice(0, 200) ?? null,
+        app: 'TailoringERP', format: 1, id: record.id, fileName, type: opts.type, note: opts.note?.slice(0, 200) ?? null,
         createdAt: record.startedAt.toISOString(), appVersion: appVersion(), database: this.conn.database, migration,
         keyFingerprint: key.fingerprint, sizeBytes, checksumSha256, counts, verifiedAt: null, restoreTest: null,
       };

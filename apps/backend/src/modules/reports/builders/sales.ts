@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { Tenant } from '../../../common/tenant';
 import { ORDER_TYPES } from '@az/shared';
 import { dec } from '../../../common/utils/money';
 import {
@@ -23,13 +24,13 @@ async function salesBy(input: ReportInput, unit: 'day' | 'month'): Promise<Built
            COALESCE(SUM((SELECT SUM(i.quantity) FROM order_items i WHERE i."orderId" = o.id)), 0) AS pcs,
            SUM(o."stitchingTotal") AS st, SUM(o."fabricTotal") AS fb, SUM(o."additionalCharges") AS ad, SUM(o.discount) AS disc, SUM(o."totalAmount") AS total
     FROM orders o
-    WHERE o."deletedAt" IS NULL AND o.lifecycle <> 'CANCELLED' AND o."orderDate" BETWEEN ${asDay(r.fromDate)}::date AND ${asDay(r.toDate)}::date
+    WHERE o."companyId" = ${Tenant.require()}::uuid AND o."deletedAt" IS NULL AND o.lifecycle <> 'CANCELLED' AND o."orderDate" BETWEEN ${asDay(r.fromDate)}::date AND ${asDay(r.toDate)}::date
     GROUP BY 1`;
   const cash = await input.prisma.$queryRaw<{ k: string; recv: Prisma.Decimal; refund: Prisma.Decimal }[]>`
     SELECT to_char(("paymentDate" + interval '5 hours')::date, ${fmt}) AS k,
            COALESCE(SUM(CASE WHEN type <> 'REFUND' THEN amount ELSE 0 END), 0) AS recv,
            COALESCE(SUM(CASE WHEN type = 'REFUND' THEN amount ELSE 0 END), 0) AS refund
-    FROM payments WHERE status = 'POSTED' AND "paymentDate" >= ${r.start} AND "paymentDate" < ${r.endExclusive}
+    FROM payments WHERE "companyId" = ${Tenant.require()}::uuid AND status = 'POSTED' AND "paymentDate" >= ${r.start} AND "paymentDate" < ${r.endExclusive}
     GROUP BY 1`;
   const byO = new Map(orders.map((o) => [o.k, o]));
   const byC = new Map(cash.map((c) => [c.k, c]));
@@ -79,7 +80,7 @@ export const monthlySales: ReportBuilder = (input) => salesBy(input, 'month');
 export const stitchingRevenue: ReportBuilder = async (input) => {
   const r = input.range!;
   const conds: Prisma.Sql[] = [
-    Prisma.sql`o."deletedAt" IS NULL`, Prisma.sql`o.lifecycle <> 'CANCELLED'`,
+    Prisma.sql`o."companyId" = ${Tenant.require()}::uuid`, Prisma.sql`o."deletedAt" IS NULL`, Prisma.sql`o.lifecycle <> 'CANCELLED'`,
     Prisma.sql`o."orderDate" BETWEEN ${asDay(r.fromDate)}::date AND ${asDay(r.toDate)}::date`,
   ];
   if (input.f.garment) conds.push(Prisma.sql`i."garmentTypeId" = ${input.f.garment}::uuid`);
@@ -109,7 +110,7 @@ export const stitchingRevenue: ReportBuilder = async (input) => {
 export const fabricSales: ReportBuilder = async (input) => {
   const r = input.range!;
   const conds: Prisma.Sql[] = [
-    Prisma.sql`o."deletedAt" IS NULL`, Prisma.sql`o.lifecycle <> 'CANCELLED'`, Prisma.sql`i."fabricSource" = 'SHOP'`, Prisma.sql`i."fabricId" IS NOT NULL`,
+    Prisma.sql`o."companyId" = ${Tenant.require()}::uuid`, Prisma.sql`o."deletedAt" IS NULL`, Prisma.sql`o.lifecycle <> 'CANCELLED'`, Prisma.sql`i."fabricSource" = 'SHOP'`, Prisma.sql`i."fabricId" IS NOT NULL`,
     Prisma.sql`o."orderDate" BETWEEN ${asDay(r.fromDate)}::date AND ${asDay(r.toDate)}::date`,
   ];
   if (input.f.fabricCategory) conds.push(Prisma.sql`f."categoryId" = ${input.f.fabricCategory}::uuid`);

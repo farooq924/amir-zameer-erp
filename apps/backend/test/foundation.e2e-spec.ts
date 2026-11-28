@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { Tenant } from '../src/common/tenant';
 import { PrismaClient } from '@prisma/client';
 import { SequenceService } from '../src/common/services/sequence.service';
 import { Agent, bootApp, login } from './helpers';
@@ -58,7 +59,7 @@ describe('Settings, audit log, dashboard & database rules (e2e)', () => {
   });
 
   it('dashboard reflects real order and expense records', async () => {
-    const stage = await prisma.workflowStage.findUniqueOrThrow({ where: { code: 'NEW' } });
+    const stage = await prisma.workflowStage.findFirstOrThrow({ where: { code: 'NEW' } });
     const customer = await prisma.customer.create({ data: { code: 'AZC-T0001', name: 'Dashboard Test', mobile: '923001112233' } });
     const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
     // order dated "today" in Karachi
@@ -85,7 +86,8 @@ describe('Settings, audit log, dashboard & database rules (e2e)', () => {
 
   it('sequence numbers are unique under concurrency', async () => {
     const seq = app.get(SequenceService);
-    const numbers = await Promise.all(Array.from({ length: 25 }, () => seq.next({ key: 'TEST', prefix: 'AZ', period: '2026' })));
+    const company = await prisma.company.findFirstOrThrow({ orderBy: { createdAt: 'asc' } });
+    const numbers = await Tenant.run(company.id, () => Promise.all(Array.from({ length: 25 }, () => seq.next({ key: 'TEST', prefix: 'AZ', period: '2026' }))));
     expect(new Set(numbers).size).toBe(25);
     expect(numbers.sort()[0]).toBe('AZ-2026-00001');
     expect(numbers.sort()[24]).toBe('AZ-2026-00025');

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Tenant, byCompany, forEachCompany } from '../../common/tenant';
 import { JournalSource, PaymentMethod, Prisma } from '@prisma/client';
 import { ACC, ACCOUNT_TYPES, DEFAULT_ACCOUNTS, DEFAULT_EXPENSE_CATEGORIES } from '@az/shared';
 import { PrismaService, PrismaTx } from '../../common/prisma/prisma.service';
@@ -80,24 +81,37 @@ const BATCH = 300;
 @Injectable()
 export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(PostingService.name);
-  private accounts = new Map<string, string>(); // code -> id
+  /** companyId -> (account code -> id) */
+  private accountCache = new Map<string, Map<string, string>>();
   private chain: Promise<unknown> = Promise.resolve();
   private timer: NodeJS.Timeout | null = null;
-  private skipped = new Set<string>();
-  last: SyncResult | null = null;
+  private skipped = new Set<string>(); // keys hold record ids, so they never clash between companies
+  private lastByCompany = new Map<string, SyncResult>();
+
+  /** Last sync result of the current company. */
+  get last(): SyncResult | null {
+    return this.lastByCompany.get(Tenant.require()) ?? null;
+  }
+
+  private get accounts(): Map<string, string> {
+    const id = Tenant.require();
+    let m = this.accountCache.get(id);
+    if (!m) this.accountCache.set(id, (m = new Map()));
+    return m;
+  }
 
   constructor(private readonly prisma: PrismaService, private readonly sequences: SequenceService) {}
 
   async onApplicationBootstrap() {
-    try {
-      await this.ensureDefaults();
-    } catch (e) {
-      this.logger.error(`Could not create the default chart of accounts: ${(e as Error).message}`);
-    }
+    await forEachCompany(this.prisma, () => this.ensureDefaults(), {
+      includeSuspended: true,
+      onError: (id, e) => this.logger.error(`Could not create the default chart of accounts for company ${id}: ${e.message}`),
+    });
     if (process.env.NODE_ENV === 'test') return;
-    // Post existing documents shortly after start, then keep the books current every minute.
-    setTimeout(() => void this.sync().catch(() => undefined), 3_000).unref();
-    this.timer = setInterval(() => void this.sync().catch(() => undefined), 60_000);
+    // Post existing documents shortly after start, then keep the books current every minute (every company).
+    const syncAll = () => forEachCompany(this.prisma, () => this.sync()).catch(() => undefined);
+    setTimeout(() => void syncAll(), 3_000).unref();
+    this.timer = setInterval(() => void syncAll(), 60_000);
     this.timer.unref();
   }
 
@@ -134,13 +148,13 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
 
   private async loadAccounts() {
     const rows = await this.prisma.chartOfAccount.findMany({ select: { id: true, code: true } });
-    this.accounts = new Map(rows.map((r) => [r.code, r.id]));
+    this.accountCache.set(Tenant.require(), new Map(rows.map((r) => [r.code, r.id])));
   }
 
   private async accountId(code: string, tx: PrismaTx): Promise<string> {
     let id = this.accounts.get(code);
     if (!id) {
-      const row = await tx.chartOfAccount.findUnique({ where: { code } });
+      const row = await tx.chartOfAccount.findUnique({ where: { companyId_code: byCompany({ code }) } });
       if (!row) throw new Error(`Account ${code} is missing from the chart of accounts`);
       id = row.id;
       this.accounts.set(code, id);
@@ -151,7 +165,7 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
   async isClosed(tx: PrismaTx | PrismaService, date: string): Promise<boolean> {
     const rows = await tx.$queryRaw<{ n: number }[]>`
       SELECT COUNT(*)::int AS n FROM accounting_periods
-      WHERE ${asDate(date)}::date BETWEEN "startDate" AND "endDate" AND status <> 'OPEN'`;
+      WHERE "companyId" = ${Tenant.require()}::uuid AND ${asDate(date)}::date BETWEEN "startDate" AND "endDate" AND status <> 'OPEN'`;
     return rows[0].n > 0;
   }
 
@@ -197,7 +211,7 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Posts the mirror image of a posted entry and marks the original as reversed. */
   async reverse(tx: PrismaTx, entryId: string, opts: { date?: string; description?: string; sourceKey?: string; createdById?: string | null }) {
-    await tx.$queryRaw`SELECT id FROM journal_entries WHERE id = ${entryId}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM journal_entries WHERE id = ${entryId}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
     const e = await tx.journalEntry.findUniqueOrThrow({ where: { id: entryId }, include: { lines: { include: { account: { select: { code: true } } } } } });
     if (e.status !== 'POSTED') throw new Error(`Entry ${e.entryNo} is not posted`);
     const rev = await this.post(tx, {
@@ -243,6 +257,7 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   private async runSync(): Promise<SyncResult> {
+    const cid = Tenant.require();
     if (!this.accounts.size) await this.ensureDefaults();
     const result: SyncResult = { at: new Date().toISOString(), posted: 0, reversed: 0, failed: [] };
     const each = async (key: string, fn: (tx: PrismaTx) => Promise<unknown>) => {
@@ -261,7 +276,7 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
     for (;;) {
       const rows = await this.prisma.$queryRaw<{ id: string }[]>`
         SELECT cl.id FROM customer_ledger cl
-        WHERE NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'CL:' || cl.id::text)
+        WHERE cl."companyId" = ${cid}::uuid AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'CL:' || cl.id::text)
           AND NOT (('CL:' || cl.id::text) = ANY(${failedKeys()}::text[]))
         ORDER BY cl."createdAt" LIMIT ${BATCH}`;
       if (!rows.length) break;
@@ -271,7 +286,7 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
     for (;;) {
       const rows = await this.prisma.$queryRaw<{ id: string }[]>`
         SELECT sl.id FROM supplier_ledger sl
-        WHERE NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'SL:' || sl.id::text)
+        WHERE sl."companyId" = ${cid}::uuid AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'SL:' || sl.id::text)
           AND NOT (('SL:' || sl.id::text) = ANY(${failedKeys()}::text[]))
         ORDER BY sl."createdAt" LIMIT ${BATCH}`;
       if (!rows.length) break;
@@ -281,7 +296,7 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
     for (;;) {
       const rows = await this.prisma.$queryRaw<{ id: string }[]>`
         SELECT m.id FROM inventory_movements m
-        WHERE m.type IN ('OPENING','ADJUSTMENT_IN','ADJUSTMENT_OUT','ORDER_CONSUMPTION','ORDER_REVERSAL','SALE','SALE_RETURN')
+        WHERE m."companyId" = ${cid}::uuid AND m.type IN ('OPENING','ADJUSTMENT_IN','ADJUSTMENT_OUT','ORDER_CONSUMPTION','ORDER_REVERSAL','SALE','SALE_RETURN')
           AND m."totalCost" > 0
           AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'INV:' || m.id::text)
           AND NOT (('INV:' || m.id::text) = ANY(${failedKeys()}::text[]))
@@ -308,7 +323,7 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
     for (;;) {
       const rows = await this.prisma.$queryRaw<{ id: string }[]>`
         SELECT s.id FROM salary_payments s
-        WHERE s.status = 'POSTED' AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'SALPAY:' || s.id::text)
+        WHERE s."companyId" = ${cid}::uuid AND s.status = 'POSTED' AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'SALPAY:' || s.id::text)
           AND NOT (('SALPAY:' || s.id::text) = ANY(${failedKeys()}::text[]))
         ORDER BY s."createdAt" LIMIT ${BATCH}`;
       if (!rows.length) break;
@@ -318,7 +333,7 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
     for (;;) {
       const rows = await this.prisma.$queryRaw<{ id: string }[]>`
         SELECT a.id FROM employee_advances a
-        WHERE NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'ADV:' || a.id::text)
+        WHERE a."companyId" = ${cid}::uuid AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'ADV:' || a.id::text)
           AND NOT (('ADV:' || a.id::text) = ANY(${failedKeys()}::text[]))
         ORDER BY a."createdAt" LIMIT ${BATCH}`;
       if (!rows.length) break;
@@ -326,13 +341,13 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
     }
     const writtenOff = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT a.id FROM employee_advances a
-      WHERE a.status = 'WRITTEN_OFF' AND a."balanceAmount" > 0
+      WHERE a."companyId" = ${cid}::uuid AND a.status = 'WRITTEN_OFF' AND a."balanceAmount" > 0
         AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'ADVWO:' || a.id::text)`;
     for (const r of writtenOff) await each(`ADVWO:${r.id}`, (tx) => this.postAdvanceWriteOff(tx, r.id));
     // 7. Expenses (normally posted at approval; this catches anything missed)
     const expenses = await this.prisma.$queryRaw<{ id: string; status: string }[]>`
       SELECT x.id, x.status::text AS status FROM expenses x
-      WHERE (x.status = 'APPROVED' OR (x.status = 'CANCELLED' AND x."approvedAt" IS NOT NULL))
+      WHERE x."companyId" = ${cid}::uuid AND (x.status = 'APPROVED' OR (x.status = 'CANCELLED' AND x."approvedAt" IS NOT NULL))
         AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j."sourceKey" = 'EXP:' || x.id::text)`;
     for (const x of expenses) {
       await each(`EXP:${x.id}`, async (tx) => {
@@ -343,11 +358,11 @@ export class PostingService implements OnApplicationBootstrap, OnModuleDestroy {
     }
     const cancelled = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT x.id FROM expenses x JOIN journal_entries j ON j."sourceKey" = 'EXP:' || x.id::text AND j.status = 'POSTED'
-      WHERE x.status = 'CANCELLED'`;
+      WHERE x."companyId" = ${cid}::uuid AND x.status = 'CANCELLED'`;
     for (const x of cancelled) await each(`EXPX:${x.id}`, (tx) => this.reverseExpense(tx, x.id, null));
 
     if (result.failed.length) this.logger.warn(`Posting: ${result.failed.length} document(s) could not be posted, e.g. ${result.failed[0].key}: ${result.failed[0].reason}`);
-    this.last = result;
+    this.lastByCompany.set(cid, result);
     return result;
   }
 

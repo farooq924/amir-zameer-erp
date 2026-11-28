@@ -1,8 +1,10 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { byCompany } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { env } from '../../config/env';
 import { paginate } from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { Tenant } from '../../common/tenant';
 import { AuditService } from '../../common/services/audit.service';
 import { AuthUser, RequestContext } from '../../common/types/auth-user';
 import { SessionService } from '../auth/session.service';
@@ -46,7 +48,7 @@ export class SecurityService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (process.env.NODE_ENV === 'test') return;
-    this.timer = setInterval(() => void this.housekeeping().catch((e: Error) => this.logger.warn(e.message)), HOUSEKEEPING_MS);
+    this.timer = setInterval(() => void Tenant.system(() => this.housekeeping()).catch((e: Error) => this.logger.warn(e.message)), HOUSEKEEPING_MS);
     this.timer.unref();
   }
 
@@ -78,7 +80,7 @@ export class SecurityService implements OnModuleInit, OnModuleDestroy {
         where: { deletedAt: null, isActive: true, roles: { some: { role: { code: 'OWNER' } } } },
         select: { id: true, username: true, passwordChangedAt: true, createdAt: true },
       }),
-      this.prisma.systemSetting.findUnique({ where: { key: 'demo.data' } }),
+      this.prisma.systemSetting.findUnique({ where: { companyId_key: byCompany({ key: 'demo.data' }) } }),
       this.backups.overview().catch(() => null),
       this.prisma.session.count({ where: { ...this.activeSessionWhere(), user: { isActive: false } } }),
     ]);

@@ -16,7 +16,7 @@ export const SETTING_GROUPS = {
       logoUrl: z.string().trim().max(500).optional().default(''),
     }),
     defaults: {
-      businessName: 'AMIR ZAMEER', tagline: "Men's Tailoring & Fabrics", phone: '', whatsapp: '', email: '',
+      businessName: 'My Tailoring Shop', tagline: "Men's Tailoring & Fabrics", phone: '', whatsapp: '', email: '',
       address: '', city: '', ntn: '', logoUrl: '',
     },
   },
@@ -73,7 +73,7 @@ export const SETTING_GROUPS = {
       receiptCopies: z.number().int().min(1).max(3),
     }),
     defaults: {
-      invoiceFooter: 'Thank you for choosing AMIR ZAMEER.', receiptWidth: '80mm', showLogoOnReceipt: true,
+      invoiceFooter: 'Thank you for your business.', receiptWidth: '80mm', showLogoOnReceipt: true,
       defaultOrderPrint: 'RECEIPT', invoiceTitle: 'INVOICE',
       invoiceTerms: 'Please bring this invoice when collecting your order.\nOrders not collected within 30 days of the delivery date may be disposed of.\nAdvance payments are not refundable once cutting has started.',
       showNtnOnInvoice: true, showSignatureLine: true, autoPrint: false, receiptCopies: 1,

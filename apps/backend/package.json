@@ -3,7 +3,7 @@
   "version": "1.11.0",
   "private": true,
   "scripts": {
-    "build": "nest build && tsc -p tsconfig.seed.json",
+    "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -14,7 +14,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
-    "db:seed:prod": "node dist-seed/seed.js",
+    "db:seed:prod": "node dist/modules/platform/seed-cli.js",
     "demo:load": "node dist/demo/cli.js load",
     "demo:remove": "node dist/demo/cli.js remove",
     "demo:status": "node dist/demo/cli.js status",

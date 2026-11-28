@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant, byCompany } from '../../common/tenant';
 import { AccountType, Prisma } from '@prisma/client';
 import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, JOURNAL_SOURCES, monthLabel } from '@az/shared';
 import { paginate } from '../../common/dto/pagination.dto';
@@ -35,7 +36,7 @@ export class AccountingService {
 
   /** Sums of posted lines per account between two dates (inclusive, either end optional). */
   private async sums(from?: string, to?: string): Promise<Map<string, Row>> {
-    const conds: Prisma.Sql[] = [Prisma.sql`j.status <> 'DRAFT'`];
+    const conds: Prisma.Sql[] = [Prisma.sql`j."companyId" = ${Tenant.require()}::uuid`, Prisma.sql`j.status <> 'DRAFT'`];
     if (from) conds.push(Prisma.sql`j."entryDate" >= ${asDate(from)}::date`);
     if (to) conds.push(Prisma.sql`j."entryDate" <= ${asDate(to)}::date`);
     const rows = await this.prisma.$queryRaw<Row[]>`
@@ -99,7 +100,7 @@ export class AccountingService {
   }
 
   async createAccount(dto: AccountDto, ctx: RequestContext) {
-    if (await this.prisma.chartOfAccount.findUnique({ where: { code: dto.code } })) throw new ConflictException(`Account code ${dto.code} is already used`);
+    if (await this.prisma.chartOfAccount.findUnique({ where: { companyId_code: byCompany({ code: dto.code }) } })) throw new ConflictException(`Account code ${dto.code} is already used`);
     const sub = ACCOUNT_SUBTYPES.find((s) => s.key === dto.subType);
     if (!sub) throw new BadRequestException('Choose a valid group');
     const type = sub.type;
@@ -342,7 +343,7 @@ export class AccountingService {
       FROM journal_entry_lines l
       JOIN journal_entries j ON j.id = l."journalEntryId"
       LEFT JOIN journal_entries o ON o.id = j."reversalOfId"
-      WHERE j.status <> 'DRAFT' AND l."accountId" = ANY(${ids}::uuid[])
+      WHERE j."companyId" = ${Tenant.require()}::uuid AND j.status <> 'DRAFT' AND l."accountId" = ANY(${ids}::uuid[])
         AND j."entryDate" >= ${asDate(from)}::date AND j."entryDate" <= ${asDate(to)}::date
       GROUP BY 1, 2`;
     const LABEL: Record<string, string> = {
@@ -390,7 +391,7 @@ export class AccountingService {
     }
     const counts = await this.prisma.$queryRaw<{ month: string; n: number; amount: Prisma.Decimal }[]>`
       SELECT to_char("entryDate", 'YYYY-MM') AS month, COUNT(*)::int AS n, COALESCE(SUM("totalDebit"),0) AS amount
-      FROM journal_entries WHERE status <> 'DRAFT' GROUP BY 1`;
+      FROM journal_entries WHERE "companyId" = ${Tenant.require()}::uuid AND status <> 'DRAFT' GROUP BY 1`;
     const cmap = new Map(counts.map((c) => [c.month, c]));
     const users = await this.prisma.user.findMany({ where: { id: { in: stored.map((p) => p.closedById).filter((x): x is string => !!x) } }, select: { id: true, fullName: true } });
     const uname = new Map(users.map((u) => [u.id, u.fullName]));
@@ -413,7 +414,7 @@ export class AccountingService {
       const blocking = r.failed.length;
       if (blocking) throw new BadRequestException(`${blocking} document(s) could not be posted yet. Open Accounting > Overview to see why, fix them, then close the month.`);
     }
-    const p = await this.prisma.accountingPeriod.findUnique({ where: { startDate_endDate: { startDate: asDate(start), endDate: asDate(end) } } });
+    const p = await this.prisma.accountingPeriod.findUnique({ where: { companyId_startDate_endDate: byCompany({ startDate: asDate(start), endDate: asDate(end) }) } });
     if (p?.status === 'LOCKED') throw new BadRequestException(`${monthLabel(month)} is locked for ever and cannot be changed`);
     if (action === 'reopen' && (!p || p.status === 'OPEN')) throw new BadRequestException(`${monthLabel(month)} is already open`);
     if (action === 'close' && p?.status === 'CLOSED') throw new BadRequestException(`${monthLabel(month)} is already closed`);

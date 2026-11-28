@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { Fabric, Prisma } from '@prisma/client';
 import { paginate } from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -83,10 +84,10 @@ export class FabricsService {
 
   private async idsByLevel(level: 'low' | 'out' | 'in'): Promise<string[]> {
     const rows = level === 'out'
-      ? await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM fabrics WHERE "deletedAt" IS NULL AND "currentStock" - "reservedStock" <= 0`
+      ? await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM fabrics WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND "currentStock" - "reservedStock" <= 0`
       : level === 'low'
-        ? await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM fabrics WHERE "deletedAt" IS NULL AND "minimumStock" > 0 AND "currentStock" - "reservedStock" <= "minimumStock"`
-        : await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM fabrics WHERE "deletedAt" IS NULL AND "currentStock" - "reservedStock" > 0`;
+        ? await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM fabrics WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND "minimumStock" > 0 AND "currentStock" - "reservedStock" <= "minimumStock"`
+        : await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM fabrics WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND "currentStock" - "reservedStock" > 0`;
     return rows.map((r) => r.id);
   }
 
@@ -98,9 +99,9 @@ export class FabricsService {
              COUNT(*) FILTER (WHERE "minimumStock" > 0 AND "currentStock" - "reservedStock" <= "minimumStock" AND "currentStock" - "reservedStock" > 0)::bigint AS low,
              COUNT(*) FILTER (WHERE "currentStock" - "reservedStock" <= 0)::bigint AS out,
              COALESCE(SUM("reservedStock"), 0) AS reserved
-      FROM fabrics WHERE "deletedAt" IS NULL AND "isActive"`;
+      FROM fabrics WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND "isActive"`;
     const lowList = await this.prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM fabrics WHERE "deletedAt" IS NULL AND "isActive" AND "minimumStock" > 0 AND "currentStock" - "reservedStock" <= "minimumStock"
+      SELECT id FROM fabrics WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND "isActive" AND "minimumStock" > 0 AND "currentStock" - "reservedStock" <= "minimumStock"
       ORDER BY ("currentStock" - "reservedStock") ASC LIMIT 8`;
     const low = lowList.length ? await this.prisma.fabric.findMany({ where: { id: { in: lowList.map((r) => r.id) } }, include }) : [];
     const order = new Map(lowList.map((r, i) => [r.id, i]));

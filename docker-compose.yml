@@ -1,7 +1,7 @@
 # AMIR ZAMEER ERP - production-style stack.
 #   cp .env.example .env   (fill in real values)
 #   docker compose up -d --build
-#   docker compose exec backend node dist-seed/seed.js   (first time: creates roles + Owner; safe to re-run)
+#   docker compose exec backend node dist/modules/platform/seed-cli.js   (first time: creates roles + Owner; safe to re-run)
 services:
   db:
     image: postgres:18-alpine

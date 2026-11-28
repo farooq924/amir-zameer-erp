@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { paginate } from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -174,7 +175,7 @@ export class PurchasesService {
       }
     }
     await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM purchases WHERE id = ${purchaseId}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM purchases WHERE id = ${purchaseId}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
       const p = await tx.purchase.findUnique({ where: { id: purchaseId }, include: { items: { include: { fabric: true } }, returns: { include: { items: true } }, supplier: true } });
       if (!p) throw new NotFoundException('Purchase not found');
       if (p.status !== 'POSTED') throw new BadRequestException('This purchase is cancelled');

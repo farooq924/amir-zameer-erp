@@ -48,7 +48,7 @@ E2E_PASSWORD=<owner password> pnpm --filter @az/frontend test:e2e   # with both 
 ```bash
 cp .env.example .env    # fill in real secrets
 docker compose up -d --build
-docker compose exec backend node dist-seed/seed.js
+docker compose exec backend node dist/modules/platform/seed-cli.js
 ```
 The app is served on `127.0.0.1:8080`; the host Nginx terminates HTTPS (see `docs/DEPLOYMENT.md`).
 

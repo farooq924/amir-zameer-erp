@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { DecimalLike, dec, moneyString } from '../../common/utils/money';
@@ -59,10 +60,10 @@ export class DashboardService {
         this.profitBetween(range.fromDate, range.toDate),
         this.prisma.$queryRaw<{ value: DecimalLike }[]>`
           SELECT COALESCE(SUM("currentStock" * "averageCost"), 0) AS value
-          FROM fabrics WHERE "deletedAt" IS NULL AND "isActive"`,
+          FROM fabrics WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND "isActive"`,
         this.prisma.$queryRaw<{ count: bigint }[]>`
           SELECT COUNT(*)::bigint AS count FROM fabrics
-          WHERE "deletedAt" IS NULL AND "isActive" AND "currentStock" <= "minimumStock" AND "minimumStock" > 0`,
+          WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND "isActive" AND "currentStock" <= "minimumStock" AND "minimumStock" > 0`,
       ]);
 
     return {
@@ -99,18 +100,18 @@ export class DashboardService {
         SELECT to_char("orderDate", 'YYYY-MM-DD') AS day, SUM("totalAmount") AS total,
                SUM("stitchingTotal") AS stitching, SUM("fabricTotal") AS fabric
         FROM orders
-        WHERE "deletedAt" IS NULL AND lifecycle <> 'CANCELLED' AND "orderDate" BETWEEN ${fromD} AND ${toD}
+        WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND lifecycle <> 'CANCELLED' AND "orderDate" BETWEEN ${fromD} AND ${toD}
         GROUP BY 1`,
       this.prisma.$queryRaw<{ month: string; total: DecimalLike; stitching: DecimalLike; fabric: DecimalLike }[]>`
         SELECT to_char("orderDate", 'YYYY-MM') AS month, SUM("totalAmount") AS total,
                SUM("stitchingTotal") AS stitching, SUM("fabricTotal") AS fabric
         FROM orders
-        WHERE "deletedAt" IS NULL AND lifecycle <> 'CANCELLED' AND "orderDate" BETWEEN ${monthStartD} AND ${toD}
+        WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND lifecycle <> 'CANCELLED' AND "orderDate" BETWEEN ${monthStartD} AND ${toD}
         GROUP BY 1`,
       this.prisma.$queryRaw<{ month: string; total: DecimalLike }[]>`
         SELECT to_char("expenseDate", 'YYYY-MM') AS month, SUM(amount) AS total
         FROM expenses
-        WHERE "deletedAt" IS NULL AND status = 'APPROVED' AND "expenseDate" BETWEEN ${monthStartD} AND ${toD}
+        WHERE "companyId" = ${Tenant.require()}::uuid AND "deletedAt" IS NULL AND status = 'APPROVED' AND "expenseDate" BETWEEN ${monthStartD} AND ${toD}
         GROUP BY 1`,
       this.prisma.$queryRaw<{ month: string; income: DecimalLike; expense: DecimalLike }[]>`
         SELECT to_char(je."entryDate", 'YYYY-MM') AS month,
@@ -119,19 +120,19 @@ export class DashboardService {
         FROM journal_entry_lines l
         JOIN journal_entries je ON je.id = l."journalEntryId"
         JOIN chart_of_accounts a ON a.id = l."accountId"
-        WHERE je.status IN ('POSTED', 'REVERSED') AND je."entryDate" BETWEEN ${monthStartD} AND ${toD}
+        WHERE je."companyId" = ${Tenant.require()}::uuid AND je.status IN ('POSTED', 'REVERSED') AND je."entryDate" BETWEEN ${monthStartD} AND ${toD}
         GROUP BY 1`,
       this.prisma.$queryRaw<{ code: string; name: string; color: string; count: bigint }[]>`
         SELECT s.code, s.name, s.color, COUNT(o.id)::bigint AS count
         FROM workflow_stages s
         LEFT JOIN orders o ON o."stageId" = s.id AND o."deletedAt" IS NULL AND o."orderDate" BETWEEN ${fromD} AND ${toD}
-        WHERE s."isActive"
+        WHERE s."companyId" = ${Tenant.require()}::uuid AND s."isActive"
         GROUP BY s.id ORDER BY s."sortOrder"`,
       this.prisma.$queryRaw<{ employeeId: string; name: string; completed: bigint; rejected: bigint }[]>`
         SELECT e.id AS "employeeId", e.name, SUM(p."completedQuantity")::bigint AS completed,
                SUM(p."rejectedQuantity")::bigint AS rejected
         FROM production_records p JOIN employees e ON e.id = p."employeeId"
-        WHERE p."workDate" BETWEEN ${fromD} AND ${toD}
+        WHERE p."companyId" = ${Tenant.require()}::uuid AND p."workDate" BETWEEN ${fromD} AND ${toD}
         GROUP BY e.id ORDER BY completed DESC LIMIT 10`,
     ]);
 
@@ -172,7 +173,7 @@ export class DashboardService {
       FROM journal_entry_lines l
       JOIN journal_entries je ON je.id = l."journalEntryId"
       JOIN chart_of_accounts a ON a.id = l."accountId"
-      WHERE je.status IN ('POSTED', 'REVERSED')
+      WHERE je."companyId" = ${Tenant.require()}::uuid AND je.status IN ('POSTED', 'REVERSED')
         AND je."entryDate" BETWEEN ${new Date(`${from}T00:00:00Z`)} AND ${new Date(`${to}T00:00:00Z`)}`;
     return dec(rows[0]?.income).minus(dec(rows[0]?.expense));
   }

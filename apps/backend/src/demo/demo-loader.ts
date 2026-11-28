@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import { INestApplicationContext } from '@nestjs/common';
+import { Tenant, byCompany } from '../common/tenant';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -33,6 +34,9 @@ export interface DemoManifest {
   complete: boolean;
   loadedAt: string;
   userId: string | null;
+  /** Demo login of this company (usernames are unique across all companies). */
+  username?: string;
+  email?: string;
   customers: string[];
   suppliers: string[];
   fabrics: string[];
@@ -50,14 +54,14 @@ export interface DemoManifest {
 }
 
 export async function readManifest(prisma: PrismaService): Promise<DemoManifest | null> {
-  const row = await prisma.systemSetting.findUnique({ where: { key: DEMO_SETTING_KEY } });
+  const row = await prisma.systemSetting.findUnique({ where: { companyId_key: byCompany({ key: DEMO_SETTING_KEY }) } });
   return (row?.value as unknown as DemoManifest) ?? null;
 }
 
 async function saveManifest(prisma: PrismaService, m: DemoManifest) {
   const value = m as unknown as Prisma.InputJsonValue;
   await prisma.systemSetting.upsert({
-    where: { key: DEMO_SETTING_KEY },
+    where: { companyId_key: byCompany({ key: DEMO_SETTING_KEY }) },
     create: { key: DEMO_SETTING_KEY, group: 'demo', value, description: 'Demo data loaded by scripts/load-demo-data.ps1. Removed by scripts/remove-demo-data.ps1.' },
     update: { value },
   });
@@ -121,6 +125,8 @@ export interface LoadResult {
   status: 'loaded' | 'already-loaded';
   counts: Record<string, number>;
   notes: string[];
+  /** Demo login username (when loaded). */
+  username?: string;
 }
 
 export async function loadDemoData(app: INestApplicationContext): Promise<LoadResult> {
@@ -158,13 +164,23 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   const manifest: DemoManifest = { version: 1, complete: false, loadedAt: new Date().toISOString(), userId: null, customers: [], suppliers: [], fabrics: [], employees: [], payrolls: [], expenses: [], recurring: [], journals: [] };
 
   // ---------------------------------------------------------------- 1. demo login
-  const role = await prisma.role.findUnique({ where: { code: DEMO_USER.roleCode } });
+  const role = await prisma.role.findUnique({ where: { companyId_code: byCompany({ code: DEMO_USER.roleCode }) } });
   if (!role) throw new Error(`Role ${DEMO_USER.roleCode} was not found. Run the normal update first.`);
-  const taken = await prisma.user.findFirst({ where: { OR: [{ username: DEMO_USER.username }, { email: DEMO_USER.email }] } });
-  if (taken) throw new Error(`A user named "${DEMO_USER.username}" (or ${DEMO_USER.email}) already exists. Rename or delete that user first.`);
+  // Usernames are unique across all companies: the first company gets "demo", others "demo-<company code>".
+  const company = await prisma.company.findUniqueOrThrow({ where: { id: Tenant.require() } });
+  const isTaken = (username: string, email: string) => Tenant.system(() => prisma.user.findFirst({ where: { OR: [{ username }, { email }] } }));
+  let demoUsername: string = DEMO_USER.username;
+  let demoEmail: string = DEMO_USER.email;
+  if (await isTaken(demoUsername, demoEmail)) {
+    demoUsername = `demo-${company.code}`.slice(0, 60);
+    demoEmail = `demo.${company.code}@example.com`;
+  }
+  if (await isTaken(demoUsername, demoEmail)) throw new Error(`A user named "${demoUsername}" (or ${demoEmail}) already exists. Rename or delete that user first.`);
+  manifest.username = demoUsername;
+  manifest.email = demoEmail;
   const user = await prisma.user.create({
     data: {
-      fullName: DEMO_USER.fullName, email: DEMO_USER.email, username: DEMO_USER.username,
+      fullName: DEMO_USER.fullName, email: demoEmail, username: demoUsername,
       passwordHash: await passwords.hash(DEMO_USER.password), roles: { create: [{ roleId: role.id }] },
     },
   });
@@ -590,7 +606,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   }
 
   // ---------------------------------------------------------------- owner capital and shop expenses (books + expense reports)
-  const accountId = async (code: string) => (await prisma.chartOfAccount.findUnique({ where: { code } }))?.id;
+  const accountId = async (code: string) => (await prisma.chartOfAccount.findUnique({ where: { companyId_code: byCompany({ code }) } }))?.id;
   add(at(addDays(setupDay, -1), '09:00'), 'owner capital', async () => {
     const [cash, bank, capital] = await Promise.all([accountId('1000'), accountId('1010'), accountId('3000')]);
     if (!cash || !bank || !capital) { notes.push('Owner capital was not added: the standard accounts are missing.'); return; }
@@ -691,7 +707,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
 
   // Saved report filters for the demo login (Reports > Saved).
   await prisma.systemSetting.upsert({
-    where: { key: `reports.saved_filters.${user.id}` },
+    where: { companyId_key: byCompany({ key: `reports.saved_filters.${user.id}` }) },
     create: {
       key: `reports.saved_filters.${user.id}`, group: 'report_filters', description: 'Saved report filters', updatedById: user.id,
       value: DEMO_SAVED_FILTERS.map((f) => ({ id: randomUUID(), ...f, createdAt: new Date().toISOString() })) as unknown as Prisma.InputJsonValue,
@@ -710,7 +726,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   counts.orders = orderCount;
   counts.whatsappMessages = counts_wa.messages;
   counts.syncEntries = syncEntries;
-  return { status: 'loaded', counts, notes };
+  return { status: 'loaded', counts, notes, username: demoUsername };
 }
 
 function countsOf(m: DemoManifest): Record<string, number> {

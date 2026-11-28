@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { byCompany } from '../../common/tenant';
 import { STAGE_CANCELLED, STAGE_DELIVERED, STAGE_NEW } from '@az/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -27,7 +28,7 @@ export class WorkflowService {
     const last = await this.prisma.workflowStage.findFirst({ where: { isTerminal: false }, orderBy: { sortOrder: 'desc' } });
     const base = dto.name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30) || 'STAGE';
     let code = base;
-    for (let n = 2; await this.prisma.workflowStage.findUnique({ where: { code } }); n++) code = `${base}_${n}`;
+    for (let n = 2; await this.prisma.workflowStage.findUnique({ where: { companyId_code: byCompany({ code }) } }); n++) code = `${base}_${n}`;
     const stage = await this.prisma.$transaction(async (tx) => {
       // New stages go just before the final stages (Delivered / Cancelled).
       const s = await tx.workflowStage.create({ data: { code, name: dto.name, color: dto.color ?? 'slate', sortOrder: (last?.sortOrder ?? 0) + 5 } });

@@ -2,7 +2,9 @@ import { BadRequestException, HttpException, HttpStatus, Injectable, Unauthorize
 import { env } from '../../config/env';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
+import { Tenant } from '../../common/tenant';
 import { AuthUser, RequestContext } from '../../common/types/auth-user';
+import { subscriptionState } from '../platform/subscription';
 import { PasswordService, passwordPolicyError } from './password.service';
 import { CreatedSession, SessionService } from './session.service';
 
@@ -19,9 +21,13 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
-  async login(identifierRaw: string, password: string, ctx: RequestContext): Promise<CreatedSession & { userId: string }> {
+  /** Login runs before the company is known, so it works in platform mode and then inside the user's company. */
+  login(identifierRaw: string, password: string, ctx: RequestContext): Promise<CreatedSession & { userId: string }> {
+    return Tenant.system(() => this.loginInner(identifierRaw, password, ctx));
+  }
+
+  private async loginInner(identifierRaw: string, password: string, ctx: RequestContext): Promise<CreatedSession & { userId: string }> {
     const identifier = identifierRaw.trim().toLowerCase();
-    const { LOGIN_MAX_ATTEMPTS, LOGIN_LOCK_MINUTES } = env();
 
     // 1. IP-level brute force protection.
     if (ctx.ipAddress) {
@@ -38,6 +44,18 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: { deletedAt: null, OR: [{ email: { equals: identifier, mode: 'insensitive' } }, { username: { equals: identifier, mode: 'insensitive' } }] },
     });
+    // From here on, records (attempts, audit) belong to the user's company.
+    if (user?.companyId) return Tenant.run(user.companyId, () => this.finishLogin(user, identifier, password, ctx));
+    return this.finishLogin(user, identifier, password, ctx);
+  }
+
+  private async finishLogin(
+    user: Awaited<ReturnType<PrismaService['user']['findFirst']>>,
+    identifier: string,
+    password: string,
+    ctx: RequestContext,
+  ): Promise<CreatedSession & { userId: string }> {
+    const { LOGIN_MAX_ATTEMPTS, LOGIN_LOCK_MINUTES } = env();
 
     // 2. Account lockout.
     if (user?.lockedUntil && user.lockedUntil > new Date()) {
@@ -71,6 +89,21 @@ export class AuthService {
     if (!user.isActive) {
       await this.recordAttempt(identifier, ctx, false, 'INACTIVE');
       throw new UnauthorizedException('This account has been deactivated. Contact the business owner.');
+    }
+
+    // Company (tenant) must not be suspended.
+    if (user.companyId) {
+      const company = await this.prisma.company.findUnique({ where: { id: user.companyId } });
+      if (!company || subscriptionState(company).access === 'SUSPENDED') {
+        await this.recordAttempt(identifier, ctx, false, 'COMPANY_SUSPENDED');
+        throw new HttpException(
+          `${company?.name ?? 'This company'} account is suspended${company?.suspendedReason ? ` (${company.suspendedReason})` : ''}. Please contact TailoringERP support: Brandistan, 0333-2532924.`,
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    } else if (!user.isSuperAdmin) {
+      await this.recordAttempt(identifier, ctx, false, 'NO_COMPANY');
+      throw new UnauthorizedException(GENERIC_LOGIN_ERROR);
     }
 
     // 4. Success.

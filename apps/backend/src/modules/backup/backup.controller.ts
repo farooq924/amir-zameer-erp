@@ -3,13 +3,16 @@ import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { CurrentUser, ReqContext } from '../../common/decorators/current-user.decorator';
+import { Platform } from '../../common/decorators/platform.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { AuthUser, RequestContext } from '../../common/types/auth-user';
 import { BackupService } from './backup.service';
 import { BackupListQueryDto, CreateBackupDto, PasswordConfirmDto, RestoreBackupDto, UpdateBackupConfigDto } from './dto/backup.dto';
 
+/** Backups cover the whole platform (all companies), so only the TailoringERP Super Admin manages them. */
 @ApiTags('Backup')
 @ApiCookieAuth()
+@Platform()
 @Controller('backup')
 export class BackupController {
   constructor(private readonly backups: BackupService) {}

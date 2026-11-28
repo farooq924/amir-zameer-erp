@@ -10,6 +10,7 @@ if (existsSync(envFile)) process.loadEnvFile(envFile);
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { Tenant } from '../common/tenant';
 import { DEMO_USER } from './demo-dataset';
 import { loadDemoData, readManifest } from './demo-loader';
 import { removeDemoData } from './demo-remover';
@@ -19,6 +20,7 @@ import { removeDemoData } from './demo-remover';
  *   node dist/demo/cli.js load     adds the demo login and Karachi demo data (safe to run twice)
  *   node dist/demo/cli.js remove   deletes the demo login and all demo data (real records are kept)
  *   node dist/demo/cli.js status   shows whether demo data is loaded
+ * Add --company=<code> to choose the company (default: the first company, e.g. zameer-ansari).
  */
 async function main(): Promise<void> {
   const command = (process.argv[2] ?? 'status').toLowerCase();
@@ -30,6 +32,20 @@ async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error'] });
   try {
     const prisma = app.get(PrismaService, { strict: false });
+    const code = process.argv.find((a) => a.startsWith('--company='))?.split('=')[1]?.trim().toLowerCase();
+    const company = code
+      ? await prisma.company.findUnique({ where: { code } })
+      : await prisma.company.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!company) throw new Error(code ? `Company "${code}" was not found` : 'No company exists yet');
+    console.log(`Company: ${company.name} (${company.code})`);
+    await Tenant.run(company.id, () => run(command, app, prisma));
+  } finally {
+    await app.close();
+  }
+}
+
+async function run(command: string, app: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>, prisma: PrismaService): Promise<void> {
+  {
     if (command === 'status') {
       const m = await readManifest(prisma);
       if (!m) console.log('Demo data is NOT loaded.');
@@ -49,7 +65,8 @@ async function main(): Promise<void> {
         r.notes.forEach((n) => console.log(`  Note: ${n}`));
       }
       console.log('');
-      console.log(`Demo login  ->  Username: ${DEMO_USER.username}   Password: ${DEMO_USER.password}   (role: Manager)`);
+      const m = await readManifest(prisma);
+      console.log(`Demo login  ->  Username: ${r.username ?? m?.username ?? DEMO_USER.username}   Password: ${DEMO_USER.password}   (role: Manager)`);
       return;
     }
     console.log('Removing demo data...');
@@ -60,8 +77,6 @@ async function main(): Promise<void> {
       for (const [k, v] of Object.entries(r.counts)) if (v) console.log(`  ${k}: ${v}`);
       console.log('Your real records were not touched.');
     }
-  } finally {
-    await app.close();
   }
 }
 

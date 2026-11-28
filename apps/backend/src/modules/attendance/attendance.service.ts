@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { byCompany } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { LEAVE_TYPES, monthBounds } from '@az/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -224,7 +225,7 @@ export class AttendanceService {
   }
 
   private async lockedPeriod(periodKey: string) {
-    const p = await this.prisma.payroll.findUnique({ where: { periodKey }, select: { status: true } });
+    const p = await this.prisma.payroll.findUnique({ where: { companyId_periodKey: byCompany({ periodKey }) }, select: { status: true } });
     return !!p && p.status !== 'DRAFT' && p.status !== 'CANCELLED';
   }
 }

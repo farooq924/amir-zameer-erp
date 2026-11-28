@@ -2,6 +2,7 @@ import {
   BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnApplicationBootstrap, OnModuleDestroy,
 } from '@nestjs/common';
 import { Prisma, WhatsAppTemplate } from '@prisma/client';
+import { Tenant, byCompany, forEachCompany } from '../../common/tenant';
 import {
   DEFAULT_WHATSAPP_TEMPLATES, PAYMENT_METHODS, WHATSAPP_PURPOSES, WHATSAPP_STATUS_RANK, WhatsAppAutoPurpose,
   formatPhone, isPakistaniMobile, normalizePhone, renderWhatsAppTemplate, templatePlaceholderCount, whatsappLink,
@@ -67,7 +68,7 @@ export class WhatsAppService implements OnApplicationBootstrap, OnModuleDestroy 
   /** Demo customers have made-up numbers that may belong to real people: never message them through the Cloud API. */
   private async isDemoCustomer(customerId: string | undefined | null): Promise<boolean> {
     if (!customerId) return false;
-    const row = await this.prisma.systemSetting.findUnique({ where: { key: 'demo.data' } });
+    const row = await this.prisma.systemSetting.findUnique({ where: { companyId_key: byCompany({ key: 'demo.data' }) } });
     const ids = (row?.value as { customers?: string[] } | null)?.customers ?? [];
     return ids.includes(customerId);
   }
@@ -80,13 +81,13 @@ export class WhatsAppService implements OnApplicationBootstrap, OnModuleDestroy 
   ) {}
 
   async onApplicationBootstrap() {
-    try {
-      await this.ensureDefaults();
-    } catch (e) {
-      this.logger.error(`Could not create default WhatsApp templates: ${(e as Error).message}`);
-    }
+    await forEachCompany(this.prisma, () => this.ensureDefaults(), {
+      includeSuspended: true,
+      onError: (id, e) => this.logger.error(`Could not create default WhatsApp templates for company ${id}: ${e.message}`),
+    });
     if (process.env.NODE_ENV === 'test') return;
-    this.timer = setInterval(() => void this.processQueue().catch(() => undefined), 30_000);
+    // Each company has its own WhatsApp number and queue.
+    this.timer = setInterval(() => void forEachCompany(this.prisma, () => this.processQueue()).catch(() => undefined), 30_000);
     this.timer.unref();
   }
 
@@ -97,7 +98,7 @@ export class WhatsAppService implements OnApplicationBootstrap, OnModuleDestroy 
   /** Default templates (never overwrites the owner's edits). */
   async ensureDefaults() {
     for (const t of DEFAULT_WHATSAPP_TEMPLATES) {
-      const exists = await this.prisma.whatsAppTemplate.findUnique({ where: { name_language: { name: t.name, language: t.language } } });
+      const exists = await this.prisma.whatsAppTemplate.findUnique({ where: { companyId_name_language: byCompany({ name: t.name, language: t.language }) } });
       if (exists) continue;
       await this.prisma.whatsAppTemplate.create({
         data: { name: t.name, language: t.language, category: t.category, purpose: t.purpose, bodyPreview: t.bodyPreview, variables: t.variables },
@@ -110,7 +111,7 @@ export class WhatsAppService implements OnApplicationBootstrap, OnModuleDestroy 
   // ---------------------------------------------------------------------------
 
   async getConfig(): Promise<WhatsAppConfig> {
-    const row = await this.prisma.systemSetting.findUnique({ where: { key: WHATSAPP_CONFIG_KEY } });
+    const row = await this.prisma.systemSetting.findUnique({ where: { companyId_key: byCompany({ key: WHATSAPP_CONFIG_KEY }) } });
     const stored = (row?.value ?? {}) as Partial<WhatsAppConfig>;
     return { ...DEFAULT_WHATSAPP_CONFIG, ...stored, autoSend: { ...DEFAULT_WHATSAPP_CONFIG.autoSend, ...(stored.autoSend ?? {}) } };
   }
@@ -149,7 +150,7 @@ export class WhatsAppService implements OnApplicationBootstrap, OnModuleDestroy 
   private async saveConfig(c: WhatsAppConfig): Promise<WhatsAppConfig> {
     const value = c as unknown as Prisma.InputJsonValue;
     await this.prisma.systemSetting.upsert({
-      where: { key: WHATSAPP_CONFIG_KEY }, create: { key: WHATSAPP_CONFIG_KEY, group: 'whatsapp', value }, update: { value },
+      where: { companyId_key: byCompany({ key: WHATSAPP_CONFIG_KEY }) }, create: { key: WHATSAPP_CONFIG_KEY, group: 'whatsapp', value }, update: { value },
     });
     return c;
   }
@@ -234,7 +235,7 @@ export class WhatsAppService implements OnApplicationBootstrap, OnModuleDestroy 
 
   private async businessValues(): Promise<Values> {
     const biz = await this.settings.getGroup('business');
-    return { business_name: String(biz.businessName || 'AMIR ZAMEER'), business_phone: String(biz.phone || biz.whatsapp || '') };
+    return { business_name: String(biz.businessName || 'My Tailoring Shop'), business_phone: String(biz.phone || biz.whatsapp || '') };
   }
 
   private async customerValues(customerId: string) {
@@ -576,6 +577,36 @@ export class WhatsAppService implements OnApplicationBootstrap, OnModuleDestroy 
   // ---------------------------------------------------------------------------
   // Webhook (Meta calls these; no login)
   // ---------------------------------------------------------------------------
+
+  /**
+   * Webhooks are public, so the company comes from the URL (/api/whatsapp/webhook/<company code>).
+   * The old URL without a code still works: the company whose verify token / App Secret matches is used.
+   */
+  async webhookVerify(companyCode: string | undefined, mode?: string, token?: string, challenge?: string): Promise<string> {
+    const companyId = await this.webhookCompany(companyCode, (c) => !!token && !!c.verifyToken && safeEqual(token, c.verifyToken));
+    return Tenant.run(companyId, () => this.verifyWebhook(mode, token, challenge));
+  }
+
+  async webhookReceive(companyCode: string | undefined, raw: Buffer | undefined, header: string | undefined, body: unknown) {
+    const signatureOk = (c: WhatsAppConfig) =>
+      !!c.appSecret && !!raw && !!header?.startsWith('sha256=') && safeEqual(`sha256=${createHmac('sha256', c.appSecret).update(raw).digest('hex')}`, header);
+    const companyId = await this.webhookCompany(companyCode, signatureOk);
+    await Tenant.run(companyId, async () => {
+      await this.checkSignature(raw, header);
+      await this.handleWebhook(body);
+    });
+  }
+
+  private async webhookCompany(code: string | undefined, matches: (c: WhatsAppConfig) => boolean): Promise<string> {
+    if (code) {
+      const c = await this.prisma.company.findUnique({ where: { code: code.toLowerCase() }, select: { id: true } });
+      if (!c) throw new ForbiddenException('Unknown company');
+      return c.id;
+    }
+    const companies = await this.prisma.company.findMany({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+    for (const c of companies) if (matches(await Tenant.run(c.id, () => this.getConfig()))) return c.id;
+    throw new ForbiddenException('Verify token does not match');
+  }
 
   async verifyWebhook(mode?: string, token?: string, challenge?: string): Promise<string> {
     const c = await this.getConfig();

@@ -49,7 +49,7 @@ describe('backup encryption', () => {
   it('rejects files that are not backups', async () => {
     const other = join(dir, 'x.azbak');
     writeFileSync(other, Buffer.alloc(100, 1));
-    expect(() => createDecryptStream(other, secret)).toThrow(/not an AMIR ZAMEER/);
+    expect(() => createDecryptStream(other, secret)).toThrow(/not a TailoringERP/);
   });
 
   it('fingerprint is stable and does not reveal the key', () => {

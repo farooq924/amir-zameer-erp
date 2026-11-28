@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant, byCompany } from '../../common/tenant';
 import { Employee, Prisma, SalaryStructure } from '@prisma/client';
 import { monthBounds, normalizePhone } from '@az/shared';
 import { paginate } from '../../common/dto/pagination.dto';
@@ -91,7 +92,7 @@ export class EmployeesService {
       this.prisma.employee.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { _all: true } }),
       this.prisma.attendance.groupBy({ by: ['status'], where: { date: asDate(today), employee: { deletedAt: null } }, _count: { _all: true } }),
       this.prisma.employeeAdvance.aggregate({ where: { status: 'OPEN' }, _sum: { balanceAmount: true }, _count: { _all: true } }),
-      this.prisma.payroll.findUnique({ where: { periodKey: period }, select: { id: true, status: true, totalNet: true, totalPaid: true } }),
+      this.prisma.payroll.findUnique({ where: { companyId_periodKey: byCompany({ periodKey: period }) }, select: { id: true, status: true, totalNet: true, totalPaid: true } }),
       this.prisma.leaveRecord.count({ where: { status: 'PENDING' } }),
       this.prisma.overtimeRecord.count({ where: { status: 'PENDING' } }),
       this.prisma.salaryStructure.aggregate({ where: { isCurrent: true, salaryType: { in: ['MONTHLY', 'FIXED_PLUS_INCENTIVE'] }, employee: { deletedAt: null, status: { in: ['ACTIVE', 'ON_LEAVE'] } } }, _sum: { monthlySalary: true } }),
@@ -232,7 +233,7 @@ export class EmployeesService {
     if (!e) throw new NotFoundException('Employee not found');
     const data = this.salaryData(dto);
     await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM employees WHERE id = ${id}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM employees WHERE id = ${id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
       const current = await tx.salaryStructure.findFirst({ where: { employeeId: id, isCurrent: true } });
       if (current && dto.effectiveFrom <= dateOnly(current.effectiveFrom)!) {
         throw new BadRequestException(`The new salary must start after ${dateOnly(current.effectiveFrom)} (when the current salary started)`);

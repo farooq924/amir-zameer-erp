@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { byCompany } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -81,7 +82,7 @@ export class UsersService {
     if (dto.roleIds) {
       await this.assertRolesAssignable(dto.roleIds, actor);
       const wasOwner = before.roles.some((r) => r.code === 'OWNER');
-      const ownerRole = await this.prisma.role.findUnique({ where: { code: 'OWNER' } });
+      const ownerRole = await this.prisma.role.findUnique({ where: { companyId_code: byCompany({ code: 'OWNER' }) } });
       const staysOwner = ownerRole ? dto.roleIds.includes(ownerRole.id) : false;
       if (wasOwner && !staysOwner) await this.assertNotLastOwner(id);
     }

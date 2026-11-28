@@ -52,13 +52,13 @@ export class BackupFileError extends Error {}
 /** Reads and checks the header of an .azbak file. */
 export function readBackupHeader(path: string): { salt: Buffer; iv: Buffer; tag: Buffer; size: number } {
   const size = statSync(path).size;
-  if (size < HEADER_LEN + TAG_LEN) throw new BackupFileError('This file is too small to be an AMIR ZAMEER backup.');
+  if (size < HEADER_LEN + TAG_LEN) throw new BackupFileError('This file is too small to be a TailoringERP backup.');
   const fd = openSync(path, 'r');
   try {
     const head = Buffer.alloc(HEADER_LEN);
     readSync(fd, head, 0, HEADER_LEN, 0);
     if (!head.subarray(0, BACKUP_MAGIC.length).equals(BACKUP_MAGIC)) {
-      throw new BackupFileError('This file is not an AMIR ZAMEER encrypted backup (.azbak).');
+      throw new BackupFileError('This file is not a TailoringERP encrypted backup (.azbak).');
     }
     const tag = Buffer.alloc(TAG_LEN);
     readSync(fd, tag, 0, TAG_LEN, size - TAG_LEN);
