@@ -1,6 +1,13 @@
-# AMIR ZAMEER - Tailoring & Fabric Management ERP
+# TailoringERP By Brandistan - Tailoring & Fabric Management ERP (SaaS)
 
-Production-grade ERP for AMIR ZAMEER (men's tailoring, fabric sales and stitching, Pakistan, PKR, Asia/Karachi).
+Multi-company (SaaS) ERP for men's tailoring, fabric sales and stitching shops (Pakistan, PKR, Asia/Karachi).
+Each company (shop) has fully separate data; the first company, "Zameer Ansari", holds the original AMIR ZAMEER data.
+
+**SaaS (v2.0.0):** one database, every business record carries `companyId`, enforced by a Prisma query extension
+(`src/common/tenant`) plus composite unique keys. The Super Admin (`users.isSuperAdmin`, no company) manages companies,
+plans, trials and manual subscription payments at `/platform`, and can open a company for support (audited).
+Create the Super Admin with `scripts\create-super-admin.ps1` (or `node dist/modules/platform/cli.js create-super-admin`
+with `SA_USERNAME`, `SA_PASSWORD`, `SA_NAME`, `SA_EMAIL`). Backups cover the whole system and are Super Admin only.
 
 | Layer | Stack |
 |---|---|
