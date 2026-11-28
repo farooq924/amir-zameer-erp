@@ -22,6 +22,11 @@ export async function createApp(): Promise<INestApplication> {
   app.setGlobalPrefix('api');
   // No upgrade-insecure-requests: the ERP is also opened on plain http://localhost on the shop PC.
   app.use(helmet({ contentSecurityPolicy: { directives: { upgradeInsecureRequests: null } } }));
+  // Browser features the ERP never uses are switched off for every page and API response.
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
+    next();
+  });
   app.use(cookieParser());
   app.useBodyParser('json', { limit: '1mb' });
   app.enableCors({ origin: config.APP_URL, credentials: true });

@@ -58,3 +58,14 @@ It refuses to run against a database whose name does not end in `_test`.
   cancelled orders listed but kept out of the totals.
 * Frontend: 6 files, 20 tests (new report cell formatting test); type check and production build clean.
 * Manual check at 1366 px and 390 px: reports home, viewer, columns, export, saved filters and A4 print. Screenshots in `docs/screenshots/phase-7`.
+
+## Phase 10 results (2026-11-28)
+* Backend: 28 suites, 228 tests passed. New unit tests: backup encryption (no readable data, wrong key, changed byte, not a backup),
+  Karachi backup schedule, DATABASE_URL to pg_dump connection. New `test/security-backup.e2e-spec.ts` (19): security headers,
+  mass assignment, 413 body limit, SQL/script text, error bodies, performance smoke test (90th percentile < 1.5 s on 6 main screens),
+  Security Center permissions, sessions (own / all / revoke rules), lockout + unlock, backup permissions, encrypted backup, download,
+  verify, restore test, Owner-only restore, real restore with safety backup, settings + second copy, recovery key, daily schedule +
+  retention, delete, folder scan.
+* Frontend: 24 tests passed. Type check and production build clean.
+* Manual browser check desktop (1366 px) and mobile (390 px): Backup page, restore test result, restore dialog, recovery key dialog,
+  Security Center overview, devices, login history, locked accounts.
