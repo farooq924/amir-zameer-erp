@@ -247,6 +247,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const rowActions = (r: T, compact = false) => {
     const btn = 'h-7 w-7 rounded-md [&_svg]:size-[15px] text-muted-foreground hover:bg-gold-soft hover:text-[#8a6a1f] dark:hover:text-gold';
     const stop = (fn: () => void) => (e: React.MouseEvent) => { e.stopPropagation(); fn(); };
+    const extra = rowMenu?.(r);
+    const hasExtra = extra !== null && extra !== undefined && extra !== false;
     const items = (
       <>
         {onView && allowed('view', r) && <DropdownMenuItem onSelect={() => onView(r)}><Eye /> View</DropdownMenuItem>}
@@ -254,7 +256,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
         {(onDuplicate || duplicateRow) && allowed('duplicate', r) && (
           <DropdownMenuItem onSelect={() => (onDuplicate ? onDuplicate(r) : runEach('duplicate', [r], duplicateRow!))}><Copy /> Duplicate</DropdownMenuItem>
         )}
-        {rowMenu?.(r)}
+        {extra}
         {deleteRow && allowed('delete', r) && (<><DropdownMenuSeparator /><DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirm([r])}><Trash2 /> Delete</DropdownMenuItem></>)}
       </>
     );
@@ -279,12 +281,12 @@ export function DataTable<T>(props: DataTableProps<T>) {
         {deleteRow && allowed('delete', r) && (
           <Button variant="ghost" size="icon" className={cn(btn, 'hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/15 dark:hover:text-rose-400')} title="Delete" aria-label="Delete" onClick={stop(() => setConfirm([r]))}><Trash2 /></Button>
         )}
-        {rowMenu && (
+        {hasExtra && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className={btn} aria-label="More actions" onClick={(e) => e.stopPropagation()}><MoreVertical /></Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>{rowMenu(r)}</DropdownMenuContent>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>{extra}</DropdownMenuContent>
           </DropdownMenu>
         )}
       </div>

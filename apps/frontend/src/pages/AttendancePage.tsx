@@ -8,7 +8,8 @@ import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/c
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, NativeSelect } from '@/components/ui/input';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable } from '@/components/data-table/DataTable';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { LeaveDialog, OvertimeDialog } from '@/features/hr/AttendanceDialogs';
@@ -208,30 +209,22 @@ function LeaveTab() {
         {can('attendance', 'CREATE') && <Button variant="gold" onClick={() => setOpen(true)}><Plus /> Add leave</Button>}
       </div>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.length ? (
-          <EmptyState icon={<CalendarOff />} title={status === 'PENDING' ? 'No leave waiting for approval' : 'No leave found'} />
-        ) : (
-          <Table>
-            <THead><TR><TH>Employee</TH><TH>Leave</TH><TH>Dates</TH><TH className="text-right">Days</TH><TH>Status</TH><TH className="w-40" /></TR></THead>
-            <TBody>
-              {q.data!.map((l) => (
-                <TR key={l.id}>
-                  <TD><Link to={`/employees/${l.employee.id}`} className="font-medium hover:text-primary">{l.employee.name}</Link><span className="block text-xs text-muted-foreground">{l.employee.code}</span></TD>
-                  <TD>{LEAVE_LABEL[l.leaveType]}{l.reason && <span className="block text-xs text-muted-foreground">{l.reason}</span>}</TD>
-                  <TD className="whitespace-nowrap">{formatDate(l.fromDate)}{l.toDate !== l.fromDate ? ` - ${formatDate(l.toDate)}` : ''}</TD>
-                  <TD className="text-right tabular-nums">{Number(l.days)}</TD>
-                  <TD><ApprovalBadge status={l.status} /></TD>
-                  <TD>{l.status === 'PENDING' && can('attendance', 'APPROVE') && (
-                    <div className="flex justify-end gap-1">
-                      <Button size="sm" loading={decide.isPending && decide.variables?.id === l.id && decide.variables.ok} onClick={() => decide.mutate({ id: l.id, ok: true })}><Check /> Approve</Button>
-                      <Button size="sm" variant="outline" aria-label="Reject" onClick={() => decide.mutate({ id: l.id, ok: false })}><X /></Button>
-                    </div>
-                  )}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        )}
+        <DataTable title="Leave" module="attendance" noun="leave" rows={q.data} getRowId={(l) => l.id}
+          loading={q.isLoading} error={q.error} onRetry={() => q.refetch()}
+          rowMenu={can('attendance', 'APPROVE') ? (l) => (l.status === 'PENDING' ? <>
+            <DropdownMenuItem onSelect={() => decide.mutate({ id: l.id, ok: true })}><Check /> Approve</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => decide.mutate({ id: l.id, ok: false })}><X /> Reject</DropdownMenuItem>
+          </> : null) : undefined}
+          columns={[
+            { id: 'employee', header: 'Employee', value: (l) => l.employee.name, text: (l) => `${l.employee.name} (${l.employee.code})`,
+              cell: (l) => <><Link to={`/employees/${l.employee.id}`} className="font-medium hover:text-primary">{l.employee.name}</Link><span className="block text-xs text-muted-foreground">{l.employee.code}</span></> },
+            { id: 'leave', header: 'Leave', value: (l) => LEAVE_LABEL[l.leaveType], text: (l) => `${LEAVE_LABEL[l.leaveType]}${l.reason ? ` - ${l.reason}` : ''}`,
+              cell: (l) => <>{LEAVE_LABEL[l.leaveType]}{l.reason && <span className="block text-xs text-muted-foreground">{l.reason}</span>}</> },
+            { id: 'dates', header: 'Dates', value: (l) => l.fromDate, text: (l) => `${formatDate(l.fromDate)}${l.toDate !== l.fromDate ? ` - ${formatDate(l.toDate)}` : ''}`, className: 'whitespace-nowrap' },
+            { id: 'days', header: 'Days', type: 'number', value: (l) => Number(l.days) },
+            { id: 'status', header: 'Status', value: (l) => l.status, cell: (l) => <ApprovalBadge status={l.status} /> },
+          ]}
+          empty={<EmptyState icon={<CalendarOff />} title={status === 'PENDING' ? 'No leave waiting for approval' : 'No leave found'} />} />
       </Card>
       <LeaveDialog open={open} onOpenChange={setOpen} />
     </div>
@@ -263,32 +256,22 @@ function OvertimeTab() {
         {can('attendance', 'CREATE') && <Button variant="gold" onClick={() => setOpen(true)}><Plus /> Add overtime</Button>}
       </div>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.length ? (
-          <EmptyState icon={<CalendarClock />} title="No overtime in this month" />
-        ) : (
-          <Table>
-            <THead><TR><TH>Date</TH><TH>Employee</TH><TH className="text-right">Hours</TH><TH className="hidden sm:table-cell text-right">Rate</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH className="w-40" /></TR></THead>
-            <TBody>
-              {q.data!.map((o) => (
-                <TR key={o.id}>
-                  <TD className="whitespace-nowrap">{formatDate(o.date)}</TD>
-                  <TD><span className="font-medium">{o.employee?.name}</span>{o.notes && <span className="block text-xs text-muted-foreground">{o.notes}</span>}</TD>
-                  <TD className="text-right tabular-nums">{Number(o.hours)}</TD>
-                  <TD className="hidden text-right tabular-nums sm:table-cell">{formatPKR(o.ratePerHour)}</TD>
-                  <TD className="text-right font-medium tabular-nums">{formatPKR(o.amount)}</TD>
-                  <TD><ApprovalBadge status={o.status} />{o.paid && <span className="ml-1 text-xs text-emerald-700">Paid</span>}</TD>
-                  <TD>{o.status === 'PENDING' && can('attendance', 'APPROVE') && (
-                    <div className="flex justify-end gap-1">
-                      <Button size="sm" onClick={() => decide.mutate({ id: o.id, ok: true })}><Check /> Approve</Button>
-                      <Button size="sm" variant="outline" aria-label="Reject" onClick={() => decide.mutate({ id: o.id, ok: false })}><X /></Button>
-                    </div>
-                  )}</TD>
-                </TR>
-              ))}
-              <TR className="bg-muted/50 font-semibold"><TD colSpan={4}>Approved total</TD><TD className="text-right tabular-nums">{formatPKR(total)}</TD><TD colSpan={2} /></TR>
-            </TBody>
-          </Table>
-        )}
+        <DataTable title={`Overtime ${monthLabel(month)}`} module="attendance" noun="overtime entry" rows={q.data} getRowId={(o) => o.id}
+          loading={q.isLoading} error={q.error} onRetry={() => q.refetch()}
+          rowMenu={can('attendance', 'APPROVE') ? (o) => (o.status === 'PENDING' ? <>
+            <DropdownMenuItem onSelect={() => decide.mutate({ id: o.id, ok: true })}><Check /> Approve</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => decide.mutate({ id: o.id, ok: false })}><X /> Reject</DropdownMenuItem>
+          </> : null) : undefined}
+          columns={[
+            { id: 'date', header: 'Date', value: (o) => o.date, text: (o) => formatDate(o.date), className: 'whitespace-nowrap' },
+            { id: 'employee', header: 'Employee', value: (o) => o.employee?.name ?? '', cell: (o) => <><span className="font-medium">{o.employee?.name}</span>{o.notes && <span className="block text-xs text-muted-foreground">{o.notes}</span>}</> },
+            { id: 'hours', header: 'Hours', type: 'number', value: (o) => Number(o.hours) },
+            { id: 'rate', header: 'Rate', type: 'money', value: (o) => Number(o.ratePerHour), cell: (o) => formatPKR(o.ratePerHour), className: 'hidden sm:table-cell' },
+            { id: 'amount', header: 'Amount', type: 'money', value: (o) => Number(o.amount), cell: (o) => <span className="font-medium">{formatPKR(o.amount)}</span>, text: (o) => formatPKR(o.amount) },
+            { id: 'status', header: 'Status', value: (o) => `${o.status}${o.paid ? ' (paid)' : ''}`, cell: (o) => <><ApprovalBadge status={o.status} />{o.paid && <span className="ml-1 text-xs text-emerald-700">Paid</span>}</> },
+          ]}
+          footer={() => ({ date: 'Approved total', amount: formatPKR(total) })}
+          empty={<EmptyState icon={<CalendarClock />} title="No overtime in this month" />} />
       </Card>
       <OvertimeDialog open={open} onOpenChange={setOpen} />
     </div>
