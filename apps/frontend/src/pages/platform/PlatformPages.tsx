@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { type DataColumn, DataTable, type ServerPagination, fetchAllPages } from '@/components/data-table/DataTable';
 import { StatCard } from '@/features/dashboard/StatCard';
 import {
   AccessBadge, CompanyFormDialog, CompanyStatusBadge, PLAN_MODULE_OPTIONS, PaymentDialog, moduleLabel, useEnterCompany, usePlans,
@@ -26,19 +26,6 @@ import { PAYMENT_METHODS } from '@/types/platform';
 import { formatDate, formatDateTime, formatPKR, humanize } from '@/utils/format';
 
 const methodLabel = (m: string) => PAYMENT_METHODS.find((x) => x.value === m)?.label ?? m;
-
-function Pager({ meta, page, setPage, noun }: { meta?: Paginated<unknown>['meta']; page: number; setPage: (fn: (p: number) => number) => void; noun: string }) {
-  if (!meta || meta.totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-between border-t p-3 text-sm">
-      <span className="text-muted-foreground">Page {meta.page} of {meta.totalPages} · {meta.total} {noun}</span>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-        <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-      </div>
-    </div>
-  );
-}
 
 function TableSkeleton() {
   return <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>;
@@ -116,11 +103,12 @@ export function CompaniesPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [formOpen, setFormOpen] = useState(() => new URLSearchParams(window.location.search).get('new') === '1');
   const enter = useEnterCompany();
   const list = useQuery({
-    queryKey: ['platform', 'companies', { search, status, page }],
-    queryFn: () => api.get<Paginated<CompanyRow>>('/platform/companies', { search, status, page, pageSize: 25 }),
+    queryKey: ['platform', 'companies', { search, status, page, pageSize }],
+    queryFn: () => api.get<Paginated<CompanyRow>>('/platform/companies', { search, status, page, pageSize }),
     placeholderData: keepPreviousData,
   });
   return (
@@ -128,37 +116,42 @@ export function CompaniesPage() {
       <PageHeader title="Companies" description="Every tailoring shop using TailoringERP."
         actions={<Button onClick={() => setFormOpen(true)}><Plus /> New company</Button>} />
       <Card>
-        <div className="flex flex-col gap-2 border-b p-3 sm:flex-row">
-          <div className="relative max-w-xs flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Search name, code, phone or city" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          </div>
-          <NativeSelect className="sm:w-56" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} aria-label="Filter by status">
-            {STATUS_FILTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </NativeSelect>
-        </div>
-        {list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => list.refetch()} /> : list.isLoading ? <TableSkeleton />
-          : list.data!.data.length === 0 ? <EmptyState title="No companies found" icon={<Building2 />} /> : (
-            <Table>
-              <THead><TR><TH>Company</TH><TH>Plan</TH><TH>Status</TH><TH>Subscription</TH><TH>Users</TH><TH>Last login</TH><TH className="w-10" /></TR></THead>
-              <TBody>
-                {list.data!.data.map((c) => (
-                  <TR key={c.id} className="cursor-pointer" onClick={() => navigate(`/platform/companies/${c.id}`)}>
-                    <TD><div className="font-medium">{c.name}</div><div className="text-xs text-muted-foreground">{c.code}{c.city ? ` · ${c.city}` : ''}{c.phone ? ` · ${c.phone}` : ''}</div></TD>
-                    <TD>{c.plan.name}</TD>
-                    <TD><CompanyStatusBadge status={c.status} /></TD>
-                    <TD className="whitespace-nowrap"><AccessBadge access={c.access} daysLeft={c.daysLeft} />{c.endsAt && <span className="ml-1 text-xs text-muted-foreground">{formatDate(c.endsAt)}</span>}</TD>
-                    <TD className="tabular-nums">{c.activeUsers ?? 0} / {c.plan.maxUsers}</TD>
-                    <TD className="whitespace-nowrap text-muted-foreground">{formatDateTime(c.lastLoginAt ?? null)}</TD>
-                    <TD onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="icon" title="Open this company (support)" aria-label={`Open ${c.name}`} disabled={enter.isPending} onClick={() => enter.mutate(c.id)}><LogIn /></Button>
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          )}
-        <Pager meta={list.data?.meta} page={page} setPage={setPage} noun="companies" />
+        <DataTable
+          title="Companies"
+          noun="company"
+          rows={list.data?.data}
+          getRowId={(c) => c.id}
+          loading={list.isLoading}
+          error={list.error}
+          onRetry={() => list.refetch()}
+          pagination={{ page, pageSize, total: list.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<CompanyRow>>('/platform/companies', { search, status, page: pg, pageSize: size }))}
+          onRowClick={(c) => navigate(`/platform/companies/${c.id}`)}
+          onView={(c) => navigate(`/platform/companies/${c.id}`)}
+          rowMenu={(c) => <DropdownMenuItem disabled={enter.isPending} onSelect={() => enter.mutate(c.id)}><LogIn /> Open this company (support)</DropdownMenuItem>}
+          toolbar={
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative max-w-xs flex-1">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input className="pl-8" placeholder="Search name, code, phone or city" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+              </div>
+              <NativeSelect className="sm:w-56" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} aria-label="Filter by status">
+                {STATUS_FILTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </NativeSelect>
+            </div>
+          }
+          columns={[
+            { id: 'company', header: 'Company', value: (c) => c.name, text: (c) => `${c.name} (${c.code})${c.city ? ` - ${c.city}` : ''}${c.phone ? ` - ${c.phone}` : ''}`,
+              cell: (c) => <><div className="font-medium">{c.name}</div><div className="text-xs text-muted-foreground">{c.code}{c.city ? ` · ${c.city}` : ''}{c.phone ? ` · ${c.phone}` : ''}</div></> },
+            { id: 'plan', header: 'Plan', value: (c) => c.plan.name },
+            { id: 'status', header: 'Status', value: (c) => c.status, cell: (c) => <CompanyStatusBadge status={c.status} /> },
+            { id: 'subscription', header: 'Subscription', value: (c) => c.endsAt, text: (c) => `${c.access}${c.endsAt ? ` until ${formatDate(c.endsAt)}` : ''}`,
+              cell: (c) => <span className="whitespace-nowrap"><AccessBadge access={c.access} daysLeft={c.daysLeft} />{c.endsAt && <span className="ml-1 text-xs text-muted-foreground">{formatDate(c.endsAt)}</span>}</span> },
+            { id: 'users', header: 'Users', value: (c) => c.activeUsers ?? 0, text: (c) => `${c.activeUsers ?? 0} / ${c.plan.maxUsers}` },
+            { id: 'lastLogin', header: 'Last login', value: (c) => c.lastLoginAt ?? null, text: (c) => formatDateTime(c.lastLoginAt ?? null), className: 'whitespace-nowrap text-muted-foreground' },
+          ]}
+          empty={<EmptyState title="No companies found" icon={<Building2 />} />}
+        />
       </Card>
       <CompanyFormDialog open={formOpen} onOpenChange={setFormOpen} onSaved={(c) => navigate(`/platform/companies/${c.id}`)} />
     </div>
@@ -269,25 +262,25 @@ export function CompanyDetailPage() {
 
       <Card className="mt-4">
         <CardHeader><CardTitle>Users</CardTitle></CardHeader>
-        <Table>
-          <THead><TR><TH>Name</TH><TH>Username</TH><TH>Roles</TH><TH>Status</TH><TH>Last login</TH></TR></THead>
-          <TBody>
-            {c.users.map((u) => (
-              <TR key={u.id}>
-                <TD><div className="font-medium">{u.fullName}</div><div className="text-xs text-muted-foreground">{u.email}</div></TD>
-                <TD className="text-muted-foreground">{u.username}</TD>
-                <TD><div className="flex flex-wrap gap-1">{u.roles.map((r) => <Badge key={r.code} variant="secondary">{r.name}</Badge>)}</div></TD>
-                <TD>{u.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="danger">Inactive</Badge>}</TD>
-                <TD className="whitespace-nowrap text-muted-foreground">{formatDateTime(u.lastLoginAt)}</TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
+        <DataTable
+          title={`${c.name} - users`}
+          noun="user"
+          rows={c.users}
+          getRowId={(u) => u.id}
+          columns={[
+            { id: 'name', header: 'Name', value: (u) => u.fullName, text: (u) => `${u.fullName}${u.email ? ` (${u.email})` : ''}`,
+              cell: (u) => <><div className="font-medium">{u.fullName}</div><div className="text-xs text-muted-foreground">{u.email}</div></> },
+            { id: 'username', header: 'Username', value: (u) => u.username, className: 'text-muted-foreground' },
+            { id: 'roles', header: 'Roles', value: (u) => u.roles.map((r) => r.name).join(', '), cell: (u) => <div className="flex flex-wrap gap-1">{u.roles.map((r) => <Badge key={r.code} variant="secondary">{r.name}</Badge>)}</div> },
+            { id: 'status', header: 'Status', value: (u) => (u.isActive ? 'Active' : 'Inactive'), cell: (u) => (u.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="danger">Inactive</Badge>) },
+            { id: 'lastLogin', header: 'Last login', value: (u) => u.lastLoginAt, text: (u) => formatDateTime(u.lastLoginAt), className: 'whitespace-nowrap text-muted-foreground' },
+          ]}
+        />
       </Card>
 
       <Card className="mt-4">
         <CardHeader><CardTitle>Payments</CardTitle></CardHeader>
-        {c.payments.length === 0 ? <EmptyState title="No payments yet" icon={<CreditCard />} /> : <PaymentsTable rows={c.payments} />}
+        <PaymentsTable title={`${c.name} - payments`} rows={c.payments} empty={<EmptyState title="No payments yet" icon={<CreditCard />} />} />
       </Card>
 
       <CompanyFormDialog open={editOpen} onOpenChange={setEditOpen} company={c} />
@@ -316,23 +309,24 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return <div className="flex items-start justify-between gap-3"><span className="text-muted-foreground">{label}</span><span className="text-right font-medium">{children}</span></div>;
 }
 
-function PaymentsTable({ rows, showCompany }: { rows: CompanyPaymentRow[]; showCompany?: boolean }) {
+function PaymentsTable({ rows, showCompany, title = 'Subscription payments', empty, loading, error, onRetry, pagination, fetchAll, toolbar, footer }: {
+  rows?: CompanyPaymentRow[]; showCompany?: boolean; title?: string; empty?: React.ReactNode; loading?: boolean; error?: unknown; onRetry?: () => void;
+  pagination?: ServerPagination; fetchAll?: () => Promise<CompanyPaymentRow[]>; toolbar?: React.ReactNode; footer?: string;
+}) {
+  const navigate = useNavigate();
+  const columns: DataColumn<CompanyPaymentRow>[] = [
+    { id: 'paidAt', header: 'Paid on', value: (p) => p.paidAt, text: (p) => formatDate(p.paidAt), className: 'whitespace-nowrap' },
+    ...(showCompany ? [{ id: 'company', header: 'Company', value: (p: CompanyPaymentRow) => p.company, cell: (p: CompanyPaymentRow) => <span className="font-medium">{p.company}</span> }] : []),
+    { id: 'method', header: 'Method', value: (p) => methodLabel(p.method) },
+    { id: 'reference', header: 'Reference', value: (p) => p.reference || '-', className: 'text-muted-foreground' },
+    { id: 'period', header: 'Period', value: (p) => p.periodFrom, text: (p) => `${formatDate(p.periodFrom)} - ${formatDate(p.periodTo)} (${p.months} mo)`, className: 'whitespace-nowrap text-muted-foreground' },
+    { id: 'amount', header: 'Amount', type: 'money', value: (p) => p.amount, cell: (p) => <span className="font-semibold">{formatPKR(p.amount)}</span> },
+  ];
   return (
-    <Table>
-      <THead><TR><TH>Paid on</TH>{showCompany && <TH>Company</TH>}<TH>Method</TH><TH>Reference</TH><TH>Period</TH><TH className="text-right">Amount</TH></TR></THead>
-      <TBody>
-        {rows.map((p) => (
-          <TR key={p.id}>
-            <TD className="whitespace-nowrap">{formatDate(p.paidAt)}</TD>
-            {showCompany && <TD><Link className="font-medium hover:underline" to={`/platform/companies/${p.companyId}`}>{p.company}</Link></TD>}
-            <TD>{methodLabel(p.method)}</TD>
-            <TD className="text-muted-foreground">{p.reference || '-'}</TD>
-            <TD className="whitespace-nowrap text-muted-foreground">{formatDate(p.periodFrom)} - {formatDate(p.periodTo)} ({p.months} mo)</TD>
-            <TD className="text-right font-semibold tabular-nums">{formatPKR(p.amount)}</TD>
-          </TR>
-        ))}
-      </TBody>
-    </Table>
+    <DataTable title={title} noun="payment" rows={rows} columns={columns} getRowId={(p) => p.id} loading={loading} error={error} onRetry={onRetry}
+      pagination={pagination} fetchAll={fetchAll} toolbar={toolbar} empty={empty}
+      onView={showCompany ? (p) => navigate(`/platform/companies/${p.companyId}`) : undefined}
+      footer={footer ? () => ({ amount: footer }) : undefined} />
   );
 }
 
@@ -341,25 +335,33 @@ function PaymentsTable({ rows, showCompany }: { rows: CompanyPaymentRow[]; showC
 export function PlatformPaymentsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const q = useQuery({
-    queryKey: ['platform', 'payments', { search, page }],
-    queryFn: () => api.get<Paginated<CompanyPaymentRow> & { totalAmount: string }>('/platform/payments', { search, page, pageSize: 25 }),
+    queryKey: ['platform', 'payments', { search, page, pageSize }],
+    queryFn: () => api.get<Paginated<CompanyPaymentRow> & { totalAmount: string }>('/platform/payments', { search, page, pageSize }),
     placeholderData: keepPreviousData,
   });
   return (
     <div>
       <PageHeader title="Subscription Payments" description="Payments received from companies (JazzCash, EasyPaisa, bank, cash). Record a new one from the company page." />
       <Card>
-        <div className="flex flex-col gap-2 border-b p-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative max-w-xs flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Search company or reference" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          </div>
-          {q.data && <p className="text-sm">Total: <span className="font-semibold">{formatPKR(q.data.totalAmount)}</span></p>}
-        </div>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <TableSkeleton />
-          : q.data!.data.length === 0 ? <EmptyState title="No payments found" icon={<CreditCard />} /> : <PaymentsTable rows={q.data!.data} showCompany />}
-        <Pager meta={q.data?.meta} page={page} setPage={setPage} noun="payments" />
+        <PaymentsTable
+          showCompany
+          rows={q.data?.data}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<CompanyPaymentRow>>('/platform/payments', { search, page: pg, pageSize: size }))}
+          footer={q.data ? `Total ${formatPKR(q.data.totalAmount)}` : undefined}
+          toolbar={
+            <div className="relative max-w-xs flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-8" placeholder="Search company or reference" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+            </div>
+          }
+          empty={<EmptyState title="No payments found" icon={<CreditCard />} />}
+        />
       </Card>
     </div>
   );
@@ -449,39 +451,41 @@ export function PlansPage() {
 export function PlatformActivityPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const q = useQuery({
-    queryKey: ['platform', 'activity', { search, page }],
-    queryFn: () => api.get<Paginated<PlatformAuditRow>>('/platform/audit-logs', { search, page, pageSize: 50 }),
+    queryKey: ['platform', 'activity', { search, page, pageSize }],
+    queryFn: () => api.get<Paginated<PlatformAuditRow>>('/platform/audit-logs', { search, page, pageSize }),
     placeholderData: keepPreviousData,
   });
   return (
     <div>
       <PageHeader title="Platform Activity" description="Super Admin actions: companies created, plan changes, payments, suspensions and support visits. It cannot be edited or deleted." />
       <Card>
-        <div className="border-b p-3">
-          <div className="relative max-w-xs">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Search action" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          </div>
-        </div>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <TableSkeleton />
-          : q.data!.data.length === 0 ? <EmptyState title="No activity yet" /> : (
-            <Table>
-              <THead><TR><TH>When</TH><TH>Action</TH><TH>Company</TH><TH>By</TH><TH>IP</TH></TR></THead>
-              <TBody>
-                {q.data!.data.map((r) => (
-                  <TR key={r.id}>
-                    <TD className="whitespace-nowrap text-muted-foreground">{formatDateTime(r.createdAt)}</TD>
-                    <TD><Badge variant="secondary">{humanize(r.action)}</Badge></TD>
-                    <TD>{r.company ?? '-'}</TD>
-                    <TD>{r.user ?? 'System'}</TD>
-                    <TD className="text-muted-foreground">{r.ipAddress ?? '-'}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          )}
-        <Pager meta={q.data?.meta} page={page} setPage={setPage} noun="records" />
+        <DataTable
+          title="Platform activity"
+          noun="record"
+          rows={q.data?.data}
+          getRowId={(r) => r.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<PlatformAuditRow>>('/platform/audit-logs', { search, page: pg, pageSize: size }))}
+          toolbar={
+            <div className="relative max-w-xs">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-8" placeholder="Search action" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+            </div>
+          }
+          columns={[
+            { id: 'when', header: 'When', value: (r) => r.createdAt, text: (r) => formatDateTime(r.createdAt), className: 'whitespace-nowrap text-muted-foreground' },
+            { id: 'action', header: 'Action', value: (r) => humanize(r.action), cell: (r) => <Badge variant="secondary">{humanize(r.action)}</Badge> },
+            { id: 'company', header: 'Company', value: (r) => r.company ?? '-' },
+            { id: 'by', header: 'By', value: (r) => r.user ?? 'System' },
+            { id: 'ip', header: 'IP', value: (r) => r.ipAddress ?? '-', className: 'text-muted-foreground' },
+          ]}
+          empty={<EmptyState title="No activity yet" />}
+        />
       </Card>
     </div>
   );

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, NativeSelect } from '@/components/ui/input';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable, fetchAllPages } from '@/components/data-table/DataTable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { useCan } from '@/hooks/use-permission';
@@ -197,58 +197,51 @@ function LoginsTab() {
   const [result, setResult] = useState<'all' | 'failed' | 'success'>('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const params = { result, search: search || undefined };
   const q = useQuery({
-    queryKey: ['security', 'logins', result, search, page],
-    queryFn: () => api.get<Paginated<LoginAttemptRow>>('/security/login-attempts', { result, search: search || undefined, page, pageSize: 25 }),
+    queryKey: ['security', 'logins', result, search, page, pageSize],
+    queryFn: () => api.get<Paginated<LoginAttemptRow>>('/security/login-attempts', { ...params, page, pageSize }),
   });
+  const resultText = (a: LoginAttemptRow) => (a.success ? 'Signed in' : REASONS[a.reason ?? ''] ?? humanize(a.reason ?? 'Failed'));
   return (
     <Card>
-      <div className="flex flex-wrap items-center gap-2 border-b p-3">
-        <NativeSelect aria-label="Result" className="w-auto" value={result} onChange={(e) => { setResult(e.target.value as typeof result); setPage(1); }}>
-          <option value="all">All logins</option><option value="failed">Failed only</option><option value="success">Successful only</option>
-        </NativeSelect>
-        <Input aria-label="Search username or address" placeholder="Search username or address" className="sm:w-64" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-      </div>
-      {q.isLoading ? <LoadingState /> : q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
-        : !q.data?.data.length ? <EmptyState icon={<ShieldCheck />} title="No logins found" /> : (
-          <>
-            <div className="hidden md:block">
-              <Table>
-                <THead><TR><TH>Time</TH><TH>Username / email</TH><TH>Address</TH><TH>Result</TH></TR></THead>
-                <TBody>
-                  {q.data.data.map((a) => (
-                    <TR key={a.id}>
-                      <TD className="whitespace-nowrap">{formatDateTime(a.createdAt)}</TD>
-                      <TD>{a.identifier}</TD>
-                      <TD className="font-mono text-xs">{a.ipAddress ?? '-'}</TD>
-                      <TD>{a.success ? <Badge variant="success">Signed in</Badge> : <Badge variant="danger">{REASONS[a.reason ?? ''] ?? humanize(a.reason ?? 'Failed')}</Badge>}</TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
+      <DataTable
+        title="Login history"
+        module="security"
+        noun="login"
+        rows={q.data?.data}
+        getRowId={(a) => a.id}
+        loading={q.isLoading}
+        error={q.error}
+        onRetry={() => void q.refetch()}
+        pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+        fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<LoginAttemptRow>>('/security/login-attempts', { ...params, page: pg, pageSize: size }))}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <NativeSelect aria-label="Result" className="w-auto" value={result} onChange={(e) => { setResult(e.target.value as typeof result); setPage(1); }}>
+              <option value="all">All logins</option><option value="failed">Failed only</option><option value="success">Successful only</option>
+            </NativeSelect>
+            <Input aria-label="Search username or address" placeholder="Search username or address" className="sm:w-64" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+          </div>
+        }
+        columns={[
+          { id: 'time', header: 'Time', value: (a) => a.createdAt, text: (a) => formatDateTime(a.createdAt), className: 'whitespace-nowrap' },
+          { id: 'identifier', header: 'Username / email', value: (a) => a.identifier },
+          { id: 'ip', header: 'Address', value: (a) => a.ipAddress ?? '-', className: 'font-mono text-xs' },
+          { id: 'result', header: 'Result', value: resultText, cell: (a) => (a.success ? <Badge variant="success">Signed in</Badge> : <Badge variant="danger">{resultText(a)}</Badge>) },
+        ]}
+        empty={<EmptyState icon={<ShieldCheck />} title="No logins found" />}
+        mobileCard={(a) => (
+          <div className="flex items-center justify-between gap-2 px-1 py-3">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{a.identifier}</p>
+              <p className="text-xs text-muted-foreground">{formatDateTime(a.createdAt)} · {a.ipAddress ?? '-'}</p>
             </div>
-            <ul className="divide-y md:hidden">
-              {q.data.data.map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-2 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{a.identifier}</p>
-                    <p className="text-xs text-muted-foreground">{formatDateTime(a.createdAt)} · {a.ipAddress ?? '-'}</p>
-                  </div>
-                  {a.success ? <Badge variant="success">Signed in</Badge> : <Badge variant="danger">{REASONS[a.reason ?? ''] ?? 'Failed'}</Badge>}
-                </li>
-              ))}
-            </ul>
-            {q.data.meta.totalPages > 1 && (
-              <div className="flex items-center justify-between border-t p-3 text-sm">
-                <span className="text-muted-foreground">Page {q.data.meta.page} of {q.data.meta.totalPages}</span>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-                  <Button size="sm" variant="outline" disabled={page >= q.data.meta.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-                </div>
-              </div>
-            )}
-          </>
+            {a.success ? <Badge variant="success">Signed in</Badge> : <Badge variant="danger">{resultText(a)}</Badge>}
+          </div>
         )}
+      />
     </Card>
   );
 }

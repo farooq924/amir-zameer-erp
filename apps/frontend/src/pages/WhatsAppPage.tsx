@@ -1,12 +1,14 @@
 import { WHATSAPP_AUTO_PURPOSES, WHATSAPP_PURPOSES, WHATSAPP_VARIABLES, formatPhone, renderWhatsAppTemplate, templatePlaceholderCount } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CheckCheck, Clock, Copy, Link2, MessageCircle, Pencil, Plug, Plus, RefreshCw, RotateCcw, Save, Search, Send, ShieldCheck, Users, X, XCircle,
+  CheckCheck, Clock, Copy, Link2, MessageCircle, Pencil, Plug, Plus, RefreshCw, RotateCcw, Save, Search, Send, ShieldCheck, Users, XCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common';
+import { type DataColumn, DataTable, fetchAllPages } from '@/components/data-table/DataTable';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +16,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { DateRange, monthStartPK, todayPK } from '@/features/finance/shared';
@@ -41,11 +42,13 @@ function MessagesTab() {
   const [from, setFrom] = useState(monthStartPK());
   const [to, setTo] = useState(todayPK());
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [open, setOpen] = useState<WaMessage | null>(null);
   useEffect(() => setPage(1), [search, status, channel, from, to]);
+  const listParams = { search: search.trim() || undefined, status, channel, from: from || undefined, to: to || undefined };
   const q = useQuery({
-    queryKey: ['whatsapp', 'messages', { search, status, channel, from, to, page }],
-    queryFn: () => api.get<Paginated<WaMessage>>('/whatsapp/messages', { search: search.trim() || undefined, status, channel, from: from || undefined, to: to || undefined, page, pageSize: 25 }),
+    queryKey: ['whatsapp', 'messages', { search, status, channel, from, to, page, pageSize }],
+    queryFn: () => api.get<Paginated<WaMessage>>('/whatsapp/messages', { ...listParams, page, pageSize }),
     refetchInterval: 20_000,
   });
   const act = useMutation({
@@ -59,7 +62,20 @@ function MessagesTab() {
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const rows = q.data?.data ?? [];
+  const columns: DataColumn<WaMessage>[] = [
+    { id: 'sent', header: 'Sent', value: (m) => m.createdAt, text: (m) => formatDateTime(m.createdAt), className: 'whitespace-nowrap text-xs' },
+    { id: 'customer', header: 'Customer', value: (m) => m.customer?.name ?? '', text: (m) => `${m.customer?.name ?? '-'} (${formatPhone(m.toNumber)})`,
+      cell: (m) => <>{m.customer ? <Link to={`/customers/${m.customer.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-primary">{m.customer.name}</Link> : <span className="font-medium">-</span>}
+        <span className="block text-xs text-muted-foreground">{formatPhone(m.toNumber)}</span></> },
+    { id: 'message', header: 'Message', value: (m) => m.body, className: 'max-w-[360px]',
+      cell: (m) => { const link = relatedLink(m); return <><span className="text-xs font-medium text-muted-foreground">{m.template ? purposeLabel(m.template.purpose) : 'Typed message'}{link && m.relatedType === 'ORDER' && <> · <Link to={link} onClick={(e) => e.stopPropagation()} className="hover:text-primary">order</Link></>}</span>
+        <span className="block truncate text-sm">{m.body}</span></>; } },
+    { id: 'channel', header: 'Channel', value: (m) => m.channel, cell: (m) => <WaChannelBadge channel={m.channel} /> },
+    { id: 'status', header: 'Status', value: (m) => m.status,
+      cell: (m) => <><WaStatusBadge status={m.status} channel={m.channel} />
+        {m.status === 'QUEUED' && m.attempts > 0 && <span className="block text-[11px] text-muted-foreground">Try {m.attempts + 1} at {formatDateTime(m.nextRetryAt)}</span>}
+        {m.status === 'FAILED' && m.errorMessage && <span className="block max-w-[180px] truncate text-[11px] text-rose-700 dark:text-rose-400" title={m.errorMessage}>{m.errorMessage}</span>}</> },
+  ];
 
   return (
     <div className="space-y-4">
@@ -78,49 +94,29 @@ function MessagesTab() {
         <DateRange idPrefix="wa" from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </Card>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !rows.length ? (
-          <EmptyState icon={<MessageCircle />} title="No messages" description="Messages sent from orders, payments and customers appear here with their delivery status." />
-        ) : (
-          <>
-            <div className="hidden md:block">
-              <Table>
-                <THead><TR><TH>Sent</TH><TH>Customer</TH><TH>Message</TH><TH>Channel</TH><TH>Status</TH><TH className="w-24"><span className="sr-only">Actions</span></TH></TR></THead>
-                <TBody>
-                  {rows.map((m) => {
-                    const link = relatedLink(m);
-                    return (
-                      <TR key={m.id} className="cursor-pointer" onClick={() => setOpen(m)}>
-                        <TD className="whitespace-nowrap text-xs">{formatDateTime(m.createdAt)}</TD>
-                        <TD>
-                          {m.customer ? <Link to={`/customers/${m.customer.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-primary">{m.customer.name}</Link> : <span className="font-medium">-</span>}
-                          <span className="block text-xs text-muted-foreground">{formatPhone(m.toNumber)}</span>
-                        </TD>
-                        <TD className="max-w-[360px]">
-                          <span className="text-xs font-medium text-muted-foreground">{m.template ? purposeLabel(m.template.purpose) : 'Typed message'}{link && m.relatedType === 'ORDER' && <> · <Link to={link} onClick={(e) => e.stopPropagation()} className="hover:text-primary">order</Link></>}</span>
-                          <span className="block truncate text-sm">{m.body}</span>
-                        </TD>
-                        <TD><WaChannelBadge channel={m.channel} /></TD>
-                        <TD>
-                          <WaStatusBadge status={m.status} channel={m.channel} />
-                          {m.status === 'QUEUED' && m.attempts > 0 && <span className="block text-[11px] text-muted-foreground">Try {m.attempts + 1} at {formatDateTime(m.nextRetryAt)}</span>}
-                          {m.status === 'FAILED' && m.errorMessage && <span className="block max-w-[180px] truncate text-[11px] text-rose-700 dark:text-rose-400" title={m.errorMessage}>{m.errorMessage}</span>}
-                        </TD>
-                        <TD onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-end gap-1">
-                            {can('whatsapp', 'CREATE') && m.channel === 'CLOUD_API' && (m.status === 'FAILED' || m.status === 'QUEUED') && <Button variant="ghost" size="icon" aria-label="Send again" loading={act.isPending} onClick={() => act.mutate({ id: m.id, kind: 'retry' })}><RotateCcw /></Button>}
-                            {can('whatsapp', 'CREATE') && m.status === 'QUEUED' && <Button variant="ghost" size="icon" aria-label="Cancel message" onClick={() => act.mutate({ id: m.id, kind: 'cancel' })}><X /></Button>}
-                          </div>
-                        </TD>
-                      </TR>
-                    );
-                  })}
-                </TBody>
-              </Table>
-            </div>
-            <ul className="divide-y md:hidden">
-              {rows.map((m) => (
-                <li key={m.id}>
-                  <button type="button" className="w-full p-3 text-left" onClick={() => setOpen(m)}>
+        <DataTable
+          title="WhatsApp messages"
+          module="whatsapp"
+          noun="message"
+          rows={q.data?.data}
+          columns={columns}
+          getRowId={(m) => m.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<WaMessage>>('/whatsapp/messages', { ...listParams, page: pg, pageSize: size }))}
+          onRowClick={(m) => setOpen(m)}
+          onView={(m) => setOpen(m)}
+          deleteRow={can('whatsapp', 'CREATE') ? (m) => api.post(`/whatsapp/messages/${m.id}/cancel`) : undefined}
+          canRow={(a, m) => a !== 'delete' || m.status === 'QUEUED'}
+          deleteWarning="Only queued messages can be removed: they are cancelled and will not be sent. Sent messages stay in the log."
+          onChanged={() => qc.invalidateQueries({ queryKey: ['whatsapp'] })}
+          rowMenu={can('whatsapp', 'CREATE') ? (m) => (m.channel === 'CLOUD_API' && (m.status === 'FAILED' || m.status === 'QUEUED')
+            ? <DropdownMenuItem onSelect={() => act.mutate({ id: m.id, kind: 'retry' })}><RotateCcw /> Send again</DropdownMenuItem> : null) : undefined}
+          empty={<EmptyState icon={<MessageCircle />} title="No messages" description="Messages sent from orders, payments and customers appear here with their delivery status." />}
+          mobileCard={(m) => (
+            <button type="button" className="w-full px-1 py-3 text-left" onClick={() => setOpen(m)}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{m.customer?.name ?? formatPhone(m.toNumber)}</p>
@@ -131,18 +127,8 @@ function MessagesTab() {
                     <p className="mt-1.5 line-clamp-2 text-sm">{m.body}</p>
                     <div className="mt-1.5 flex items-center gap-2"><WaChannelBadge channel={m.channel} /><span className="text-xs text-muted-foreground">{m.template ? purposeLabel(m.template.purpose) : 'Typed message'}</span></div>
                   </button>
-                </li>
-              ))}
-            </ul>
-            <div className="flex items-center justify-between gap-2 border-t px-4 py-3 text-sm">
-              <span className="text-muted-foreground">{q.data!.meta.total} message(s)</span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                <Button size="sm" variant="outline" disabled={page >= q.data!.meta.totalPages} onClick={() => setPage(page + 1)}>Next</Button>
-              </div>
-            </div>
-          </>
-        )}
+          )}
+        />
       </Card>
       <Dialog open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
         <DialogContent className="max-w-md">

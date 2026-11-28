@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common';
+import { ConfirmDialog, EmptyState, ErrorState, PageHeader } from '@/components/common';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import { Input, NativeSelect } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable, fetchAllPages } from '@/components/data-table/DataTable';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
@@ -95,6 +96,7 @@ export function BackupPage() {
   const qc = useQueryClient();
   const [type, setType] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [note, setNote] = useState('');
   const [testResult, setTestResult] = useState<{ row: BackupRow; result: RestoreTestResult } | null>(null);
   const [toDelete, setToDelete] = useState<BackupRow | null>(null);
@@ -104,8 +106,8 @@ export function BackupPage() {
 
   const overview = useQuery({ queryKey: ['backup', 'overview'], queryFn: () => api.get<BackupOverview>('/backup/overview'), refetchInterval: 30_000 });
   const list = useQuery({
-    queryKey: ['backup', 'list', type, page],
-    queryFn: () => api.get<Paginated<BackupRow>>('/backup', { type: type || undefined, page, pageSize: 20 }),
+    queryKey: ['backup', 'list', type, page, pageSize],
+    queryFn: () => api.get<Paginated<BackupRow>>('/backup', { type: type || undefined, page, pageSize }),
   });
   const refresh = () => { void qc.invalidateQueries({ queryKey: ['backup'] }); void qc.invalidateQueries({ queryKey: ['security'] }); };
 
@@ -187,7 +189,19 @@ export function BackupPage() {
 
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
         <Card className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 border-b p-3">
+          <DataTable
+            title="Backups"
+            module="backup"
+            noun="backup"
+            rows={list.data?.data}
+            getRowId={(r) => r.id}
+            loading={list.isLoading}
+            error={list.error}
+            onRetry={() => void list.refetch()}
+            pagination={{ page, pageSize, total: list.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+            fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<BackupRow>>('/backup', { type: type || undefined, page: pg, pageSize: size }))}
+            toolbar={
+          <div className="flex flex-wrap items-center gap-2">
             <NativeSelect aria-label="Backup type" className="w-auto" value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
               <option value="">All backups</option><option value="AUTOMATIC">Automatic</option><option value="MANUAL">Manual</option>
             </NativeSelect>
@@ -197,59 +211,35 @@ export function BackupPage() {
               </div>
             )}
           </div>
-          {list.isLoading ? <LoadingState /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} />
-            : !list.data?.data.length ? (
-              <EmptyState icon={<DatabaseBackup />} title="No backups yet" description="Press Back up now to make the first encrypted backup." />
-            ) : (
-              <>
-                {/* Desktop table */}
-                <div className="hidden md:block">
-                  <Table>
-                    <THead><TR><TH>Date</TH><TH>Backup</TH><TH>Size</TH><TH>Status</TH><TH className="w-12" /></TR></THead>
-                    <TBody>
-                      {list.data.data.map((r) => (
-                        <TR key={r.id}>
-                          <TD className="whitespace-nowrap">{formatDateTime(r.startedAt)}</TD>
-                          <TD>
-                            <div className="flex items-center gap-2"><span className="font-medium">{r.type === 'AUTOMATIC' ? 'Automatic' : 'Manual'}</span>{r.restoredAt && <Badge variant="gold">Restored {formatDateTime(r.restoredAt)}</Badge>}</div>
-                            <p className="text-xs text-muted-foreground">{r.note ?? r.fileName}{r.createdBy && r.type === 'MANUAL' ? ` · by ${r.createdBy}` : ''}</p>
-                            {r.restoreTest && <p className={r.restoreTest.ok ? 'text-xs text-emerald-700 dark:text-emerald-400' : 'text-xs text-rose-700 dark:text-rose-400'}>{r.restoreTest.ok ? 'Restore test passed' : 'Restore test failed'} · {formatDateTime(r.restoreTest.at)}</p>}
-                            {r.errorMessage && <p className="text-xs text-rose-700 dark:text-rose-400">{r.errorMessage}</p>}
-                          </TD>
-                          <TD className="whitespace-nowrap tabular-nums">{formatBytes(r.sizeBytes)}</TD>
-                          <TD><BackupStatusBadge status={r.status} /></TD>
-                          <TD><RowMenu row={r} busy={busyId === r.id} perms={{ canCreate, canApprove, canExport, isOwner }} onAction={act} onDelete={setToDelete} onRestore={setToRestore} /></TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
+            }
+            columns={[
+              { id: 'date', header: 'Date', value: (r) => r.startedAt, text: (r) => formatDateTime(r.startedAt), className: 'whitespace-nowrap' },
+              { id: 'backup', header: 'Backup', value: (r) => (r.type === 'AUTOMATIC' ? 'Automatic' : 'Manual'), text: (r) => `${r.type === 'AUTOMATIC' ? 'Automatic' : 'Manual'} - ${r.note ?? r.fileName}`,
+                cell: (r) => <>
+                  <div className="flex items-center gap-2"><span className="font-medium">{r.type === 'AUTOMATIC' ? 'Automatic' : 'Manual'}</span>{r.restoredAt && <Badge variant="gold">Restored {formatDateTime(r.restoredAt)}</Badge>}</div>
+                  <p className="text-xs text-muted-foreground">{r.note ?? r.fileName}{r.createdBy && r.type === 'MANUAL' ? ` · by ${r.createdBy}` : ''}</p>
+                  {r.restoreTest && <p className={r.restoreTest.ok ? 'text-xs text-emerald-700 dark:text-emerald-400' : 'text-xs text-rose-700 dark:text-rose-400'}>{r.restoreTest.ok ? 'Restore test passed' : 'Restore test failed'} · {formatDateTime(r.restoreTest.at)}</p>}
+                  {r.errorMessage && <p className="text-xs text-rose-700 dark:text-rose-400">{r.errorMessage}</p>}
+                </> },
+              { id: 'size', header: 'Size', type: 'number', value: (r) => r.sizeBytes, text: (r) => formatBytes(r.sizeBytes) },
+              { id: 'status', header: 'Status', value: (r) => r.status, cell: (r) => <BackupStatusBadge status={r.status} /> },
+              { id: 'menu', header: '', exportable: false, sortable: false, className: 'w-12 no-print',
+                cell: (r) => <span onClick={(e) => e.stopPropagation()}><RowMenu row={r} busy={busyId === r.id} perms={{ canCreate, canApprove, canExport, isOwner }} onAction={act} onDelete={setToDelete} onRestore={setToRestore} /></span> },
+            ]}
+            empty={<EmptyState icon={<DatabaseBackup />} title="No backups yet" description="Press Back up now to make the first encrypted backup." />}
+            mobileCard={(r) => (
+              <div className="flex items-start gap-3 px-1 py-3">
+                <div className="icon-tile h-10 w-10 bg-gold-soft text-[#9a7420] dark:text-gold"><DatabaseBackup className="h-5 w-5" /></div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{r.type === 'AUTOMATIC' ? 'Automatic' : 'Manual'}</span><BackupStatusBadge status={r.status} /></div>
+                  <p className="text-xs text-muted-foreground">{formatDateTime(r.startedAt)} · {formatBytes(r.sizeBytes)}</p>
+                  {r.note && <p className="truncate text-xs text-muted-foreground">{r.note}</p>}
+                  {r.errorMessage && <p className="text-xs text-rose-700 dark:text-rose-400">{r.errorMessage}</p>}
                 </div>
-                {/* Mobile cards */}
-                <ul className="divide-y md:hidden">
-                  {list.data.data.map((r) => (
-                    <li key={r.id} className="flex items-start gap-3 p-3">
-                      <div className="icon-tile h-10 w-10 bg-gold-soft text-[#9a7420] dark:text-gold"><DatabaseBackup className="h-5 w-5" /></div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{r.type === 'AUTOMATIC' ? 'Automatic' : 'Manual'}</span><BackupStatusBadge status={r.status} /></div>
-                        <p className="text-xs text-muted-foreground">{formatDateTime(r.startedAt)} · {formatBytes(r.sizeBytes)}</p>
-                        {r.note && <p className="truncate text-xs text-muted-foreground">{r.note}</p>}
-                        {r.errorMessage && <p className="text-xs text-rose-700 dark:text-rose-400">{r.errorMessage}</p>}
-                      </div>
-                      <RowMenu row={r} busy={busyId === r.id} perms={{ canCreate, canApprove, canExport, isOwner }} onAction={act} onDelete={setToDelete} onRestore={setToRestore} />
-                    </li>
-                  ))}
-                </ul>
-                {list.data.meta.totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t p-3 text-sm">
-                    <span className="text-muted-foreground">Page {list.data.meta.page} of {list.data.meta.totalPages}</span>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-                      <Button size="sm" variant="outline" disabled={page >= list.data.meta.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-                    </div>
-                  </div>
-                )}
-              </>
+                <RowMenu row={r} busy={busyId === r.id} perms={{ canCreate, canApprove, canExport, isOwner }} onAction={act} onDelete={setToDelete} onRestore={setToRestore} />
+              </div>
             )}
+          />
         </Card>
 
         <div className="space-y-4">

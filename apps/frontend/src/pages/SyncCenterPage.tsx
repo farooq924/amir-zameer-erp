@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, NativeSelect } from '@/components/ui/input';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable, fetchAllPages } from '@/components/data-table/DataTable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { ConflictReviewDialog } from '@/features/offline/ConflictReviewDialog';
@@ -47,6 +47,7 @@ export function SyncCenterPage() {
   const [logStatus, setLogStatus] = useState('');
   const [logEntity, setLogEntity] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [name, setName] = useState(deviceName());
 
   const outbox = useLive(async () => (user ? (await db.outbox.where('userId').equals(user.id).toArray()).sort((a, b) => b.clientTimestamp.localeCompare(a.clientTimestamp)) : []), [user?.id], [] as OutboxOp[]);
@@ -56,9 +57,10 @@ export function SyncCenterPage() {
     queryFn: () => api.get<SyncConflictRow[]>('/sync/conflicts', { status: conflictStatus, scope }),
     enabled: online,
   });
+  const logParams = { scope, status: logStatus || undefined, entityType: logEntity || undefined };
   const log = useQuery({
-    queryKey: ['sync', 'log', scope, logStatus, logEntity, page],
-    queryFn: () => api.get<Paginated<SyncLogRow>>('/sync/operations', { scope, status: logStatus || undefined, entityType: logEntity || undefined, page, pageSize: 25 }),
+    queryKey: ['sync', 'log', scope, logStatus, logEntity, page, pageSize],
+    queryFn: () => api.get<Paginated<SyncLogRow>>('/sync/operations', { ...logParams, page, pageSize }),
     enabled: online && tab === 'log',
   });
 
@@ -169,7 +171,20 @@ export function SyncCenterPage() {
 
         <TabsContent value="log">
           <Card>
-            <div className="flex flex-wrap items-center gap-2 border-b p-3">
+            {!online ? <EmptyState icon={<WifiOff />} title="Go online to see the sync log" /> : (
+              <DataTable
+                title="Sync log"
+                module="sync"
+                noun="entry"
+                rows={log.data?.data}
+                getRowId={(r) => r.id}
+                loading={log.isLoading}
+                error={log.error}
+                onRetry={() => void log.refetch()}
+                pagination={{ page, pageSize, total: log.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+                fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<SyncLogRow>>('/sync/operations', { ...logParams, page: pg, pageSize: size }))}
+                toolbar={
+            <div className="flex flex-wrap items-center gap-2">
               <NativeSelect aria-label="Status" className="w-auto" value={logStatus} onChange={(e) => { setLogStatus(e.target.value); setPage(1); }}>
                 <option value="">All statuses</option><option value="APPLIED">Saved</option><option value="CONFLICT">Conflict</option><option value="REJECTED">Rejected</option>
               </NativeSelect>
@@ -182,49 +197,28 @@ export function SyncCenterPage() {
                 </NativeSelect>
               )}
             </div>
-            {!online ? <EmptyState icon={<WifiOff />} title="Go online to see the sync log" />
-              : log.isLoading ? <LoadingState />
-              : log.isError ? <ErrorState message={errorMessage(log.error)} onRetry={() => void log.refetch()} />
-              : !log.data?.data.length ? <EmptyState title="No synced entries yet" description="Entries saved in the Offline Desk appear here once they reach the server." />
-              : (
-                <>
-                  <div className="hidden md:block">
-                    <Table>
-                      <THead><TR><TH>Synced</TH><TH>Record</TH><TH>User / device</TH><TH>Status</TH><TH>Result</TH></TR></THead>
-                      <TBody>
-                        {log.data.data.map((r) => (
-                          <TR key={r.id}>
-                            <TD className="whitespace-nowrap text-xs">{formatDateTime(r.serverTimestamp)}<span className="block text-muted-foreground">saved {formatDateTime(r.clientTimestamp)}</span></TD>
-                            <TD>{syncEntityLabel(r.entityType)} <span className="text-xs text-muted-foreground">{r.operation === 'CREATE' ? 'new' : 'edit'}</span></TD>
-                            <TD className="text-xs">{r.user?.fullName ?? '-'}<span className="block font-mono text-muted-foreground">{r.deviceId}</span></TD>
-                            <TD><SyncStatusBadge status={r.status} /></TD>
-                            <TD className="max-w-xs text-xs">{r.status === 'APPLIED' ? resultText(r.result) : <span className="text-muted-foreground">{r.message}</span>}</TD>
-                          </TR>
-                        ))}
-                      </TBody>
-                    </Table>
+                }
+                columns={[
+                  { id: 'synced', header: 'Synced', value: (r) => r.serverTimestamp, text: (r) => `${formatDateTime(r.serverTimestamp)} (saved ${formatDateTime(r.clientTimestamp)})`,
+                    cell: (r) => <span className="whitespace-nowrap text-xs">{formatDateTime(r.serverTimestamp)}<span className="block text-muted-foreground">saved {formatDateTime(r.clientTimestamp)}</span></span> },
+                  { id: 'record', header: 'Record', value: (r) => `${syncEntityLabel(r.entityType)} ${r.operation === 'CREATE' ? 'new' : 'edit'}`,
+                    cell: (r) => <>{syncEntityLabel(r.entityType)} <span className="text-xs text-muted-foreground">{r.operation === 'CREATE' ? 'new' : 'edit'}</span></> },
+                  { id: 'user', header: 'User / device', value: (r) => `${r.user?.fullName ?? '-'} ${r.deviceId}`,
+                    cell: (r) => <span className="text-xs">{r.user?.fullName ?? '-'}<span className="block font-mono text-muted-foreground">{r.deviceId}</span></span> },
+                  { id: 'status', header: 'Status', value: (r) => r.status, cell: (r) => <SyncStatusBadge status={r.status} /> },
+                  { id: 'result', header: 'Result', value: (r) => (r.status === 'APPLIED' ? resultText(r.result) : r.message ?? ''), className: 'max-w-xs text-xs',
+                    cell: (r) => (r.status === 'APPLIED' ? resultText(r.result) : <span className="text-muted-foreground">{r.message}</span>) },
+                ]}
+                empty={<EmptyState title="No synced entries yet" description="Entries saved in the Offline Desk appear here once they reach the server." />}
+                mobileCard={(r) => (
+                  <div className="space-y-1 px-1 py-3">
+                    <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{syncEntityLabel(r.entityType)} {r.operation === 'CREATE' ? '(new)' : '(edit)'}</span><SyncStatusBadge status={r.status} /></div>
+                    <p className="text-xs text-muted-foreground">{formatDateTime(r.serverTimestamp)} · {r.user?.fullName ?? '-'}</p>
+                    <p className="text-xs">{r.status === 'APPLIED' ? resultText(r.result) : r.message}</p>
                   </div>
-                  <ul className="divide-y md:hidden">
-                    {log.data.data.map((r) => (
-                      <li key={r.id} className="space-y-1 p-3">
-                        <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{syncEntityLabel(r.entityType)} {r.operation === 'CREATE' ? '(new)' : '(edit)'}</span><SyncStatusBadge status={r.status} /></div>
-                        <p className="text-xs text-muted-foreground">{formatDateTime(r.serverTimestamp)} · {r.user?.fullName ?? '-'}</p>
-                        <p className="text-xs">{r.status === 'APPLIED' ? resultText(r.result) : r.message}</p>
-                      </li>
-                    ))}
-                  </ul>
-                  {log.data.meta.totalPages > 1 && (
-                    <div className="flex items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground">
-                      <span>{log.data.meta.total} record(s)</span>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                        <span className="self-center">Page {page} of {log.data.meta.totalPages}</span>
-                        <Button size="sm" variant="outline" disabled={page >= log.data.meta.totalPages} onClick={() => setPage(page + 1)}>Next</Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
+                )}
+              />
+            )}
           </Card>
         </TabsContent>
 
