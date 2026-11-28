@@ -19,6 +19,13 @@ const EnvSchema = z.object({
   TRUST_PROXY: bool.default(false),
   /** Folder of the built web app served on the API port. Default: apps/frontend/dist. */
   FRONTEND_DIST: z.string().optional(),
+  /** Phase 10 backups. Folder for .azbak files (default: <project>/backups). */
+  BACKUP_DIR: z.string().optional(),
+  /** Encryption key for backups (min 16 characters). When empty, a key file is created (BACKUP_KEY_FILE, default apps/backend/backup.key). */
+  BACKUP_ENCRYPTION_KEY: z.string().optional(),
+  BACKUP_KEY_FILE: z.string().optional(),
+  /** Folder with pg_dump / pg_restore, e.g. C:\Program Files\PostgreSQL\18\bin. Found automatically when empty. */
+  PG_BIN_DIR: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;

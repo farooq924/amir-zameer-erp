@@ -13,3 +13,5 @@ test-results
 dist-seed
 .sandbox-ca.crt
 logs/
+backup.key
+*.azbak

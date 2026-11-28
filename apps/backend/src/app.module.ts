@@ -22,6 +22,8 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { SyncModule } from './modules/sync/sync.module';
+import { BackupModule } from './modules/backup/backup.module';
+import { SecurityModule } from './modules/security/security.module';
 import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthController } from './modules/health/health.controller';
@@ -58,6 +60,8 @@ import { UsersModule } from './modules/users/users.module';
     ReportsModule,
     WhatsAppModule,
     SyncModule,
+    BackupModule,
+    SecurityModule,
   ],
   controllers: [HealthController],
   providers: [

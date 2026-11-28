@@ -18,6 +18,21 @@ if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) 
   Stop-WithError 'Auto-start is not set up yet. Double-click SETUP-AUTO-START.cmd first.'
 }
 
+# Safety first: an encrypted backup of the current data before anything changes (from version 1.10.0 on).
+$backupCli = Join-Path $Root 'apps\backend\dist\modules\backup\cli.js'
+if (Test-Path $backupCli) {
+  Say 'Making a backup before the update...' 'Cyan'
+  Push-Location (Join-Path $Root 'apps\backend')
+  & node 'dist\modules\backup\cli.js' create 'Before update'
+  $backupOk = ($LASTEXITCODE -eq 0)
+  Pop-Location
+  if (-not $backupOk) {
+    Say 'The backup before the update failed (see above).' 'Red'
+    $go = Read-Host 'Type YES to update anyway, or press Enter to stop'
+    if ($go -ne 'YES') { Stop-WithError 'Update cancelled. Nothing was changed.' }
+  }
+}
+
 Say 'Stopping the ERP...' 'Cyan'
 Stop-ErpServer
 Build-Erp

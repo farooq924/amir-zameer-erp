@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ClipboardList, Home, KeyRound, LogOut, Menu, Moon, MoreHorizontal, Plus, Ruler, UserPlus, Users, WifiOff, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ClipboardList, Home, KeyRound, LogOut, Menu, MonitorSmartphone, Moon, MoreHorizontal, Plus, Ruler, UserPlus, Users, WifiOff, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -240,6 +240,7 @@ function ProfileMenu({ name, role, theme, setTheme, onPassword, onLogout, compac
           <span className="min-w-0"><span className="block truncate text-sm font-semibold">{name}</span><span className="block truncate text-xs text-muted-foreground">{role}</span></span>
         </div>
         <DropdownMenuItem onSelect={onPassword}><KeyRound /> Change Password</DropdownMenuItem>
+        <DropdownMenuItem asChild><Link to="/security?tab=sessions"><MonitorSmartphone /> My Devices</Link></DropdownMenuItem>
         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTheme(theme === 'dark' ? 'light' : 'dark'); }}>
           <Moon /> <span className="flex-1">Dark Mode</span>
           <Switch checked={theme === "dark"} onCheckedChange={() => undefined} className="pointer-events-none" aria-label="Dark mode" />

@@ -11,6 +11,23 @@ export const BUILD_DATE = __BUILD_DATE__;
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
   {
+    version: '1.10.0', title: 'Security, Backups & Deployment',
+    notes: [
+      'New Backup & Restore page: encrypted backup of all ERP data with one click (Back up now)',
+      'Automatic daily backup at a time you choose (default 11:00 PM); runs later if the PC was off at that time',
+      'Every backup is encrypted (AES-256) and checked after saving; keeps the last 14 automatic backups',
+      'Optional second copy folder: a USB drive or Google Drive / OneDrive folder gets a copy of every backup',
+      'Restore test: restores a backup into a temporary database and compares the records, without touching live data',
+      'Restore (Owner only, password + RESTORE): a safety backup is made first, then all data is replaced in one step',
+      'Recovery key download for the Owner, needed to open backups on a new computer',
+      'New Security Center: security checklist with score, signed-in devices, login history and locked accounts',
+      'Sign out any device, or all your other devices; unlock a locked account',
+      'My Devices in the user menu for every user',
+      'Extra browser protection headers; clearer errors for too large requests',
+      'Backup and restore scripts for Windows, automatic backup before every update, VPS / Docker deployment guide and handover guide',
+    ],
+  },
+  {
     version: '1.9.0', title: 'Offline App & Sync',
     notes: [
       'Install the ERP as an app on phones, tablets and PCs (Install app button, or Add to Home Screen)',

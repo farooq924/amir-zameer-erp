@@ -49,6 +49,7 @@ export const MODULES: readonly ModuleDefinition[] = [
   { key: 'accounting', label: 'Accounting', path: '/accounting', phase: 6, icon: 'BookOpen', actions: [...CRUD_APPROVE, 'MANAGE_SETTINGS'] },
   { key: 'reports', label: 'Reports', path: '/reports', phase: 7, icon: 'BarChart3', actions: ['VIEW', 'EXPORT', 'PRINT'] },
   { key: 'whatsapp', label: 'WhatsApp', path: '/whatsapp', phase: 8, icon: 'MessageCircle', actions: ['VIEW', 'CREATE', 'MANAGE_SETTINGS'] },
+  { key: 'security', label: 'Security', path: '/security', phase: 10, icon: 'Lock', actions: ['VIEW', 'MANAGE_SETTINGS'] },
   { key: 'backup', label: 'Backup', path: '/backup', phase: 10, icon: 'DatabaseBackup', actions: ['VIEW', 'CREATE', 'APPROVE', 'EXPORT'] },
   { key: 'audit_logs', label: 'Audit Logs', path: '/audit-logs', phase: 1, icon: 'ShieldCheck', actions: ['VIEW', 'EXPORT'] },
   { key: 'settings', label: 'Settings', path: '/settings', phase: 1, icon: 'Settings', actions: ['VIEW', 'MANAGE_SETTINGS'] },

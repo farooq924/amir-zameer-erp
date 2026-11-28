@@ -46,6 +46,8 @@ import { UsersPage } from '@/pages/UsersPage';
 import { WhatsAppPage } from '@/pages/WhatsAppPage';
 import { OfflineDeskPage } from '@/pages/OfflineDeskPage';
 import { SyncCenterPage } from '@/pages/SyncCenterPage';
+import { BackupPage } from '@/pages/BackupPage';
+import { SecurityPage } from '@/pages/SecurityPage';
 import { useAuth } from '@/store/auth';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -63,7 +65,7 @@ function RequirePermission({ module, action = 'VIEW', children }: { module: stri
   return hasPermission(user, module, action) ? <>{children}</> : <ForbiddenPage />;
 }
 
-const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers', 'employees', 'attendance', 'payroll', 'production', 'payments', 'expenses', 'accounting', 'reports', 'whatsapp', 'sync']);
+const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers', 'employees', 'attendance', 'payroll', 'production', 'payments', 'expenses', 'accounting', 'reports', 'whatsapp', 'sync', 'backup', 'security']);
 
 /** Remount the order form on every navigation so "Book another order" starts clean. */
 function OrderFormRoute() {
@@ -118,6 +120,8 @@ export function App() {
         <Route path="reports/:key" element={<RequirePermission module="reports"><ReportViewerPage /></RequirePermission>} />
         <Route path="whatsapp" element={<RequirePermission module="whatsapp"><WhatsAppPage /></RequirePermission>} />
         <Route path="offline" element={<OfflineDeskPage />} />
+        <Route path="backup" element={<RequirePermission module="backup"><BackupPage /></RequirePermission>} />
+        <Route path="security" element={<SecurityPage />} />
         <Route path="sync" element={<SyncCenterPage />} />
         <Route path="audit-logs" element={<RequirePermission module="audit_logs"><AuditLogsPage /></RequirePermission>} />
         {MODULES.filter((m) => !IMPLEMENTED.has(m.key) && !m.hidden).map((m) => (

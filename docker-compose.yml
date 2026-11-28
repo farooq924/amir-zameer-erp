@@ -4,7 +4,7 @@
 #   docker compose exec backend node dist-seed/seed.js   (first time: creates roles + Owner; safe to re-run)
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -12,7 +12,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       TZ: Asia/Karachi
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -31,7 +31,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public&connection_limit=10
       COOKIE_SECURE: "true"
       TRUST_PROXY: "true"
+      SWAGGER_ENABLED: "false"
       TZ: Asia/Karachi
+    volumes:
+      - backups:/backups      # encrypted .azbak backups (copy them off the server, see docs/BACKUP-RESTORE.md)
+      - backupkey:/app-keys   # backup.key when BACKUP_ENCRYPTION_KEY is not set in .env
 
   frontend:
     build: { context: ., dockerfile: docker/frontend.Dockerfile }
@@ -42,3 +46,5 @@ services:
 
 volumes:
   pgdata:
+  backups:
+  backupkey:

@@ -67,6 +67,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
+    // Body parser errors (too large, broken JSON) carry their own 4xx status.
+    const parserStatus = (exception as { status?: unknown; type?: unknown })?.status;
+    if (typeof parserStatus === 'number' && parserStatus >= 400 && parserStatus < 500 && typeof (exception as { type?: unknown }).type === 'string') {
+      const text = parserStatus === 413 ? 'The request is too large' : 'The request could not be read';
+      return { statusCode: parserStatus, error: HttpStatus[parserStatus] ?? 'Error', message: text, requestId };
+    }
+
     // Business-rule violations raised by database triggers (SQLSTATE P0001).
     const message = (exception as Error)?.message ?? '';
     if (message.includes('P0001') || /append-only|immutable|not balanced|period .* closed/i.test(message)) {

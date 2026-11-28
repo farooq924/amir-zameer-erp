@@ -40,7 +40,7 @@ flowchart LR
 | 7 Reports | All 30 reports with filters, pagination, sorting, column visibility, Excel/CSV/PDF export, print | 6 | **Done (v1.7.0)** |
 | 8 WhatsApp & Printing | Meta Cloud API (templates, webhooks, status, retries, opt-in), manual fallback, A4 invoices, 58/80 mm receipts | 3, 6 | **Done (v1.8.0)** |
 | 9 Offline PWA | Workbox, IndexedDB (Dexie), offline forms, sync queue, idempotent sync API, conflict review | 2-6 | **Done (v1.9.0)** |
-| 10 Security & Deployment | Security/performance tests, encrypted automated backups + restore test, VPS, Docker, SSL, docs, handover | all | Planned |
+| 10 Security & Deployment | Security/performance tests, encrypted automated backups + restore test, VPS, Docker, SSL, docs, handover | all | **Done (v1.10.0)** |
 
 ## Design decisions already locked in (Phase 1)
 
