@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 @layer base {
-  /* AMIR ZAMEER brand: navy + gold. All screens use these tokens. */
+  /* TailoringERP brand: navy + gold. All screens use these tokens. */
   :root {
     --background: 220 33% 97%;
     --foreground: 220 58% 14%;

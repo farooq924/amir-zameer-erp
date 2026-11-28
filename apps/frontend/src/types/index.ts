@@ -1,3 +1,17 @@
+export interface AuthCompany {
+  id: string;
+  code: string;
+  name: string;
+  status: 'TRIAL' | 'ACTIVE' | 'SUSPENDED';
+  plan: { code: string; name: string; maxUsers: number };
+  /** Module keys this company may use (core + plan). */
+  modules: string[];
+  access: 'FULL' | 'GRACE' | 'READ_ONLY' | 'SUSPENDED';
+  endsAt: string | null;
+  graceEndsAt: string | null;
+  daysLeft: number | null;
+}
+
 export interface AuthUser {
   id: string;
   fullName: string;
@@ -7,6 +21,13 @@ export interface AuthUser {
   roles: { code: string; name: string }[];
   permissions: string[];
   sessionId: string;
+  /** TailoringERP platform admin (Brandistan). */
+  isSuperAdmin?: boolean;
+  /** Company this session works in; null for the Super Admin platform area. */
+  companyId?: string | null;
+  company?: AuthCompany | null;
+  /** Super Admin has opened a company for support. */
+  supportMode?: boolean;
 }
 
 export interface Paginated<T> {

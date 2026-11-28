@@ -33,10 +33,13 @@ export function ExpenseVoucherPrintPage() {
       <style>{'@media print { @page { size: A5 landscape; margin: 8mm; } }'}</style>
       <article className="mx-auto max-w-[210mm] bg-white p-8 text-[12px] text-black shadow print:max-w-none print:p-0 print:shadow-none">
         <header className="flex items-start justify-between border-b-2 border-black pb-2">
-          <div>
-            <h1 className="text-xl font-bold tracking-wide">{String(biz.businessName || 'AMIR ZAMEER')}</h1>
+          <div className="flex items-start gap-3">
+            {biz.logoUrl ? <img src={String(biz.logoUrl)} alt="" className="h-12 max-w-[110px] shrink-0 object-contain" /> : null}
+            <div>
+            <h1 className="text-xl font-bold tracking-wide">{String(biz.businessName || '')}</h1>
             {biz.address || biz.city ? <p>{[biz.address, biz.city].filter(Boolean).join(', ') as string}</p> : null}
             {biz.phone ? <p>{String(biz.phone)}</p> : null}
+          </div>
           </div>
           <div className="text-right">
             <p className="text-lg font-bold">EXPENSE VOUCHER</p>

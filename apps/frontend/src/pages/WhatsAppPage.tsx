@@ -22,6 +22,7 @@ import { CustomerPicker, type PickedCustomer } from '@/features/orders/CustomerP
 import { SendWhatsAppDialog } from '@/features/whatsapp/SendWhatsAppDialog';
 import { MetaStatusBadge, WaChannelBadge, WaStatusBadge, purposeLabel } from '@/features/whatsapp/shared';
 import { useCan } from '@/hooks/use-permission';
+import { useAuth } from '@/store/auth';
 import { api, errorMessage } from '@/services/api';
 import type { Paginated } from '@/types';
 import type { WaConfig, WaMessage, WaSummary, WaTemplate } from '@/types/whatsapp';
@@ -323,6 +324,8 @@ function SettingsTab() {
     onSuccess: (c) => { qc.setQueryData(['whatsapp', 'config'], c); void qc.invalidateQueries({ queryKey: ['whatsapp', 'summary'] }); toast.success('WhatsApp settings saved'); },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  // Each company has its own webhook address.
+  const companyCode = useAuth((s) => s.user?.company?.code);
   const test = useMutation({
     mutationFn: () => api.post<{ ok: boolean; displayPhoneNumber?: string; verifiedName?: string; quality?: string; error?: string }>('/whatsapp/config/test'),
     onSuccess: (r) => (r.ok ? toast.success(`Connected: ${r.verifiedName ?? ''} ${r.displayPhoneNumber ?? ''}${r.quality ? ` (quality ${r.quality})` : ''}`) : toast.error(r.error ?? 'Connection failed')),
@@ -330,7 +333,7 @@ function SettingsTab() {
   });
   if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
   if (!q.data || !d.autoSend) return <LoadingState />;
-  const webhookUrl = `${window.location.origin}/api/whatsapp/webhook`;
+  const webhookUrl = `${window.location.origin}/api/whatsapp/webhook${companyCode ? `/${companyCode}` : ''}`;
   return (
     <form className="grid gap-4 lg:grid-cols-2" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
       <Card>

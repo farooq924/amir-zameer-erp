@@ -3,14 +3,14 @@ import type { GuideSection } from './types';
 /** Guide sections: getting started, settings and access. Text in Roman Urdu (owner's request). */
 export const START_SECTIONS: GuideSection[] = [
   {
-    id: 'welcome', part: 'start', title: 'Welcome to the ERP', icon: 'BookOpen',
-    summary: 'Ye ERP aap ki tailoring shop ka poora hisaab ek jagah rakhta hai: customers, naap (measurements), orders, kapra (fabric), staff ki salary, kharche aur accounts. Is guide mein har page aur har button ko aasan alfaaz mein samjhaya gaya hai.',
+    id: 'welcome', part: 'start', title: 'Welcome to TailoringERP', icon: 'BookOpen',
+    summary: 'TailoringERP (By Brandistan) aap ki tailoring shop ka poora hisaab ek jagah rakhta hai: customers, naap (measurements), orders, kapra (fabric), staff ki salary, kharche aur accounts. Is guide mein har page aur har button ko aasan alfaaz mein samjhaya gaya hai.',
     blocks: [
       { type: 'para', title: 'Is guide ko kaise parhein', text: 'Baen (left) taraf sections ki list hai. Upar se neeche tak tarteeb se parhein: pehle Login aur First Time Setup, phir rozana ka kaam (Customers, Orders), phir Staff, Paisa, Reports aur aakhir mein Backup. Har section mein **Open page** button hai jo seedha us page par le jata hai. Upar **Search the guide** box mein koi bhi lafz likhein (jaise "advance" ya "backup") to sirf wohi sections nazar aayenge.' },
       { type: 'options', title: 'Screen ka naqsha (Computer par)', items: [
         { name: 'Side menu (navy rang)', text: 'Baen taraf ka neela menu. Har module (Dashboard, Customers, Orders ...) yahan hai. Sirf wohi menu nazar aate hain jin ki aap ke role ko ijazat hai.' },
         { name: 'Collapse', text: 'Side menu ke neeche ka button. Menu ko patla kar deta hai taake page ko zyada jagah mile. Dobara dabane se menu khul jata hai.' },
-        { name: 'App version (v1.x.x)', text: 'Side menu ke bilkul neeche ERP ka version likha hota hai. Is par click karein to "About" khulta hai jahan har update mein kya naya aaya, wo likha hai.' },
+        { name: 'App version (v2.x.x)', text: 'Side menu ke bilkul neeche ERP ka version likha hota hai. Is par click karein to "About" khulta hai jahan har update mein kya naya aaya, wo likha hai.' },
         { name: 'Search box (Ctrl + K)', text: 'Upar wali patti mein customer dhoondne ka box. Naam, customer code ya mobile number likhein aur Enter dabaein. Keyboard par **Ctrl + K** dabane se bhi ye box khul jata hai.' },
         { name: 'Account menu (aap ka naam)', text: 'Upar daen (right) kone mein aap ka naam. Is mein **Change Password**, **My Devices**, **Dark Mode** aur **Logout** hain.' },
         { name: 'Online / Offline pill', text: 'Upar patti mein chhota sa nishan jo batata hai ke internet chal raha hai ya nahi, aur kitni entries sync hone ka intezar kar rahi hain.' },

@@ -13,7 +13,10 @@ export const SETTING_GROUPS = {
       address: z.string().trim().max(300).optional().default(''),
       city: z.string().trim().max(80).optional().default(''),
       ntn: z.string().trim().max(40).optional().default(''),
-      logoUrl: z.string().trim().max(500).optional().default(''),
+      // Company logo: a small uploaded image (data URL, resized in the browser) or an https link.
+      logoUrl: z.string().trim().max(400_000)
+        .refine((v) => v === '' || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v) || /^https:\/\/\S+$/.test(v), 'Logo must be a PNG, JPG or WEBP image')
+        .optional().default(''),
     }),
     defaults: {
       businessName: 'My Tailoring Shop', tagline: "Men's Tailoring & Fabrics", phone: '', whatsapp: '', email: '',

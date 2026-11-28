@@ -41,9 +41,9 @@ export function LoginPage() {
       {/* Brand panel (splash) */}
       <div className="relative flex flex-col items-center justify-center overflow-hidden bg-navy px-6 pb-14 pt-12 text-white lg:w-1/2 lg:pb-12">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_20%_10%,rgba(255,255,255,0.08),transparent_60%),repeating-linear-gradient(135deg,rgba(255,255,255,0.025)_0_2px,transparent_2px_6px)]" />
-        <BrandLogo size="lg" stacked subtitle="Tailoring ERP" className="relative" />
+        <BrandLogo size="lg" stacked className="relative" />
         <svg viewBox="0 0 160 16" className="relative mt-3 h-4 w-40 text-gold" aria-hidden><path d="M2 10c30-10 60 8 90-2s50-6 66 0" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" /></svg>
-        <p className="relative mt-4 hidden max-w-xs text-center text-sm text-white/70 lg:block">Customers, measurements, orders, fabric and accounts for your tailoring business, in one place.</p>
+        <p className="relative mt-4 hidden max-w-xs text-center text-sm text-white/70 lg:block">Customers, measurements, orders, fabric and accounts for your tailoring business, in one place. One login for every shop: your company opens automatically.</p>
         <TailorArt className="pointer-events-none absolute -bottom-6 -right-6 w-56 opacity-80 lg:w-96" />
       </div>
 
@@ -69,6 +69,7 @@ export function LoginPage() {
             <Button type="submit" size="lg" className="w-full" loading={form.formState.isSubmitting}><Lock /> Sign in</Button>
           </form>
           <p className="mt-4 text-center text-xs text-muted-foreground">Sessions expire automatically. Accounts lock after repeated failed attempts.</p>
+          <p className="mt-2 text-center text-xs text-muted-foreground">TailoringERP · Developed by Brandistan · www.brandistan.pk · 0333-2532924</p>
         </div>
       </div>
     </div>

@@ -59,7 +59,7 @@ export const SYSTEM_SECTIONS: GuideSection[] = [
   },
   {
     id: 'backup', part: 'security', title: 'Backup & Restore', icon: 'DatabaseBackup', path: '/backup', module: 'backup',
-    summary: 'Backup ERP ke saare data ki mehfooz (encrypted) copy hai. Rozana khud banta hai. Computer kharab ho jaye to isi se saara data wapas aata hai.',
+    summary: 'Backup ERP ke saare data ki mehfooz (encrypted) copy hai. Rozana khud banta hai. Computer kharab ho jaye to isi se saara data wapas aata hai. TailoringERP mein Backup sirf Super Admin (Brandistan) ke menu mein hai aur ek backup mein tamam companies ka data hota hai.',
     blocks: [
       { type: 'steps', title: 'Pehli dafa ye zaroor karein', items: [
         '**Backup** kholein aur **Download recovery key** (ya **Download key**) dabaein, apna password daalein. Key file USB aur kisi mehfooz jagah sambhal lein. Is ke baghair naye computer par backup nahi khulta.',

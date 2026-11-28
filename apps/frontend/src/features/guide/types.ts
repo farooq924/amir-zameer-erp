@@ -23,6 +23,8 @@ export interface GuideSection {
   /** Short Roman Urdu summary shown under the heading. */
   summary: string;
   blocks: GuideBlock[];
+  /** Only shown to the TailoringERP Super Admin. */
+  superAdmin?: boolean;
 }
 
 export const GUIDE_PARTS = [
@@ -35,6 +37,7 @@ export const GUIDE_PARTS = [
   { key: 'reports', label: 'Reports & WhatsApp' },
   { key: 'offline', label: 'Offline & Sync' },
   { key: 'security', label: 'Security & Backup' },
+  { key: 'platform', label: 'Super Admin (Brandistan)' },
   { key: 'help', label: 'Help' },
 ] as const;
 

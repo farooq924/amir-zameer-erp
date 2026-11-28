@@ -49,6 +49,7 @@ import { SyncCenterPage } from '@/pages/SyncCenterPage';
 import { BackupPage } from '@/pages/BackupPage';
 import { SecurityPage } from '@/pages/SecurityPage';
 import { DocumentsPage } from '@/pages/DocumentsPage';
+import { CompaniesPage, CompanyDetailPage, PlansPage, PlatformActivityPage, PlatformOverviewPage, PlatformPaymentsPage } from '@/pages/platform/PlatformPages';
 import { useAuth } from '@/store/auth';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -64,6 +65,19 @@ function RequireAuth({ children }: { children: ReactNode }) {
 function RequirePermission({ module, action = 'VIEW', children }: { module: string; action?: PermissionAction; children: ReactNode }) {
   const user = useAuth((s) => s.user);
   return hasPermission(user, module, action) ? <>{children}</> : <ForbiddenPage />;
+}
+
+/** Super Admin area. Company users never see it (the API also refuses them). */
+function RequirePlatform({ children }: { children: ReactNode }) {
+  const user = useAuth((s) => s.user);
+  return user?.isSuperAdmin ? <>{children}</> : <ForbiddenPage />;
+}
+
+/** Home: the dashboard for a company, the Super Admin overview for the platform area. */
+function HomeRoute() {
+  const user = useAuth((s) => s.user);
+  if (user?.isSuperAdmin && !user.company) return <Navigate to="/platform" replace />;
+  return <RequirePermission module="dashboard"><DashboardPage /></RequirePermission>;
 }
 
 const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers', 'employees', 'attendance', 'payroll', 'production', 'payments', 'expenses', 'accounting', 'reports', 'whatsapp', 'sync', 'backup', 'security']);
@@ -88,7 +102,13 @@ export function App() {
       <Route path="/print/expenses/:id" element={<RequireAuth><RequirePermission module="expenses" action="PRINT"><ExpenseVoucherPrintPage /></RequirePermission></RequireAuth>} />
       <Route path="/print/reports/:key" element={<RequireAuth><RequirePermission module="reports" action="PRINT"><ReportPrintPage /></RequirePermission></RequireAuth>} />
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
-        <Route index element={<RequirePermission module="dashboard"><DashboardPage /></RequirePermission>} />
+        <Route index element={<HomeRoute />} />
+        <Route path="platform" element={<RequirePlatform><PlatformOverviewPage /></RequirePlatform>} />
+        <Route path="platform/companies" element={<RequirePlatform><CompaniesPage /></RequirePlatform>} />
+        <Route path="platform/companies/:id" element={<RequirePlatform><CompanyDetailPage /></RequirePlatform>} />
+        <Route path="platform/payments" element={<RequirePlatform><PlatformPaymentsPage /></RequirePlatform>} />
+        <Route path="platform/plans" element={<RequirePlatform><PlansPage /></RequirePlatform>} />
+        <Route path="platform/activity" element={<RequirePlatform><PlatformActivityPage /></RequirePlatform>} />
         <Route path="settings" element={<RequirePermission module="settings"><SettingsPage /></RequirePermission>} />
         <Route path="settings/users" element={<RequirePermission module="users"><UsersPage /></RequirePermission>} />
         <Route path="settings/roles" element={<RequirePermission module="users"><RolesPage /></RequirePermission>} />

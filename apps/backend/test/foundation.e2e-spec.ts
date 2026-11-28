@@ -24,6 +24,12 @@ describe('Settings, audit log, dashboard & database rules (e2e)', () => {
     expect(all.regional).toMatchObject({ currency: 'PKR', timezone: 'Asia/Karachi' });
     await owner.agent.put('/api/settings/business').set('X-CSRF-Token', owner.csrf).send({ businessName: 'A' }).expect(400);
     await owner.agent.put('/api/settings/regional').set('X-CSRF-Token', owner.csrf).send({ currency: 'USD' }).expect(400);
+    // shop logo: only an uploaded image (data URL) or an https link
+    await owner.agent.put('/api/settings/business').set('X-CSRF-Token', owner.csrf).send({ logoUrl: 'javascript:alert(1)' }).expect(400);
+    const logo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    expect((await owner.agent.put('/api/settings/business').set('X-CSRF-Token', owner.csrf).send({ logoUrl: logo }).expect(200)).body.logoUrl).toBe(logo);
+    const logoAudit = await prisma.auditLog.findFirstOrThrow({ where: { action: 'SETTINGS_CHANGED', recordId: 'business' }, orderBy: { createdAt: 'desc' } });
+    expect(JSON.stringify(logoAudit.newValues)).not.toContain('base64');
     const saved = await owner.agent.put('/api/settings/business').set('X-CSRF-Token', owner.csrf)
       .send({ businessName: 'AMIR ZAMEER', phone: '0300-1234567', city: 'Lahore' }).expect(200);
     expect(saved.body).toMatchObject({ phone: '0300-1234567', city: 'Lahore' });

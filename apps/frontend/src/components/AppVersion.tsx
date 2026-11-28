@@ -11,6 +11,21 @@ export const BUILD_DATE = __BUILD_DATE__;
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
   {
+    version: '2.0.0', title: 'TailoringERP SaaS (many companies)',
+    notes: [
+      'The ERP is now TailoringERP By Brandistan: many tailoring shops (companies) can use one ERP, each with fully separate data',
+      'All existing data moved safely into the company "Zameer Ansari" (nothing changes for its users)',
+      'New Super Admin panel: overview, companies, create a company with its Owner login, edit, suspend / activate, reset Owner password',
+      'Plans (Basic, Standard, Premium) with price, user limit and modules, editable by the Super Admin',
+      '14-day free trial for new companies; subscription payments (JazzCash, EasyPaisa, bank, cash) marked as paid by the Super Admin',
+      'When a subscription ends: grace days with a reminder, then read-only (view and print only) until renewed',
+      'Open company (support access) for the Super Admin, recorded in the audit log of the platform and the company',
+      'Menu shows only the modules of the company plan; user limit per plan',
+      'Each company has its own shop name, address, phone and logo on prints, its own numbering, settings and WhatsApp',
+      'Backups (whole system) moved to the Super Admin; new platform activity log',
+    ],
+  },
+  {
     version: '1.11.0', title: 'Documents (User Guide)',
     notes: [
       'New Documents menu: a built-in user guide for every page and form of the ERP, written in simple Roman Urdu',
@@ -132,7 +147,7 @@ export function AppVersion({ collapsed, className }: { collapsed?: boolean; clas
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title={`AMIR ZAMEER ERP v${APP_VERSION} (built ${formatDate(BUILD_DATE)})`}
+        title={`TailoringERP By Brandistan v${APP_VERSION} (built ${formatDate(BUILD_DATE)})`}
         aria-label={`Version ${APP_VERSION}. Show what is new`}
         className={cn(
           'group flex w-full items-center gap-2 rounded-lg px-2 py-1 text-[11px] leading-tight text-sidebar-foreground/80 transition-colors hover:bg-white/5 hover:text-white',
@@ -146,7 +161,7 @@ export function AppVersion({ collapsed, className }: { collapsed?: boolean; clas
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle><Info className="h-5 w-5 text-primary" /> About AMIR ZAMEER ERP</DialogTitle>
+            <DialogTitle><Info className="h-5 w-5 text-primary" /> About TailoringERP</DialogTitle>
             <DialogDescription>Version {APP_VERSION} · built {formatDate(BUILD_DATE)}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

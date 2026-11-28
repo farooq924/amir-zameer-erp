@@ -50,8 +50,13 @@ export class SettingsService {
         create: { key: `group.${group}`, group, value, updatedById: ctx.userId },
         update: { value, updatedById: ctx.userId },
       });
-      await this.audit.log({ action: 'SETTINGS_CHANGED', module: 'settings', recordId: group, oldValues: before, newValues: value }, ctx, tx);
+      await this.audit.log({ action: 'SETTINGS_CHANGED', module: 'settings', recordId: group, oldValues: slim(before), newValues: slim(value as Record<string, unknown>) }, ctx, tx);
     });
     return parsed.data as Record<string, unknown>;
   }
+}
+
+/** Keeps uploaded logo images out of the audit log (only a marker is stored). */
+function slim(v: Record<string, unknown>): Record<string, unknown> {
+  return typeof v.logoUrl === 'string' && v.logoUrl.startsWith('data:') ? { ...v, logoUrl: `[image ${Math.round(v.logoUrl.length / 1024)} KB]` } : v;
 }

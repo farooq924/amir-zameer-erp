@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, Banknote, BarChart3, BookOpen, CalendarCheck, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, DatabaseBackup, Download,
+  AlertTriangle, Banknote, Building2, CreditCard, Crown, History, Package, BarChart3, BookOpen, CalendarCheck, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, DatabaseBackup, Download,
   ExternalLink, FileText, IdCard, Layers, LayoutDashboard, Lightbulb, ListChecks, Lock, MessageCircle, Printer, Receipt, RefreshCw, Ruler,
   Scissors, Search, Settings, ShieldCheck, Shirt, ShoppingCart, Truck, UserCog, Users, Wallet, WifiOff, type LucideIcon,
 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, NativeSelect } from '@/components/ui/input';
+import { useAuth } from '@/store/auth';
 import { GUIDE_PARTS, GUIDE_SECTIONS, type GuideBlock, type GuideSection, sectionText } from '@/features/guide';
 import { useCan } from '@/hooks/use-permission';
 import { cn } from '@/utils/cn';
@@ -17,7 +18,7 @@ import { cn } from '@/utils/cn';
 const ICONS: Record<string, LucideIcon> = {
   BookOpen, Lock, ListChecks, LayoutDashboard, Settings, UserCog, ShieldCheck, Users, Ruler, Shirt, ClipboardList, Printer, Layers, Truck,
   ShoppingCart, IdCard, CalendarCheck, Scissors, Wallet, Banknote, Receipt, BarChart3, MessageCircle, WifiOff, RefreshCw, DatabaseBackup,
-  CircleHelp, Download,
+  CircleHelp, Download, Building2, CreditCard, Crown, History, Package,
 };
 
 /** "Press **Save**" -> Press <strong>Save</strong>. Guide text marks on-screen names with double stars. */
@@ -109,18 +110,21 @@ function SectionView({ section, number, canOpen }: { section: GuideSection; numb
 /** Documents: the built-in user guide, section by section from login to backups. */
 export function DocumentsPage() {
   const can = useCan();
+  const user = useAuth((st) => st.user);
+  // Super Admin sections are shown only to the Super Admin.
+  const sections = useMemo(() => GUIDE_SECTIONS.filter((x) => !x.superAdmin || !!user?.isSuperAdmin), [user?.isSuperAdmin]);
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [printAll, setPrintAll] = useState(false);
 
-  const index = Math.max(0, GUIDE_SECTIONS.findIndex((s) => s.id === params.get('s')));
-  const current = GUIDE_SECTIONS[index]!;
+  const index = Math.max(0, sections.findIndex((s) => s.id === params.get('s')));
+  const current = sections[index]!;
   const term = search.trim().toLowerCase();
   const matches = useMemo(() => {
-    if (!term) return GUIDE_SECTIONS;
+    if (!term) return sections;
     const words = term.split(/\s+/);
-    return GUIDE_SECTIONS.filter((s) => { const t = sectionText(s); return words.every((w) => t.includes(w)); });
-  }, [term]);
+    return sections.filter((s) => { const t = sectionText(s); return words.every((w) => t.includes(w)); });
+  }, [term, sections]);
 
   const open = (id: string) => {
     setParams((p) => { p.set('s', id); return p; });
@@ -137,15 +141,15 @@ export function DocumentsPage() {
     return () => { window.clearTimeout(t); window.removeEventListener('afterprint', done); };
   }, [printAll]);
 
-  const prev = GUIDE_SECTIONS[index - 1];
-  const next = GUIDE_SECTIONS[index + 1];
+  const prev = sections[index - 1];
+  const next = sections[index + 1];
 
   return (
     <div>
       <div className="no-print">
         <PageHeader
           title="Documents"
-          description={`User guide for every page of the ERP, step by step (${GUIDE_SECTIONS.length} sections).`}
+          description={`User guide for every page of the ERP, step by step (${sections.length} sections).`}
           actions={(
             <>
               <Button variant="outline" onClick={() => setPrintAll(true)}><BookOpen />Print full guide</Button>
@@ -156,7 +160,7 @@ export function DocumentsPage() {
       </div>
 
       <div className="print-only mb-4 border-b pb-2">
-        <p className="text-lg font-bold">AMIR ZAMEER ERP - User Guide</p>
+        <p className="text-lg font-bold">TailoringERP - User Guide</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
@@ -170,7 +174,7 @@ export function DocumentsPage() {
           {/* Phones: a simple section picker */}
           <div className="lg:hidden">
             <NativeSelect value={current.id} onChange={(e) => open(e.target.value)} aria-label="Choose a section">
-              {matches.map((s) => <option key={s.id} value={s.id}>{GUIDE_SECTIONS.indexOf(s) + 1}. {s.title}</option>)}
+              {matches.map((s) => <option key={s.id} value={s.id}>{sections.indexOf(s) + 1}. {s.title}</option>)}
               {!matches.includes(current) && <option value={current.id}>{index + 1}. {current.title}</option>}
             </NativeSelect>
           </div>
@@ -185,7 +189,7 @@ export function DocumentsPage() {
                   <div key={part.key} className="mb-2">
                     <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{part.label}</p>
                     {items.map((s) => {
-                      const n = GUIDE_SECTIONS.indexOf(s) + 1;
+                      const n = sections.indexOf(s) + 1;
                       const active = s.id === current.id;
                       return (
                         <button
@@ -212,7 +216,7 @@ export function DocumentsPage() {
         <div className="min-w-0">
           {printAll ? (
             <div className="space-y-8">
-              {GUIDE_SECTIONS.map((s, i) => (
+              {sections.map((s, i) => (
                 <Card key={s.id} className="p-5 print:break-inside-auto print:border-0 print:p-0 print:shadow-none">
                   <SectionView section={s} number={i + 1} canOpen={canOpen(s)} />
                 </Card>

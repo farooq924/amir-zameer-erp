@@ -25,7 +25,7 @@ Ensure-Admin $PSCommandPath $passArgs
 Set-Location $Root
 
 Say ''
-Say '=== AMIR ZAMEER ERP - Always online setup ===' 'Yellow'
+Say '=== TailoringERP - Always online setup ===' 'Yellow'
 Say ''
 
 if ($Uninstall) {

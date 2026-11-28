@@ -19,7 +19,30 @@ type Field =
   | { key: string; label: string; type: 'text' | 'email' | 'textarea'; hint?: string }
   | { key: string; label: string; type: 'number'; min?: number; max?: number }
   | { key: string; label: string; type: 'select'; options: { value: string; label: string }[]; locked?: boolean }
-  | { key: string; label: string; type: 'boolean' };
+  | { key: string; label: string; type: 'boolean' }
+  | { key: string; label: string; type: 'image'; hint?: string };
+
+/** Shrinks an uploaded logo in the browser so it stays small (max 480 x 240 px). */
+function readLogo(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { reject(new Error('Choose a PNG, JPG or WEBP image')); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 480 / img.width, 240 / img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      let data = canvas.toDataURL('image/png');
+      if (data.length > 300_000) data = canvas.toDataURL('image/jpeg', 0.85);
+      resolve(data);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This image could not be read')); };
+    img.src = url;
+  });
+}
 
 const GROUP_ICONS: Record<string, LucideIcon> = { business: Building2, regional: Globe2, numbering: Hash, orders: ClipboardList, printing: Printer };
 
@@ -35,6 +58,7 @@ const GROUPS: { key: string; label: string; description: string; fields: Field[]
       { key: 'city', label: 'City', type: 'text' },
       { key: 'address', label: 'Address', type: 'textarea' },
       { key: 'ntn', label: 'NTN / Tax number', type: 'text' },
+      { key: 'logoUrl', label: 'Shop logo (on prints)', type: 'image', hint: 'PNG, JPG or WEBP. A wide logo on a white or clear background prints best.' },
     ],
   },
   {
@@ -105,8 +129,25 @@ function GroupForm({ group, values, canEdit }: { group: (typeof GROUPS)[number];
             const v = draft[f.key];
             const disabled = !canEdit || (f.type === 'select' && f.locked);
             return (
-              <div key={f.key} className={f.type === 'textarea' ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'}>
-                {f.type === 'boolean' ? (
+              <div key={f.key} className={f.type === 'textarea' || f.type === 'image' ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'}>
+                {f.type === 'image' ? (
+                  <>
+                    <Label htmlFor={id}>{f.label}</Label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex h-16 w-32 items-center justify-center rounded-lg border bg-white p-1">
+                        {v ? <img src={String(v)} alt="Logo" className="max-h-full max-w-full object-contain" /> : <span className="text-xs text-muted-foreground">No logo</span>}
+                      </div>
+                      {canEdit && (
+                        <>
+                          <input id={id} type="file" accept="image/png,image/jpeg,image/webp" className="max-w-[16rem] text-sm"
+                            onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) readLogo(file).then((d) => set(f.key, d)).catch((err: Error) => toast.error(err.message)); }} />
+                          {v ? <Button type="button" variant="outline" size="sm" onClick={() => set(f.key, '')}>Remove logo</Button> : null}
+                        </>
+                      )}
+                    </div>
+                    {f.hint && <p className="text-xs text-muted-foreground">{f.hint} Click Save after choosing.</p>}
+                  </>
+                ) : f.type === 'boolean' ? (
                   <label className="flex items-center gap-2 pt-6 text-sm font-medium">
                     <input id={id} type="checkbox" className="h-4 w-4" disabled={disabled} checked={Boolean(v)} onChange={(e) => set(f.key, e.target.checked)} />{f.label}
                   </label>

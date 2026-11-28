@@ -37,9 +37,9 @@ export default defineConfig(({ mode }) => ({
       injectRegister: false,
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'AMIR ZAMEER ERP',
-        short_name: 'AZ ERP',
-        description: 'AMIR ZAMEER - Tailoring & Fabric Management ERP',
+        name: 'TailoringERP By Brandistan',
+        short_name: 'TailoringERP',
+        description: 'TailoringERP By Brandistan - Tailoring & Fabric Management ERP',
         theme_color: '#101f3d',
         background_color: '#101f3d',
         display: 'standalone',

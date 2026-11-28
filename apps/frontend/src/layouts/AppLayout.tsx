@@ -20,6 +20,7 @@ import { clearCachedData } from '@/offline/db';
 import { useSync } from '@/offline/sync';
 import { cn } from '@/utils/cn';
 import { initials } from '@/utils/format';
+import { SubscriptionBanner, SupportBanner } from '@/features/platform/Banners';
 import { GlobalSearch } from './GlobalSearch';
 import { ICONS, visibleNavItems } from './navigation';
 
@@ -38,9 +39,11 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const items = visibleNavItems(user);
-  const settings = useQuery({ queryKey: ['settings'], queryFn: () => api.get<SettingsMap>('/settings'), staleTime: 5 * 60_000 });
-  const businessName = String(settings.data?.business?.businessName ?? 'AMIR ZAMEER');
-  const roleName = user?.roles.map((r) => r.name).join(', ') ?? '';
+  const hasCompany = !!user?.company;
+  const settings = useQuery({ queryKey: ['settings'], queryFn: () => api.get<SettingsMap>('/settings'), staleTime: 5 * 60_000, enabled: hasCompany });
+  // TailoringERP is the product; the company (shop) name is shown under it.
+  const companyName = hasCompany ? String(settings.data?.business?.businessName || user?.company?.name || '') : user?.isSuperAdmin ? 'Super Admin' : '';
+  const roleName = user?.isSuperAdmin ? 'Super Admin' : user?.roles.map((r) => r.name).join(', ') ?? '';
 
   const offlineSession = useAuth((s) => s.offlineSession);
   const startSync = useSync((s) => s.start);
@@ -53,7 +56,7 @@ export function AppLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offlineSession]);
 
-  const isActive = (path: string) => (path === '/' ? location.pathname === '/' : location.pathname.startsWith(path));
+  const isActive = (path: string) => (path === '/' || path === '/platform' ? location.pathname === path : location.pathname.startsWith(path));
   const reallyLogout = async () => {
     setConfirmLogout(false);
     setMobileNav(false);
@@ -72,7 +75,7 @@ export function AppLayout() {
           <NavLink
             key={m.key}
             to={m.path}
-            end={m.path === '/'}
+            end={m.path === '/' || m.path === '/platform'}
             onClick={onNavigate}
             title={collapsed ? m.label : undefined}
             className={cn(
@@ -102,8 +105,13 @@ export function AppLayout() {
       {/* Desktop sidebar */}
       <aside className={cn('relative hidden shrink-0 flex-col overflow-hidden bg-sidebar text-white transition-[width] duration-200 lg:flex no-print', sidebarCollapsed ? 'w-[72px]' : 'w-64')}>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_60%_at_0%_100%,rgba(255,255,255,0.06),transparent_60%)]" />
-        <Link to="/" className={cn('relative z-10 flex h-[88px] items-center justify-center px-4', sidebarCollapsed && 'h-16')}>
-          {sidebarCollapsed ? <SewingMachineMark className="h-7 w-9 text-gold" /> : <BrandLogo name={businessName} stacked />}
+        <Link to="/" className={cn('relative z-10 flex h-[124px] items-center pt-2 justify-center px-4', sidebarCollapsed && 'h-16')}>
+          {sidebarCollapsed ? <SewingMachineMark className="h-7 w-9 text-gold" /> : (
+            <div className="flex min-w-0 flex-col items-center gap-1.5">
+              <BrandLogo stacked />
+              {companyName && <span className="max-w-[13rem] truncate rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-medium text-white/85" title={companyName}>{companyName}</span>}
+            </div>
+          )}
         </Link>
         {navList(sidebarCollapsed)}
         <div className={cn('relative z-10 shrink-0', !sidebarCollapsed && 'h-36')}>
@@ -125,7 +133,7 @@ export function AppLayout() {
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileNav(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col overflow-hidden bg-sidebar text-white shadow-2xl animate-in slide-in-from-left">
             <div className="flex items-center justify-between px-4 pb-3 pt-5">
-              <BrandLogo name={businessName} size="md" />
+              <div className="min-w-0"><BrandLogo size="md" />{companyName && <p className="mt-1 truncate pl-1 text-xs text-white/75">{companyName}</p>}</div>
               <button className="rounded-md p-1 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => setMobileNav(false)} aria-label="Close menu"><X className="h-5 w-5" /></button>
             </div>
             <button onClick={() => { setMobileNav(false); setPwOpen(true); }} className="mx-3 mb-3 flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-left hover:bg-white/10">
@@ -146,20 +154,22 @@ export function AppLayout() {
         {/* Mobile header */}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 bg-navy px-3 text-white lg:hidden no-print">
           <button className="rounded-md p-1.5 hover:bg-white/10" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
-          <Link to="/" className="flex flex-1 justify-center"><BrandLogo name={businessName} size="sm" /></Link>
+          <Link to="/" className="flex min-w-0 flex-1 justify-center"><BrandLogo size="sm" subtitle={companyName || undefined} /></Link>
           <ConnectionPill onDark />
-          <ProfileMenu name={user?.fullName ?? ''} role={roleName} theme={theme} setTheme={setTheme} onPassword={() => setPwOpen(true)} onLogout={doLogout} compact />
+          <ProfileMenu name={user?.fullName ?? ''} role={roleName} theme={theme} setTheme={setTheme} onPassword={() => setPwOpen(true)} onLogout={doLogout} compact showDevices={hasCompany} />
         </header>
 
         {/* Desktop header */}
         <header className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b bg-card px-6 lg:flex no-print">
           <button className="rounded-md p-1.5 text-foreground hover:bg-muted" onClick={toggleSidebar} aria-label="Toggle sidebar"><Menu className="h-5 w-5" /></button>
-          <GlobalSearch />
+          {hasCompany && <GlobalSearch />}
           <div className="flex-1" />
           <ConnectionPill />
-          <ProfileMenu name={user?.fullName ?? ''} role={roleName} theme={theme} setTheme={setTheme} onPassword={() => setPwOpen(true)} onLogout={doLogout} />
+          <ProfileMenu name={user?.fullName ?? ''} role={roleName} theme={theme} setTheme={setTheme} onPassword={() => setPwOpen(true)} onLogout={doLogout} showDevices={hasCompany} />
         </header>
 
+        <SupportBanner />
+        <SubscriptionBanner />
         <OfflineBanner />
         <main className="flex-1 overflow-y-auto px-4 pb-28 pt-5 lg:px-6 lg:pb-8 lg:pt-6">
           <div className="mx-auto max-w-7xl"><Outlet /><PrintFooter printOnly /></div>
@@ -215,8 +225,8 @@ function BottomLink({ to, label, icon: Icon, active }: { to: string; label: stri
   );
 }
 
-function ProfileMenu({ name, role, theme, setTheme, onPassword, onLogout, compact }: {
-  name: string; role: string; theme: 'light' | 'dark'; setTheme: (t: 'light' | 'dark') => void; onPassword: () => void; onLogout: () => void; compact?: boolean;
+function ProfileMenu({ name, role, theme, setTheme, onPassword, onLogout, compact, showDevices = true }: {
+  showDevices?: boolean; name: string; role: string; theme: 'light' | 'dark'; setTheme: (t: 'light' | 'dark') => void; onPassword: () => void; onLogout: () => void; compact?: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -240,7 +250,7 @@ function ProfileMenu({ name, role, theme, setTheme, onPassword, onLogout, compac
           <span className="min-w-0"><span className="block truncate text-sm font-semibold">{name}</span><span className="block truncate text-xs text-muted-foreground">{role}</span></span>
         </div>
         <DropdownMenuItem onSelect={onPassword}><KeyRound /> Change Password</DropdownMenuItem>
-        <DropdownMenuItem asChild><Link to="/security?tab=sessions"><MonitorSmartphone /> My Devices</Link></DropdownMenuItem>
+        {showDevices && <DropdownMenuItem asChild><Link to="/security?tab=sessions"><MonitorSmartphone /> My Devices</Link></DropdownMenuItem>}
         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTheme(theme === 'dark' ? 'light' : 'dark'); }}>
           <Moon /> <span className="flex-1">Dark Mode</span>
           <Switch checked={theme === "dark"} onCheckedChange={() => undefined} className="pointer-events-none" aria-label="Dark mode" />
