@@ -28,8 +28,8 @@ if (Test-Path $backupCli) {
   Pop-Location
   if (-not $backupOk) {
     Say 'The backup before the update failed (see above).' 'Red'
-    $go = Read-Host 'Type YES to update anyway, or press Enter to stop'
-    if ($go -ne 'YES') { Stop-WithError 'Update cancelled. Nothing was changed.' }
+    $go = (Read-Host 'Type YES to update anyway, or press Enter to stop').Trim()
+    if ($go -notin @('YES', 'Y')) { Stop-WithError 'Update cancelled. Nothing was changed.' }
   }
 }
 

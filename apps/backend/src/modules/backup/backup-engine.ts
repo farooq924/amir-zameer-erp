@@ -235,8 +235,10 @@ export class BackupEngine {
       child.on('close', (code) => (code === 0 ? res() : rej(new Error(`pg_restore failed: ${lastLines(stderr) || `exit code ${code}`}`))));
     });
     const fed = pipeline(createDecryptStream(file, this.key().secret), child.stdin).catch((e: NodeJS.ErrnoException) => {
-      // pg_restore closing its input early is reported by its own exit code.
-      if (e.code === 'EPIPE' || e.code === 'ERR_STREAM_PREMATURE_CLOSE') return;
+      // pg_restore closing its input early is reported by its own exit code. "pg_restore --list" only reads the
+      // archive's table of contents and then exits, so the rest of the file hits a closed pipe:
+      // EPIPE on Linux, "write EOF" (code EOF) on Windows.
+      if (e.code === 'EPIPE' || e.code === 'EOF' || e.code === 'ERR_STREAM_PREMATURE_CLOSE' || e.code === 'ERR_STREAM_DESTROYED') return;
       child.kill();
       throw e;
     });
