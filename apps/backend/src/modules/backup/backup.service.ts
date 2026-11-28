@@ -52,7 +52,7 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
     if (process.env.NODE_ENV === 'test') return;
     // Backups cover the whole platform (all companies), so the scheduler runs in platform mode.
     setTimeout(() => void Tenant.system(() => this.engine.reconcile()).catch((e: Error) => this.logger.warn(`Backup folder check failed: ${e.message}`)), 5_000).unref();
-    this.timer = setInterval(() => void Tenant.system(() => this.tick()), TICK_MS);
+    this.timer = setInterval(() => void this.tick(), TICK_MS);
     this.timer.unref();
   }
 
@@ -273,6 +273,10 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
 
   /** Runs the daily automatic backup when it is due. Also catches up after the PC was switched off. */
   async tick(now: Date = new Date()): Promise<'ran' | 'skipped' | 'failed'> {
+    return Tenant.system(() => this.runTick(now));
+  }
+
+  private async runTick(now: Date): Promise<'ran' | 'skipped' | 'failed'> {
     try {
       const config = await this.getConfig();
       if (!config.autoEnabled || BackupEngine.running) return 'skipped';
