@@ -96,6 +96,7 @@ export interface Customer {
   status: CustomerStatus;
   openingBalance: string;
   whatsappOptIn: boolean;
+  whatsappOptInAt?: string | null;
   version: number;
   createdAt: string;
   outstanding?: string;

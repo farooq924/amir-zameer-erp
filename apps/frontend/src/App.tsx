@@ -43,6 +43,9 @@ import { RolesPage } from '@/pages/RolesPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ForbiddenPage, NotFoundPage, PlannedModulePage } from '@/pages/StatusPages';
 import { UsersPage } from '@/pages/UsersPage';
+import { WhatsAppPage } from '@/pages/WhatsAppPage';
+import { OfflineDeskPage } from '@/pages/OfflineDeskPage';
+import { SyncCenterPage } from '@/pages/SyncCenterPage';
 import { useAuth } from '@/store/auth';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -60,7 +63,7 @@ function RequirePermission({ module, action = 'VIEW', children }: { module: stri
   return hasPermission(user, module, action) ? <>{children}</> : <ForbiddenPage />;
 }
 
-const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers', 'employees', 'attendance', 'payroll', 'production', 'payments', 'expenses', 'accounting', 'reports']);
+const IMPLEMENTED = new Set(['dashboard', 'audit_logs', 'settings', 'users', 'customers', 'measurements', 'orders', 'garments', 'inventory', 'purchases', 'suppliers', 'employees', 'attendance', 'payroll', 'production', 'payments', 'expenses', 'accounting', 'reports', 'whatsapp', 'sync']);
 
 /** Remount the order form on every navigation so "Book another order" starts clean. */
 function OrderFormRoute() {
@@ -113,6 +116,9 @@ export function App() {
         <Route path="accounting/accounts/:id" element={<RequirePermission module="accounting"><AccountLedgerPage /></RequirePermission>} />
         <Route path="reports" element={<RequirePermission module="reports"><ReportsPage /></RequirePermission>} />
         <Route path="reports/:key" element={<RequirePermission module="reports"><ReportViewerPage /></RequirePermission>} />
+        <Route path="whatsapp" element={<RequirePermission module="whatsapp"><WhatsAppPage /></RequirePermission>} />
+        <Route path="offline" element={<OfflineDeskPage />} />
+        <Route path="sync" element={<SyncCenterPage />} />
         <Route path="audit-logs" element={<RequirePermission module="audit_logs"><AuditLogsPage /></RequirePermission>} />
         {MODULES.filter((m) => !IMPLEMENTED.has(m.key) && !m.hidden).map((m) => (
           <Route key={m.key} path={`${m.path.slice(1)}/*`} element={<RequirePermission module={m.key}><PlannedModulePage /></RequirePermission>} />

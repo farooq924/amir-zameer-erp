@@ -60,3 +60,22 @@ Payment: Unpaid = `danger`, Partly paid = `warning`, Paid = `success`, Credit = 
   minus money is shown in red. New reports only add a definition in `packages/shared/src/reports.ts` and a builder in the backend.
 * Report print (`/print/reports/:key`) is A4, landscape when more than 6 columns, navy table header and `<PrintFooter />`.
   Excel, CSV and PDF exports carry the same footer text.
+
+## WhatsApp & printing (Phase 8)
+* Send from anywhere with `SendWhatsAppDialog` (`features/whatsapp`): template select, green chat-bubble preview, amber warnings,
+  "Open WhatsApp" (manual) and gold "Send now (Cloud API)".
+* Message status badges: Queued = `warning`, Sent = `info`, Delivered / Read = `success` (double tick), Failed = `danger`;
+  channel badge Cloud API = `gold`, Manual = `outline`.
+* A4 invoice: navy table header and gold title / balance strip (`print-color-exact` keeps the colours in print), `<PrintFooter />`.
+* Print pages share one toolbar: document tabs (Receipt / A4 invoice / Job card), paper width for receipts, WhatsApp, gold Print.
+
+## Offline app & sync (Phase 9)
+* Top bar shows a connection pill (`features/offline/ConnectionStatus.tsx`): green Online, amber Offline, spinning Syncing,
+  with a gold count of entries waiting (red when some need review). It opens the Sync Center.
+* Offline = amber strip under the header with a link to the Offline Desk; entries needing review = rose strip.
+* Offline Desk (`pages/OfflineDeskPage.tsx`): status strip, navy "Waiting to sync" card, gold quick-action tiles, customer list
+  from the device copy, "Not synced" = `warning` badge.
+* Outbox badges: Waiting to sync / Will retry = `warning`, Waiting for earlier entry = `info`, Needs review = `gold`, Rejected = `danger`.
+  Server log: Saved = `success`, Already saved = `info`, Conflict = `gold`, Rejected = `danger`.
+* Conflict review: navy table header (Field / On server / On device), changed fields highlighted amber, the chosen value has a gold border.
+  Buttons: Keep server copy (outline), Keep device copy (navy), Save merged (gold); duplicates: Save as a separate customer / Use existing customer.

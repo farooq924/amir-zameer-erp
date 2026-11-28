@@ -38,8 +38,8 @@ flowchart LR
 | 5 Employees & Payroll | Employees, salary history, attendance, leave, overtime, advances, production records, payroll (monthly/daily/per-piece/fixed+incentive), slips | 1, 3 | **Done (v1.5.0)** |
 | 6 Finance & Accounting | Customer payments & ledger, refunds, expenses + approvals, supplier payments, chart of accounts, automatic double-entry posting, periods, P&L, balance sheet, cash flow | 3, 4, 5 | **Done (v1.6.0)** |
 | 7 Reports | All 30 reports with filters, pagination, sorting, column visibility, Excel/CSV/PDF export, print | 6 | **Done (v1.7.0)** |
-| 8 WhatsApp & Printing | Meta Cloud API (templates, webhooks, status, retries, opt-in), manual fallback, A4 invoices, 58/80 mm receipts | 3, 6 | Planned |
-| 9 Offline PWA | Workbox, IndexedDB (Dexie), offline forms, sync queue, idempotent sync API, conflict review | 2-6 | Planned |
+| 8 WhatsApp & Printing | Meta Cloud API (templates, webhooks, status, retries, opt-in), manual fallback, A4 invoices, 58/80 mm receipts | 3, 6 | **Done (v1.8.0)** |
+| 9 Offline PWA | Workbox, IndexedDB (Dexie), offline forms, sync queue, idempotent sync API, conflict review | 2-6 | **Done (v1.9.0)** |
 | 10 Security & Deployment | Security/performance tests, encrypted automated backups + restore test, VPS, Docker, SSL, docs, handover | all | Planned |
 
 ## Design decisions already locked in (Phase 1)

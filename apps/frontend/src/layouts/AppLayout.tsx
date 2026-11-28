@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ClipboardList, Home, KeyRound, LogOut, Menu, Moon, MoreHorizontal, Plus, Ruler, UserPlus, Users, X } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ClipboardList, Home, KeyRound, LogOut, Menu, Moon, MoreHorizontal, Plus, Ruler, UserPlus, Users, WifiOff, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AppVersion } from '@/components/AppVersion';
@@ -14,6 +14,10 @@ import { useAuth } from '@/store/auth';
 import { useUi } from '@/store/ui';
 import type { SettingsMap } from '@/types';
 import { PrintFooter } from '@/components/PrintFooter';
+import { ConfirmDialog } from '@/components/common';
+import { ConnectionPill, OfflineBanner } from '@/features/offline/ConnectionStatus';
+import { clearCachedData } from '@/offline/db';
+import { useSync } from '@/offline/sync';
 import { cn } from '@/utils/cn';
 import { initials } from '@/utils/format';
 import { GlobalSearch } from './GlobalSearch';
@@ -38,8 +42,27 @@ export function AppLayout() {
   const businessName = String(settings.data?.business?.businessName ?? 'AMIR ZAMEER');
   const roleName = user?.roles.map((r) => r.name).join(', ') ?? '';
 
+  const offlineSession = useAuth((s) => s.offlineSession);
+  const startSync = useSync((s) => s.start);
+  const pending = useSync((s) => s.counts.pending + s.counts.conflict + s.counts.rejected);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  useEffect(() => { startSync(); }, [startSync]);
+  // Opened without internet: the dashboard needs the server, so start on the Offline Desk.
+  useEffect(() => {
+    if (offlineSession && location.pathname === '/') navigate('/offline', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offlineSession]);
+
   const isActive = (path: string) => (path === '/' ? location.pathname === '/' : location.pathname.startsWith(path));
-  const doLogout = async () => { setMobileNav(false); await logout(); navigate('/login', { replace: true }); };
+  const reallyLogout = async () => {
+    setConfirmLogout(false);
+    setMobileNav(false);
+    await logout();
+    await clearCachedData().catch(() => undefined);
+    navigate('/login', { replace: true });
+  };
+  // Unsent offline work stays on the device after logout, but warn first.
+  const doLogout = async () => { if (pending > 0) { setMobileNav(false); setConfirmLogout(true); } else await reallyLogout(); };
 
   const navList = (collapsed: boolean, onNavigate?: () => void) => (
     <nav className="relative z-10 flex-1 space-y-0.5 overflow-y-auto px-3 py-1 [scrollbar-width:thin]" aria-label="Main navigation">
@@ -71,6 +94,7 @@ export function AppLayout() {
     can('customers', 'VIEW') && { label: 'Find Customer', icon: Users, to: '/customers' },
     can('measurements', 'VIEW') && { label: 'Measurements', icon: Ruler, to: '/measurements' },
     can('orders', 'CREATE') && { label: 'New Order', icon: ClipboardList, to: '/orders/new' },
+    (can('customers', 'CREATE') || can('orders', 'CREATE')) && { label: 'Offline Desk', icon: WifiOff, to: '/offline' },
   ].filter(Boolean) as { label: string; icon: typeof Plus; to: string }[];
 
   return (
@@ -123,6 +147,7 @@ export function AppLayout() {
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 bg-navy px-3 text-white lg:hidden no-print">
           <button className="rounded-md p-1.5 hover:bg-white/10" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
           <Link to="/" className="flex flex-1 justify-center"><BrandLogo name={businessName} size="sm" /></Link>
+          <ConnectionPill onDark />
           <ProfileMenu name={user?.fullName ?? ''} role={roleName} theme={theme} setTheme={setTheme} onPassword={() => setPwOpen(true)} onLogout={doLogout} compact />
         </header>
 
@@ -131,9 +156,11 @@ export function AppLayout() {
           <button className="rounded-md p-1.5 text-foreground hover:bg-muted" onClick={toggleSidebar} aria-label="Toggle sidebar"><Menu className="h-5 w-5" /></button>
           <GlobalSearch />
           <div className="flex-1" />
+          <ConnectionPill />
           <ProfileMenu name={user?.fullName ?? ''} role={roleName} theme={theme} setTheme={setTheme} onPassword={() => setPwOpen(true)} onLogout={doLogout} />
         </header>
 
+        <OfflineBanner />
         <main className="flex-1 overflow-y-auto px-4 pb-28 pt-5 lg:px-6 lg:pb-8 lg:pt-6">
           <div className="mx-auto max-w-7xl"><Outlet /><PrintFooter printOnly /></div>
         </main>
@@ -171,6 +198,11 @@ export function AppLayout() {
         </DialogContent>
       </Dialog>
       <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
+      <ConfirmDialog
+        open={confirmLogout} onOpenChange={setConfirmLogout} confirmLabel="Logout anyway" onConfirm={() => void reallyLogout()}
+        title="Unsynced work on this device"
+        description={`${pending} offline entr${pending === 1 ? 'y has' : 'ies have'} not reached the server yet. They stay on this device and are sent when you sign in again.`}
+      />
     </div>
   );
 }

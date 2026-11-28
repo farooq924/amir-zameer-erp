@@ -16,6 +16,7 @@ import { EmployeesService } from '../modules/employees/employees.service';
 import { FabricsService } from '../modules/inventory/fabrics.service';
 import { MeasurementsService } from '../modules/measurements/measurements.service';
 import { OrdersService } from '../modules/orders/orders.service';
+import { WhatsAppService } from '../modules/whatsapp/whatsapp.service';
 import { PayrollService } from '../modules/payroll/payroll.service';
 import { ProductionService } from '../modules/production/production.service';
 import { PurchasesService } from '../modules/purchases/purchases.service';
@@ -42,6 +43,10 @@ export interface DemoManifest {
   recurring?: string[];
   journals?: string[];
   savedFilters?: boolean;
+  /** Added in v1.8.0: demo customers opted in and WhatsApp history written. */
+  whatsapp?: boolean;
+  /** Added in v1.9.0: offline sync history (two shop devices) with one rejected entry and two conflicts to review. */
+  sync?: boolean;
 }
 
 export async function readManifest(prisma: PrismaService): Promise<DemoManifest | null> {
@@ -124,6 +129,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   const customersSvc = get(CustomersService);
   const measurementsSvc = get(MeasurementsService);
   const ordersSvc = get(OrdersService);
+  get(WhatsAppService).pauseAutomatic(); // never message demo customers
   const fabricsSvc = get(FabricsService);
   const suppliersSvc = get(SuppliersService);
   const purchasesSvc = get(PurchasesService);
@@ -141,6 +147,7 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   if (existing) throw new Error('An earlier demo load did not finish. Run scripts\\remove-demo-data.ps1 first, then load again.');
 
   const notes: string[] = [];
+  const counts_wa = { messages: 0 };
   const R = rng(20261127);
   const today = karachiToday();
   const day = (daysAgo: number) => addDays(today, -daysAgo);
@@ -678,6 +685,10 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   const books = await posting.sync();
   if (books.failed.length) notes.push(`${books.failed.length} accounting entries could not be posted (for example a closed month). See Accounting > Sync.`);
 
+  // WhatsApp (Phase 8): about half the customers agreed to messages, and a realistic message history.
+  counts_wa.messages = await addDemoWhatsApp(prisma, get(WhatsAppService), manifest.customers, user.id);
+  manifest.whatsapp = true;
+
   // Saved report filters for the demo login (Reports > Saved).
   await prisma.systemSetting.upsert({
     where: { key: `reports.saved_filters.${user.id}` },
@@ -689,10 +700,16 @@ export async function loadDemoData(app: INestApplicationContext): Promise<LoadRe
   });
   manifest.savedFilters = true;
 
+  // Offline sync (Phase 9): entries that came in from the shop tablet and counter PC, plus work to review in Sync Center.
+  const syncEntries = await addDemoSync(prisma, manifest.customers, user.id);
+  manifest.sync = true;
+
   manifest.complete = true;
   await saveManifest(prisma, manifest);
   const counts = countsOf(manifest);
   counts.orders = orderCount;
+  counts.whatsappMessages = counts_wa.messages;
+  counts.syncEntries = syncEntries;
   return { status: 'loaded', counts, notes };
 }
 
@@ -710,4 +727,156 @@ function nextMonthKey(key: string) {
 function monthName(key: string) {
   const [y, mo] = key.split('-').map(Number);
   return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][mo - 1]} ${y}`;
+}
+
+/**
+ * Demo WhatsApp history. Rows are written directly (nothing is sent): manual messages opened in WhatsApp and
+ * Cloud API messages with delivered / read ticks and one failure, dated with each order's own story dates.
+ * Demo customers are never messaged through the Cloud API (WhatsAppService blocks it), even when opted in.
+ */
+async function addDemoWhatsApp(prisma: PrismaService, wa: WhatsAppService, customerIds: string[], userId: string): Promise<number> {
+  await wa.ensureDefaults();
+  const templates = new Map((await prisma.whatsAppTemplate.findMany()).map((t) => [t.purpose, t]));
+  const customers = await prisma.customer.findMany({ where: { id: { in: customerIds } }, orderBy: { code: 'asc' } });
+  const optedIn = new Set<string>();
+  for (const [i, c] of customers.entries()) {
+    if (i % 2 === 1) continue;
+    optedIn.add(c.id);
+    await prisma.customer.update({ where: { id: c.id }, data: { whatsappOptIn: true, whatsappOptInAt: c.createdAt } });
+  }
+  const orders = await prisma.order.findMany({
+    where: { customerId: { in: customerIds } }, orderBy: { createdAt: 'asc' },
+    include: { payments: { where: { status: 'POSTED', type: { not: 'REFUND' } }, orderBy: { paymentDate: 'asc' } }, stage: { select: { code: true } } },
+  });
+  const minutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
+  const rows: Prisma.WhatsAppMessageCreateManyInput[] = [];
+  let n = 0;
+  const add = async (purpose: string, relatedType: 'ORDER' | 'PAYMENT', relatedId: string, customerId: string, at: Date) => {
+    const t = templates.get(purpose);
+    if (!t) return;
+    const p = await wa.preview({ templateId: t.id, relatedType, relatedId });
+    if (!p.toNumber) return;
+    n += 1;
+    const cloud = optedIn.has(customerId);
+    const failed = cloud && n % 17 === 0;
+    const read = cloud && !failed && n % 3 !== 0;
+    rows.push({
+      customerId, toNumber: p.toNumber, templateId: t.id, channel: cloud ? 'CLOUD_API' : 'MANUAL', messageType: 'TEMPLATE', body: p.text,
+      status: failed ? 'FAILED' : !cloud ? 'SENT' : read ? 'READ' : 'DELIVERED', attempts: cloud ? (failed ? 5 : 1) : 0,
+      waMessageId: cloud && !failed ? `wamid.DEMO${randomUUID().replace(/-/g, '')}` : null,
+      errorCode: failed ? '131026' : null, errorMessage: failed ? 'Message undeliverable: the number is not on WhatsApp' : null,
+      relatedType, relatedId, createdById: cloud ? null : userId, createdAt: at, updatedAt: at,
+      sentAt: failed ? null : minutes(at, 1), deliveredAt: cloud && !failed ? minutes(at, 2) : null, readAt: read ? minutes(at, 25) : null,
+      failedAt: failed ? minutes(at, 90) : null,
+    });
+  };
+  for (const o of orders) {
+    if (o.lifecycle === 'CANCELLED') continue;
+    await add('ORDER_CONFIRMATION', 'ORDER', o.id, o.customerId, minutes(o.createdAt, 2));
+    for (const pay of o.payments.slice(1)) await add('PAYMENT_RECEIVED', 'PAYMENT', pay.id, o.customerId, minutes(pay.paymentDate, 1));
+    if (o.stage.code === 'READY') await add('ORDER_READY', 'ORDER', o.id, o.customerId, minutes(o.updatedAt, 5));
+    if (o.lifecycle === 'DELIVERED' && o.actualDeliveryDate && Number(o.balanceAmount) > 0) {
+      await add('PAYMENT_REMINDER', 'ORDER', o.id, o.customerId, new Date(o.actualDeliveryDate.getTime() + 3 * 86_400_000 + 7 * 3_600_000));
+    }
+  }
+  // Never in the future (the reminder above can land after today).
+  const now = new Date();
+  const safe = rows.filter((r) => (r.createdAt as Date) <= now);
+  if (safe.length) await prisma.whatsAppMessage.createMany({ data: safe });
+  return safe.length;
+}
+
+/**
+ * Demo offline-sync history, written directly (nothing is re-applied): customers, measurements, orders and payments
+ * that "arrived" from two shop devices, one payment the server rejected, one customer edited on both the tablet
+ * and the counter (needs a merge) and one possible duplicate customer. All rows belong to the demo login,
+ * so scripts\remove-demo-data.ps1 removes them.
+ */
+async function addDemoSync(prisma: PrismaService, customerIds: string[], userId: string): Promise<number> {
+  const TABLET = 'web-demo-shop-tablet';
+  const COUNTER = 'web-demo-counter-pc';
+  const customers = await prisma.customer.findMany({ where: { id: { in: customerIds } }, orderBy: { code: 'asc' }, include: { addresses: { where: { isDefault: true }, take: 1 } } });
+  if (customers.length < 6) return 0;
+  const minutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
+  const rows: Prisma.SyncOperationCreateManyInput[] = [];
+  const applied = (deviceId: string, entityType: string, entityId: string, at: Date, payload: Record<string, unknown>, result: Record<string, unknown>) => {
+    rows.push({
+      id: randomUUID(), deviceId, userId, entityType, entityId, operation: 'CREATE', payload: payload as Prisma.InputJsonValue,
+      status: 'APPLIED', result: result as Prisma.InputJsonValue, clientTimestamp: at, serverTimestamp: minutes(at, 3 + (rows.length % 9)),
+    });
+  };
+
+  // Last few customers were registered on the tablet during a power cut, with their first measurement and order.
+  for (const c of customers.slice(-4)) {
+    applied(TABLET, 'customer', c.id, c.createdAt, { name: c.name, mobile: c.mobile, city: c.city, address: c.addresses[0]?.addressLine ?? null }, { entityId: c.id, code: c.code, name: c.name, version: 1 });
+    const m = await prisma.customerMeasurement.findFirst({ where: { customerId: c.id }, orderBy: { createdAt: 'asc' }, include: { template: { select: { name: true } } } });
+    if (m) applied(TABLET, 'measurement', m.id, m.createdAt, { customerId: c.id, templateId: m.templateId, unit: m.unit }, { entityId: m.id, customerId: c.id, template: m.template.name, versionNo: m.versionNo });
+    const o = await prisma.order.findFirst({ where: { customerId: c.id }, orderBy: { createdAt: 'asc' } });
+    if (o) applied(TABLET, 'order', o.id, o.createdAt, { customerId: c.id }, { entityId: o.id, orderNumber: o.orderNumber, totalAmount: o.totalAmount.toFixed(2), balanceAmount: o.balanceAmount.toFixed(2) });
+  }
+  // Counter PC: payments received while the internet was down.
+  const pays = await prisma.payment.findMany({ where: { customerId: { in: customerIds }, type: { not: 'REFUND' }, status: 'POSTED', orderId: { not: null } }, orderBy: { paymentDate: 'desc' }, take: 3, include: { order: { select: { orderNumber: true } } } });
+  for (const p of pays) {
+    applied(COUNTER, 'payment', p.id, p.paymentDate, { orderId: p.orderId, amount: p.amount.toFixed(2), method: p.method }, { entityId: p.id, receiptNo: p.receiptNo, orderId: p.orderId, orderNumber: p.order?.orderNumber ?? null });
+  }
+
+  // Rejected: a second cashier took the same balance on the counter PC after it was already paid.
+  const paidOrder = await prisma.order.findFirst({ where: { customerId: { in: customerIds }, paymentStatus: 'PAID', lifecycle: { not: 'CANCELLED' } }, orderBy: { updatedAt: 'desc' } });
+  if (paidOrder) {
+    const at = minutes(new Date(), -95);
+    rows.push({
+      id: randomUUID(), deviceId: COUNTER, userId, entityType: 'payment', entityId: randomUUID(), operation: 'CREATE',
+      payload: { orderId: paidOrder.id, amount: '1500.00', method: 'CASH' }, status: 'REJECTED',
+      errorMessage: 'This order is already fully paid', clientTimestamp: at, serverTimestamp: minutes(at, 4),
+    });
+  }
+  await prisma.syncOperation.createMany({ data: rows });
+
+  // Conflict 1: the tablet changed a VIP customer's address and notes while the counter changed the same customer.
+  const vip = customers[1];
+  const base = vip.version;
+  const serverNotes = 'Collar size 16. Prefers delivery after 6 pm.';
+  await prisma.customer.update({ where: { id: vip.id }, data: { notes: serverNotes, version: { increment: 1 } } });
+  const v1At = minutes(new Date(), -50);
+  const editOp = randomUUID();
+  const editPayload = { address: 'Bungalow 12, Khayaban-e-Shamsheer, DHA Phase 5', notes: 'Wants all kurtas with side pockets.' };
+  await prisma.syncOperation.create({
+    data: {
+      id: editOp, deviceId: TABLET, userId, entityType: 'customer', entityId: vip.id, operation: 'UPDATE', baseVersion: base, payload: editPayload,
+      status: 'CONFLICT', errorMessage: 'This customer was also changed on the server. Review which details to keep.', clientTimestamp: v1At, serverTimestamp: minutes(v1At, 6),
+      conflicts: {
+        create: {
+          entityType: 'customer', entityId: vip.id, serverVersion: base + 1, clientVersion: base,
+          serverData: { kind: 'VERSION', record: {
+            id: vip.id, code: vip.code, version: base + 1, name: vip.name, mobile: vip.mobile, whatsapp: vip.whatsapp, email: vip.email, city: vip.city,
+            address: vip.addresses[0]?.addressLine ?? null, customerType: vip.customerType, notes: serverNotes,
+          } },
+          clientData: editPayload,
+        },
+      },
+    },
+  });
+
+  // Conflict 2: the tablet registered a walk-in whose mobile number already belongs to a demo customer.
+  const existing = customers[2];
+  const dupAt = minutes(new Date(), -20);
+  const dupPayload = { name: `${existing.name.split(' ')[0]} Bhai`, mobile: existing.mobile, city: 'Karachi', address: 'Bolton Market, Karachi', customerType: 'WALK_IN' };
+  await prisma.syncOperation.create({
+    data: {
+      id: randomUUID(), deviceId: TABLET, userId, entityType: 'customer', entityId: randomUUID(), operation: 'CREATE', payload: dupPayload,
+      status: 'CONFLICT', errorMessage: `A customer with this phone number already exists: ${existing.name} (${existing.code}). Review before saving.`,
+      clientTimestamp: dupAt, serverTimestamp: minutes(dupAt, 2),
+      conflicts: {
+        create: {
+          entityType: 'customer', entityId: existing.id, serverVersion: existing.version, clientVersion: null,
+          serverData: { kind: 'DUPLICATE', record: {
+            id: existing.id, code: existing.code, version: existing.version, name: existing.name, mobile: existing.mobile, whatsapp: existing.whatsapp,
+            email: existing.email, city: existing.city, address: existing.addresses[0]?.addressLine ?? null, customerType: existing.customerType, notes: existing.notes,
+          } },
+          clientData: dupPayload,
+        },
+      },
+    },
+  });
+  return rows.length + 2;
 }

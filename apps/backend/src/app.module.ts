@@ -20,6 +20,8 @@ import { AccountingModule } from './modules/accounting/accounting.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { SyncModule } from './modules/sync/sync.module';
 import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthController } from './modules/health/health.controller';
@@ -54,6 +56,8 @@ import { UsersModule } from './modules/users/users.module';
     ExpensesModule,
     PaymentsModule,
     ReportsModule,
+    WhatsAppModule,
+    SyncModule,
   ],
   controllers: [HealthController],
   providers: [

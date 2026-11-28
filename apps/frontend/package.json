@@ -1,6 +1,6 @@
 {
   "name": "@az/frontend",
-  "version": "1.7.0",
+  "version": "1.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,6 +22,7 @@
     "@tanstack/react-query": "5.87.4",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "dexie": "4.4.6",
     "lucide-react": "0.544.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
@@ -44,12 +45,15 @@
     "@types/react-dom": "19.1.9",
     "@vitejs/plugin-react": "4.7.0",
     "autoprefixer": "10.4.21",
+    "fake-indexeddb": "6.2.7",
     "jsdom": "26.1.0",
     "postcss": "8.5.6",
     "tailwindcss": "3.4.17",
     "tailwindcss-animate": "1.0.7",
     "typescript": "5.9.3",
     "vite": "6.3.6",
-    "vitest": "3.2.4"
+    "vite-plugin-pwa": "1.3.0",
+    "vitest": "3.2.4",
+    "workbox-window": "7.4.1"
   }
 }

@@ -15,6 +15,7 @@ import { env } from './config/env';
 export async function createApp(): Promise<INestApplication> {
   const config = env();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true, // WhatsApp webhook signature is checked on the exact bytes Meta sent
     logger: config.NODE_ENV === 'test' ? ['error'] : ['log', 'warn', 'error'],
   });
   if (config.TRUST_PROXY) app.set('trust proxy', 1);
@@ -57,6 +58,8 @@ function serveFrontend(app: NestExpressApplication, configured: string | undefin
     setHeaders: (res, filePath) => {
       // Hashed bundles never change; index.html must always be fresh after an update.
       if (/[\\/]assets[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      // The offline app (service worker + manifest) must be re-checked on every visit so updates arrive.
+      else if (/(sw\.js|registerSW\.js|workbox-[\w-]+\.js|manifest\.webmanifest)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
     },
   });
   app.use((req: Request, res: Response, next: NextFunction) => {

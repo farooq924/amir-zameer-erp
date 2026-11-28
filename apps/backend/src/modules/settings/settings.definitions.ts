@@ -62,8 +62,22 @@ export const SETTING_GROUPS = {
       invoiceFooter: z.string().trim().max(500).optional().default(''),
       receiptWidth: z.enum(['58mm', '80mm']),
       showLogoOnReceipt: z.boolean(),
+      /** Which document "Print" opens first for an order. */
+      defaultOrderPrint: z.enum(['RECEIPT', 'INVOICE']),
+      invoiceTitle: z.string().trim().min(1).max(40),
+      invoiceTerms: z.string().trim().max(1000).optional().default(''),
+      showNtnOnInvoice: z.boolean(),
+      showSignatureLine: z.boolean(),
+      /** Open the browser print dialog as soon as a print page has loaded. */
+      autoPrint: z.boolean(),
+      receiptCopies: z.number().int().min(1).max(3),
     }),
-    defaults: { invoiceFooter: 'Thank you for choosing AMIR ZAMEER.', receiptWidth: '80mm', showLogoOnReceipt: true },
+    defaults: {
+      invoiceFooter: 'Thank you for choosing AMIR ZAMEER.', receiptWidth: '80mm', showLogoOnReceipt: true,
+      defaultOrderPrint: 'RECEIPT', invoiceTitle: 'INVOICE',
+      invoiceTerms: 'Please bring this invoice when collecting your order.\nOrders not collected within 30 days of the delivery date may be disposed of.\nAdvance payments are not refundable once cutting has started.',
+      showNtnOnInvoice: true, showSignatureLine: true, autoPrint: false, receiptCopies: 1,
+    },
   },
 } as const;
 

@@ -1,7 +1,7 @@
 import { formatPhone, whatsappLink } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Ban, Banknote, Calendar, Check, ClipboardList, Copy, MessageCircle, MoreHorizontal, PackageCheck, Pencil, Phone, Printer, RefreshCw,
+  ArrowLeft, Ban, Banknote, Calendar, Check, ClipboardList, Copy, FileText, MessageCircle, MoreHorizontal, PackageCheck, Pencil, Phone, Printer, RefreshCw,
   Ruler, Scale, Scissors, UserCog, Wallet, Workflow,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -19,6 +19,7 @@ import { StatCard } from '@/features/dashboard/StatCard';
 import { formatQty } from '@/features/inventory/shared';
 import { LifecycleBadge, METHOD_LABEL, ORDER_TYPE_LABEL, OverdueBadge, PaymentBadge, StageBadge } from '@/features/orders/badges';
 import { AdjustmentDialog, AssignDialog, CancelOrderDialog, DeliverDialog, PaymentDialog, StageDialog } from '@/features/orders/OrderActionDialogs';
+import { SendWhatsAppDialog, type WaContext } from '@/features/whatsapp/SendWhatsAppDialog';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
 import type { OrderDetail, OrderFormOptions } from '@/types';
@@ -69,6 +70,9 @@ export function OrderDetailPage() {
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [itemId, setItemId] = useState<string | null>(null);
   const [tab, setTab] = useState('garments');
+  const [waPayment, setWaPayment] = useState<string | null>(null);
+  const [waOpenState, setWaOpenState] = useState(false);
+  const setWaOpen = (v: boolean) => { if (v) setWaPayment(null); setWaOpenState(v); };
   const q = useQuery({ queryKey: ['order', id], queryFn: () => api.get<OrderDetail>(`/orders/${id}`) });
   const options = useQuery({ queryKey: ['order-form-options'], queryFn: () => api.get<OrderFormOptions>('/orders/form-options'), staleTime: 60_000 });
   const refreshMeasurement = useMutation({
@@ -112,8 +116,10 @@ export function OrderDetailPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="More actions"><MoreHorizontal /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {can('whatsapp', 'CREATE') && <DropdownMenuItem onSelect={() => setWaOpen(true)}><MessageCircle /> Send WhatsApp</DropdownMenuItem>}
                 {can('orders', 'PRINT') && <>
-                  <DropdownMenuItem asChild><Link to={`/print/orders/${o.id}`} target="_blank"><Printer /> Print receipt</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link to={`/print/orders/${o.id}?copy=receipt`} target="_blank"><Printer /> Print receipt (58 / 80 mm)</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link to={`/print/orders/${o.id}?copy=invoice`} target="_blank"><FileText /> Print A4 invoice</Link></DropdownMenuItem>
                   <DropdownMenuItem asChild><Link to={`/print/orders/${o.id}?copy=workshop`} target="_blank"><Scissors /> Print job card (workshop)</Link></DropdownMenuItem>
                 </>}
                 {open && can('orders', 'EDIT') && <DropdownMenuItem onSelect={() => navigate(`/orders/${o.id}/edit`)}><Pencil /> Edit / revise order</DropdownMenuItem>}
@@ -149,7 +155,8 @@ export function OrderDetailPage() {
             <CardTitle>Customer</CardTitle>
             <div className="flex gap-1">
               <Button variant="ghost" size="icon" asChild aria-label="Call customer"><a href={`tel:+${o.customer.mobile}`}><Phone className="text-emerald-600" /></a></Button>
-              {wa && <Button variant="ghost" size="icon" asChild aria-label="WhatsApp customer"><a href={wa} target="_blank" rel="noopener noreferrer"><MessageCircle className="text-emerald-600" /></a></Button>}
+              {can('whatsapp', 'CREATE') ? <Button variant="ghost" size="icon" aria-label="WhatsApp customer" onClick={() => setWaOpen(true)}><MessageCircle className="text-emerald-600" /></Button>
+                : wa && <Button variant="ghost" size="icon" asChild aria-label="WhatsApp customer"><a href={wa} target="_blank" rel="noopener noreferrer"><MessageCircle className="text-emerald-600" /></a></Button>}
             </div>
           </CardHeader>
           <CardContent>
@@ -254,13 +261,18 @@ export function OrderDetailPage() {
             {!o.payments.length ? <EmptyState icon={<Wallet />} title="No payments yet" description="Advance and later payments for this order appear here with their receipt numbers."
               action={canPay ? <Button onClick={() => openDialog('pay')}><Banknote /> Receive payment</Button> : undefined} /> : (
               <Table>
-                <THead><TR><TH>Receipt</TH><TH>Date</TH><TH>Method</TH><TH className="hidden sm:table-cell">Type</TH><TH className="text-right">Amount</TH><TH className="w-12"><span className="sr-only">Print</span></TH></TR></THead>
+                <THead><TR><TH>Receipt</TH><TH>Date</TH><TH>Method</TH><TH className="hidden sm:table-cell">Type</TH><TH className="text-right">Amount</TH><TH className="w-24"><span className="sr-only">Actions</span></TH></TR></THead>
                 <TBody>{o.payments.map((p) => (
                   <TR key={p.id}>
                     <TD className="font-mono text-xs">{p.receiptNo}</TD><TD className="whitespace-nowrap">{formatDateTime(p.paymentDate)}</TD>
                     <TD>{METHOD_LABEL[p.method] ?? humanize(p.method)}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</TD>
                     <TD className="hidden sm:table-cell">{p.status === 'REVERSED' ? 'Reversed' : humanize(p.type)}</TD><TD className="text-right font-medium tabular-nums">{formatPKR(p.amount)}</TD>
-                    <TD>{can('orders', 'PRINT') && <Button variant="ghost" size="icon" asChild aria-label={`Print receipt ${p.receiptNo}`}><Link to={`/print/orders/${o.id}?receipt=${p.id}`} target="_blank"><Printer /></Link></Button>}</TD>
+                    <TD>
+                      <div className="flex justify-end gap-1">
+                        {can('whatsapp', 'CREATE') && p.status !== 'REVERSED' && <Button variant="ghost" size="icon" aria-label={`WhatsApp receipt ${p.receiptNo}`} onClick={() => { setWaPayment(p.id); setWaOpenState(true); }}><MessageCircle className="text-emerald-600" /></Button>}
+                        {can('orders', 'PRINT') && <Button variant="ghost" size="icon" asChild aria-label={`Print receipt ${p.receiptNo}`}><Link to={`/print/orders/${o.id}?receipt=${p.id}`} target="_blank"><Printer /></Link></Button>}
+                      </div>
+                    </TD>
                   </TR>
                 ))}</TBody>
               </Table>
@@ -323,6 +335,10 @@ export function OrderDetailPage() {
       <DeliverDialog order={o} open={dialog === 'deliver'} onOpenChange={(v) => !v && setDialog(null)} canPay={can('payments', 'CREATE')} />
       <CancelOrderDialog order={o} open={dialog === 'cancel'} onOpenChange={(v) => !v && setDialog(null)} />
       <AdjustmentDialog order={o} open={dialog === 'adjust'} onOpenChange={(v) => !v && setDialog(null)} />
+      <SendWhatsAppDialog open={waOpenState} onOpenChange={setWaOpenState}
+        context={(waPayment ? { type: 'PAYMENT', id: waPayment } : { type: 'ORDER', id: o.id }) satisfies WaContext}
+        purpose={waPayment ? 'PAYMENT_RECEIVED' : o.lifecycle === 'DELIVERED' ? 'ORDER_DELIVERED' : o.stage.code === 'READY' ? 'ORDER_READY' : balance > 0 && o.deliveredPieces > 0 ? 'PAYMENT_REMINDER' : 'ORDER_CONFIRMATION'}
+        title={waPayment ? 'Send receipt on WhatsApp' : `WhatsApp ${o.customer.name}`} />
       <AssignDialog order={o} open={dialog === 'assign'} onOpenChange={(v) => !v && setDialog(null)} employees={options.data?.employees ?? []} itemId={itemId} />
     </div>
   );

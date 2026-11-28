@@ -18,6 +18,10 @@ import { CustomerFormDialog } from '@/features/customers/CustomerFormDialog';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { CustomerMeasurements } from '@/features/measurements/CustomerMeasurements';
 import { StageBadge } from '@/features/orders/badges';
+import { SendWhatsAppDialog } from '@/features/whatsapp/SendWhatsAppDialog';
+import { WaChannelBadge, WaStatusBadge, purposeLabel } from '@/features/whatsapp/shared';
+import { Switch } from '@/components/ui/switch';
+import type { WaMessage } from '@/types/whatsapp';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
 import type { CustomerProfile, CustomerStatus, LedgerResponse, Paginated } from '@/types';
@@ -148,6 +152,7 @@ export function CustomerProfilePage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
+  const [waOpen, setWaOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | { kind: 'status'; status: CustomerStatus } | { kind: 'delete' }>(null);
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') ?? 'overview';
@@ -187,7 +192,8 @@ export function CustomerProfilePage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild><a href={`tel:+${c.mobile}`}><Phone /> Call</a></Button>
-            {wa && <Button variant="outline" size="sm" asChild><a href={wa} target="_blank" rel="noopener noreferrer"><MessageCircle /> WhatsApp</a></Button>}
+            {can('whatsapp', 'CREATE') ? <Button variant="outline" size="sm" onClick={() => setWaOpen(true)}><MessageCircle className="text-emerald-600" /> WhatsApp</Button>
+              : wa && <Button variant="outline" size="sm" asChild><a href={wa} target="_blank" rel="noopener noreferrer"><MessageCircle /> WhatsApp</a></Button>}
             {can('orders', 'CREATE') && c.status !== 'BLOCKED' && <Button size="sm" onClick={() => navigate(`/orders/new?customerId=${c.id}`)}><Plus /> New order</Button>}
             {can('customers', 'EDIT') && <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}><Pencil /> Edit</Button>}
             {(can('customers', 'EDIT') || can('customers', 'DELETE')) && (
@@ -220,6 +226,7 @@ export function CustomerProfilePage() {
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
           <TabsTrigger value="notes">Notes</TabsTrigger>
+          {can('whatsapp', 'VIEW') && <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview" className="mt-4">
           <Card>
@@ -248,8 +255,10 @@ export function CustomerProfilePage() {
         <TabsContent value="payments" className="mt-4"><Card><PaymentsTab id={c.id} /></Card></TabsContent>
         <TabsContent value="ledger" className="mt-4"><Card><LedgerTab id={c.id} /></Card></TabsContent>
         <TabsContent value="notes" className="mt-4"><Card><NotesTab id={c.id} /></Card></TabsContent>
+        {can('whatsapp', 'VIEW') && <TabsContent value="whatsapp" className="mt-4"><WhatsAppTab id={c.id} optIn={c.whatsappOptIn} optInAt={c.whatsappOptInAt ?? null} onChanged={refresh} canEdit={can('customers', 'EDIT')} /></TabsContent>}
       </Tabs>
 
+      <SendWhatsAppDialog open={waOpen} onOpenChange={setWaOpen} context={{ type: 'CUSTOMER', id: c.id }} purpose="GENERAL" title={`WhatsApp ${c.name}`} />
       <CustomerFormDialog open={editOpen} onOpenChange={setEditOpen} customer={c} onSaved={refresh} />
       <ConfirmDialog
         open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}
@@ -262,6 +271,44 @@ export function CustomerProfilePage() {
         loading={setStatus.isPending || remove.isPending}
         onConfirm={() => { if (!confirm) return; if (confirm.kind === 'delete') remove.mutate(); else setStatus.mutate(confirm.status); }}
       />
+    </div>
+  );
+}
+
+function WhatsAppTab({ id, optIn, optInAt, onChanged, canEdit }: { id: string; optIn: boolean; optInAt: string | null; onChanged: () => void; canEdit: boolean }) {
+  const q = useQuery({ queryKey: ['whatsapp', 'messages', { customerId: id }], queryFn: () => api.get<Paginated<WaMessage>>('/whatsapp/messages', { customerId: id, pageSize: 50 }) });
+  const toggle = useMutation({
+    mutationFn: (v: boolean) => api.put(`/whatsapp/customers/${id}/opt-in`, { optIn: v }),
+    onSuccess: (_r, v) => { toast.success(v ? 'Customer agreed to WhatsApp messages' : 'WhatsApp messages stopped for this customer'); onChanged(); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <div className="space-y-4">
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <p className="font-medium">Agrees to WhatsApp messages</p>
+          <p className="text-sm text-muted-foreground">{optIn ? `Yes${optInAt ? `, since ${formatDate(optInAt)}` : ''}. Automatic order and payment updates are sent.` : 'No. Only manual messages from the WhatsApp app are possible.'}</p>
+        </div>
+        <Switch aria-label="Agrees to WhatsApp messages" checked={optIn} disabled={!canEdit || toggle.isPending} onCheckedChange={(v) => toggle.mutate(v)} />
+      </Card>
+      <Card>
+        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <Skeleton className="m-4 h-24" /> : !q.data!.data.length ? (
+          <EmptyState icon={<MessageCircle />} title="No WhatsApp messages yet" description="Messages sent to this customer appear here with their status." />
+        ) : (
+          <ul className="divide-y">
+            {q.data!.data.map((m) => (
+              <li key={m.id} className="p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{m.template ? purposeLabel(m.template.purpose) : 'Typed message'} <span className="text-xs font-normal text-muted-foreground">· {formatDateTime(m.createdAt)}</span></span>
+                  <span className="flex gap-1"><WaChannelBadge channel={m.channel} /><WaStatusBadge status={m.status} channel={m.channel} /></span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{m.body}</p>
+                {m.status === 'FAILED' && m.errorMessage && <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">{m.errorMessage}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }

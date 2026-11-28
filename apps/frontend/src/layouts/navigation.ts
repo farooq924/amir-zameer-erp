@@ -1,7 +1,7 @@
 import { MODULES, type ModuleDefinition } from '@az/shared';
 import {
   Banknote, BarChart3, BookOpen, CalendarCheck, ClipboardList, DatabaseBackup, IdCard, Layers, LayoutDashboard,
-  MessageCircle, Receipt, RefreshCw, Ruler, Scissors, Settings, ShieldCheck, Shirt, ShoppingCart, Truck, UserCog, Users, Wallet,
+  MessageCircle, Receipt, RefreshCw, WifiOff, Ruler, Scissors, Settings, ShieldCheck, Shirt, ShoppingCart, Truck, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { hasPermission } from '@/hooks/use-permission';
@@ -9,11 +9,20 @@ import type { AuthUser } from '@/types';
 
 export const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard, Users, Ruler, ClipboardList, Shirt, Layers, ShoppingCart, Truck, IdCard, CalendarCheck, Wallet, Scissors,
-  Receipt, Banknote, BookOpen, BarChart3, MessageCircle, DatabaseBackup, ShieldCheck, Settings, UserCog, RefreshCw,
+  Receipt, Banknote, BookOpen, BarChart3, MessageCircle, DatabaseBackup, ShieldCheck, Settings, UserCog, RefreshCw, WifiOff,
 };
 
 /** Navigation items the user is allowed to see, in the order defined by the shared module list. */
 export function visibleNavItems(user: AuthUser | null): ModuleDefinition[] {
-  return MODULES.filter((m) => !m.hidden && hasPermission(user, m.key, 'VIEW'));
+  const items = MODULES.filter((m) => !m.hidden && hasPermission(user, m.key, 'VIEW'));
+  // Phase 9: Offline Desk for anyone who books work, Sync Center for every signed-in user.
+  const offlineWork = ['customers', 'measurements', 'orders', 'payments'].some((k) => hasPermission(user, k, 'CREATE'));
+  const extra: ModuleDefinition[] = [
+    ...(offlineWork ? [{ key: 'offline', label: 'Offline Desk', path: '/offline', phase: 9, icon: 'WifiOff', actions: ['VIEW'] } as ModuleDefinition] : []),
+    ...(user ? [{ key: 'sync', label: 'Sync Center', path: '/sync', phase: 9, icon: 'RefreshCw', actions: ['VIEW'] } as ModuleDefinition] : []),
+  ];
+  const at = items.findIndex((m) => m.key === 'backup' || m.key === 'audit_logs' || m.key === 'settings');
+  if (at === -1) return [...items, ...extra];
+  return [...items.slice(0, at), ...extra, ...items.slice(at)];
 }
 
