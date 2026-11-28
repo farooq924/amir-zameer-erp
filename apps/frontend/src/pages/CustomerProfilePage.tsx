@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable, type DataColumn } from '@/components/data-table/DataTable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CustomerStatusBadge, CustomerTypeBadge } from '@/features/customers/badges';
 import { CustomerFormDialog } from '@/features/customers/CustomerFormDialog';
@@ -38,75 +38,67 @@ function Loading() {
   return <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>;
 }
 
-function OrdersTab({ id, status }: { id: string; status: CustomerStatus }) {
+function OrdersTab({ id, status, name }: { id: string; status: CustomerStatus; name: string }) {
   const can = useCan();
   const navigate = useNavigate();
-  const q = useQuery({ queryKey: ['customer', id, 'orders'], queryFn: () => api.get<Paginated<OrderRow>>(`/customers/${id}/orders`, { pageSize: 50 }) });
-  if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
-  if (q.isLoading) return <Loading />;
-  if (!q.data!.data.length) {
-    return <EmptyState icon={<ClipboardList />} title="No orders yet" description="Orders booked for this customer will appear here."
-      action={can('orders', 'CREATE') && status !== 'BLOCKED' ? <Button onClick={() => navigate(`/orders/new?customerId=${id}`)}><Plus /> New order</Button> : undefined} />;
-  }
+  const q = useQuery({ queryKey: ['customer', id, 'orders'], queryFn: () => api.get<Paginated<OrderRow>>(`/customers/${id}/orders`, { pageSize: 200 }) });
+  const columns: DataColumn<OrderRow>[] = [
+    { id: 'order', header: 'Order', value: (o) => o.orderNumber, cell: (o) => <span className="whitespace-nowrap font-semibold text-primary">{o.orderNumber}</span> },
+    { id: 'date', header: 'Date', value: (o) => o.orderDate, text: (o) => formatDate(o.orderDate), className: 'whitespace-nowrap' },
+    { id: 'delivery', header: 'Delivery', value: (o) => o.expectedDeliveryDate, text: (o) => formatDate(o.expectedDeliveryDate), className: 'hidden sm:table-cell' },
+    { id: 'status', header: 'Status', value: (o) => o.stage?.name ?? humanize(o.lifecycle), cell: (o) => (o.stage ? <StageBadge stage={o.stage} /> : <Badge variant="outline">{humanize(o.lifecycle)}</Badge>) },
+    { id: 'total', header: 'Total', type: 'money', value: (o) => Number(o.totalAmount), cell: (o) => formatPKR(o.totalAmount) },
+    { id: 'balance', header: 'Balance', type: 'money', value: (o) => Number(o.balanceAmount), cell: (o) => formatPKR(o.balanceAmount) },
+  ];
   return (
-    <Table>
-      <THead><TR><TH>Order</TH><TH>Date</TH><TH className="hidden sm:table-cell">Delivery</TH><TH>Status</TH><TH className="text-right">Total</TH><TH className="text-right">Balance</TH></TR></THead>
-      <TBody>{q.data!.data.map((o) => (
-        <TR key={o.id} className="cursor-pointer" onClick={() => navigate(`/orders/${o.id}`)}>
-          <TD className="whitespace-nowrap font-semibold"><Link to={`/orders/${o.id}`} onClick={(e) => e.stopPropagation()}>{o.orderNumber}</Link></TD><TD className="whitespace-nowrap">{formatDate(o.orderDate)}</TD>
-          <TD className="hidden sm:table-cell">{formatDate(o.expectedDeliveryDate)}</TD>
-          <TD>{o.stage ? <StageBadge stage={o.stage} /> : <Badge variant="outline">{humanize(o.lifecycle)}</Badge>}</TD>
-          <TD className="text-right tabular-nums">{formatPKR(o.totalAmount)}</TD><TD className="text-right tabular-nums">{formatPKR(o.balanceAmount)}</TD>
-        </TR>
-      ))}</TBody>
-    </Table>
+    <DataTable title={`${name} - orders`} module="orders" noun="order" rows={q.data?.data} columns={columns} getRowId={(o) => o.id}
+      loading={q.isLoading} error={q.error} onRetry={() => q.refetch()}
+      onRowClick={(o) => navigate(`/orders/${o.id}`)} onView={(o) => navigate(`/orders/${o.id}`)}
+      onEdit={can('orders', 'EDIT') ? (o) => navigate(`/orders/${o.id}/edit`) : undefined}
+      onDuplicate={can('orders', 'CREATE') && status !== 'BLOCKED' ? (o) => navigate(`/orders/new?from=${o.id}`) : undefined}
+      canRow={(a, o) => a !== 'edit' || o.lifecycle === 'OPEN' || o.lifecycle === 'PARTIALLY_DELIVERED'}
+      footer={(rows) => ({ order: 'Total', total: formatPKR(rows.reduce((t, o) => t + Number(o.totalAmount), 0)), balance: formatPKR(rows.reduce((t, o) => t + Number(o.balanceAmount), 0)) })}
+      empty={<EmptyState icon={<ClipboardList />} title="No orders yet" description="Orders booked for this customer will appear here."
+        action={can('orders', 'CREATE') && status !== 'BLOCKED' ? <Button onClick={() => navigate(`/orders/new?customerId=${id}`)}><Plus /> New order</Button> : undefined} />} />
   );
 }
 
-function PaymentsTab({ id }: { id: string }) {
-  const q = useQuery({ queryKey: ['customer', id, 'payments'], queryFn: () => api.get<Paginated<PaymentRow>>(`/customers/${id}/payments`, { pageSize: 50 }) });
-  if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
-  if (q.isLoading) return <Loading />;
-  if (!q.data!.data.length) return <EmptyState title="No payments yet" description="Advance and order payments appear here with their receipt numbers." />;
+function PaymentsTab({ id, name }: { id: string; name: string }) {
+  const q = useQuery({ queryKey: ['customer', id, 'payments'], queryFn: () => api.get<Paginated<PaymentRow>>(`/customers/${id}/payments`, { pageSize: 200 }) });
+  const columns: DataColumn<PaymentRow>[] = [
+    { id: 'receipt', header: 'Receipt', value: (p) => p.receiptNo, cell: (p) => <span className="whitespace-nowrap font-mono text-xs">{p.receiptNo}</span> },
+    { id: 'date', header: 'Date', value: (p) => p.paymentDate, text: (p) => formatDate(p.paymentDate), className: 'whitespace-nowrap' },
+    { id: 'order', header: 'Order', value: (p) => p.order?.orderNumber ?? '-', className: 'hidden sm:table-cell' },
+    { id: 'method', header: 'Method', value: (p) => humanize(p.method) },
+    { id: 'status', header: 'Status', value: (p) => humanize(p.status), className: 'hidden md:table-cell' },
+    { id: 'amount', header: 'Amount', type: 'money', value: (p) => Number(p.amount), cell: (p) => formatPKR(p.amount) },
+  ];
   return (
-    <Table>
-      <THead><TR><TH>Receipt</TH><TH>Date</TH><TH className="hidden sm:table-cell">Order</TH><TH>Method</TH><TH className="text-right">Amount</TH></TR></THead>
-      <TBody>{q.data!.data.map((p) => (
-        <TR key={p.id}>
-          <TD className="font-mono text-xs">{p.receiptNo}</TD><TD>{formatDate(p.paymentDate)}</TD>
-          <TD className="hidden sm:table-cell">{p.order?.orderNumber ?? '-'}</TD><TD>{humanize(p.method)}</TD>
-          <TD className="text-right tabular-nums">{formatPKR(p.amount)}</TD>
-        </TR>
-      ))}</TBody>
-    </Table>
+    <DataTable title={`${name} - payments`} module="payments" noun="payment" rows={q.data?.data} columns={columns} getRowId={(p) => p.id}
+      loading={q.isLoading} error={q.error} onRetry={() => q.refetch()}
+      footer={(rows) => ({ receipt: 'Total', amount: formatPKR(rows.reduce((t, p) => t + Number(p.amount), 0)) })}
+      empty={<EmptyState title="No payments yet" description="Advance and order payments appear here with their receipt numbers." />} />
   );
 }
 
-function LedgerTab({ id }: { id: string }) {
+type LedgerRow = LedgerResponse['entries'][number];
+
+function LedgerTab({ id, name }: { id: string; name: string }) {
   const q = useQuery({ queryKey: ['customer', id, 'ledger'], queryFn: () => api.get<LedgerResponse>(`/customers/${id}/ledger`) });
-  if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
-  if (q.isLoading) return <Loading />;
-  const d = q.data!;
-  if (!d.entries.length) return <EmptyState title="No ledger entries" description="Opening balance, invoices and payments are recorded here automatically." />;
+  const d = q.data;
+  const columns: DataColumn<LedgerRow>[] = [
+    { id: 'date', header: 'Date', value: (e) => e.date, text: (e) => formatDate(e.date), className: 'whitespace-nowrap', sortable: false },
+    { id: 'entry', header: 'Entry', value: (e) => humanize(e.entryType), text: (e) => `${humanize(e.entryType)}${e.description ? ` - ${e.description}` : ''}`, sortable: false,
+      cell: (e) => <><span className="font-medium">{humanize(e.entryType)}</span>{e.description && <span className="block text-xs text-muted-foreground">{e.description}</span>}</> },
+    { id: 'debit', header: 'Debit', type: 'money', value: (e) => Number(e.debit), text: (e) => (Number(e.debit) ? formatPKR(e.debit) : '-'), sortable: false },
+    { id: 'credit', header: 'Credit', type: 'money', value: (e) => Number(e.credit), text: (e) => (Number(e.credit) ? formatPKR(e.credit) : '-'), sortable: false },
+    { id: 'balance', header: 'Balance', type: 'money', value: (e) => Number(e.balance), cell: (e) => <span className="font-medium">{formatPKR(e.balance)}</span>, text: (e) => formatPKR(e.balance), sortable: false },
+  ];
   return (
-    <Table>
-      <THead><TR><TH>Date</TH><TH>Entry</TH><TH className="text-right">Debit</TH><TH className="text-right">Credit</TH><TH className="text-right">Balance</TH></TR></THead>
-      <TBody>
-        {d.entries.map((e) => (
-          <TR key={e.id}>
-            <TD className="whitespace-nowrap">{formatDate(e.date)}</TD>
-            <TD><span className="font-medium">{humanize(e.entryType)}</span>{e.description && <span className="block text-xs text-muted-foreground">{e.description}</span>}</TD>
-            <TD className="text-right tabular-nums">{Number(e.debit) ? formatPKR(e.debit) : '-'}</TD>
-            <TD className="text-right tabular-nums">{Number(e.credit) ? formatPKR(e.credit) : '-'}</TD>
-            <TD className="text-right font-medium tabular-nums">{formatPKR(e.balance)}</TD>
-          </TR>
-        ))}
-        <TR className="bg-muted/50 font-semibold">
-          <TD colSpan={2}>Total</TD><TD className="text-right tabular-nums">{formatPKR(d.totals.debit)}</TD>
-          <TD className="text-right tabular-nums">{formatPKR(d.totals.credit)}</TD><TD className="text-right tabular-nums">{formatPKR(d.totals.balance)}</TD>
-        </TR>
-      </TBody>
-    </Table>
+    <DataTable title={`${name} - ledger`} module="customers" noun="entry" rows={d?.entries} columns={columns} getRowId={(e) => e.id}
+      loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} defaultPageSize={50}
+      footer={() => (d ? { date: 'Total', debit: formatPKR(d.totals.debit), credit: formatPKR(d.totals.credit), balance: formatPKR(d.totals.balance) } : {})}
+      empty={<EmptyState title="No ledger entries" description="Opening balance, invoices and payments are recorded here automatically." />} />
   );
 }
 
@@ -251,9 +243,9 @@ export function CustomerProfilePage() {
         <TabsContent value="measurements" className="mt-4">
           {can('measurements', 'VIEW') ? <CustomerMeasurements customerId={c.id} /> : <Card><EmptyState title="No access" description="You do not have permission to view measurements." /></Card>}
         </TabsContent>
-        <TabsContent value="orders" className="mt-4"><Card><OrdersTab id={c.id} status={c.status} /></Card></TabsContent>
-        <TabsContent value="payments" className="mt-4"><Card><PaymentsTab id={c.id} /></Card></TabsContent>
-        <TabsContent value="ledger" className="mt-4"><Card><LedgerTab id={c.id} /></Card></TabsContent>
+        <TabsContent value="orders" className="mt-4"><Card><OrdersTab id={c.id} status={c.status} name={c.name} /></Card></TabsContent>
+        <TabsContent value="payments" className="mt-4"><Card><PaymentsTab id={c.id} name={c.name} /></Card></TabsContent>
+        <TabsContent value="ledger" className="mt-4"><Card><LedgerTab id={c.id} name={c.name} /></Card></TabsContent>
         <TabsContent value="notes" className="mt-4"><Card><NotesTab id={c.id} /></Card></TabsContent>
         {can('whatsapp', 'VIEW') && <TabsContent value="whatsapp" className="mt-4"><WhatsAppTab id={c.id} optIn={c.whatsappOptIn} optInAt={c.whatsappOptInAt ?? null} onChanged={refresh} canEdit={can('customers', 'EDIT')} /></TabsContent>}
       </Tabs>

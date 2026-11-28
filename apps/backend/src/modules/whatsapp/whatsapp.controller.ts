@@ -73,13 +73,23 @@ export class WhatsAppWebhookController {
 
   @Get() @Public() @Header('Content-Type', 'text/plain') @ApiExcludeEndpoint()
   verify(@Query('hub.mode') mode?: string, @Query('hub.verify_token') token?: string, @Query('hub.challenge') challenge?: string) {
-    return this.wa.verifyWebhook(mode, token, challenge);
+    return this.wa.webhookVerify(undefined, mode, token, challenge);
+  }
+
+  @Get(':company') @Public() @Header('Content-Type', 'text/plain') @ApiExcludeEndpoint()
+  verifyCompany(@Param('company') company: string, @Query('hub.mode') mode?: string, @Query('hub.verify_token') token?: string, @Query('hub.challenge') challenge?: string) {
+    return this.wa.webhookVerify(company, mode, token, challenge);
   }
 
   @Post() @Public() @HttpCode(200) @ApiExcludeEndpoint()
   async receive(@Req() req: Request & { rawBody?: Buffer }, @Body() body: unknown) {
-    await this.wa.checkSignature(req.rawBody, req.headers['x-hub-signature-256'] as string | undefined);
-    await this.wa.handleWebhook(body);
+    await this.wa.webhookReceive(undefined, req.rawBody, req.headers['x-hub-signature-256'] as string | undefined, body);
+    return { ok: true };
+  }
+
+  @Post(':company') @Public() @HttpCode(200) @ApiExcludeEndpoint()
+  async receiveCompany(@Param('company') company: string, @Req() req: Request & { rawBody?: Buffer }, @Body() body: unknown) {
+    await this.wa.webhookReceive(company, req.rawBody, req.headers['x-hub-signature-256'] as string | undefined, body);
     return { ok: true };
   }
 }

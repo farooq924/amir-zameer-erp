@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService, PrismaTx } from '../prisma/prisma.service';
+import { Tenant } from '../tenant';
 
 export interface SequenceOptions {
   key: string; // ORDER, CUSTOMER, RECEIPT ...
@@ -12,6 +13,7 @@ export interface SequenceOptions {
  * Concurrency-safe document numbers using a single atomic UPSERT ... RETURNING.
  * Must run inside the same transaction as the document insert so a rollback
  * also rolls back the counter (no gaps from failed saves).
+ * Every company has its own counters.
  */
 @Injectable()
 export class SequenceService {
@@ -21,10 +23,11 @@ export class SequenceService {
     const client = tx ?? this.prisma;
     const period = opts.period ?? '';
     const padding = opts.padding ?? 5;
+    const companyId = Tenant.require();
     const rows = await client.$queryRaw<{ value: number }[]>`
-      INSERT INTO number_sequences (id, key, period, prefix, padding, "nextValue", "updatedAt")
-      VALUES (gen_random_uuid(), ${opts.key}, ${period}, ${opts.prefix}, ${padding}, 2, now())
-      ON CONFLICT (key, period)
+      INSERT INTO number_sequences (id, "companyId", key, period, prefix, padding, "nextValue", "updatedAt")
+      VALUES (gen_random_uuid(), ${companyId}::uuid, ${opts.key}, ${period}, ${opts.prefix}, ${padding}, 2, now())
+      ON CONFLICT ("companyId", key, period)
       DO UPDATE SET "nextValue" = number_sequences."nextValue" + 1, "updatedAt" = now()
       RETURNING ("nextValue" - 1)::int AS value`;
     const value = rows[0].value;

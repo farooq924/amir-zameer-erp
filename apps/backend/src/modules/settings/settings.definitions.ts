@@ -13,10 +13,13 @@ export const SETTING_GROUPS = {
       address: z.string().trim().max(300).optional().default(''),
       city: z.string().trim().max(80).optional().default(''),
       ntn: z.string().trim().max(40).optional().default(''),
-      logoUrl: z.string().trim().max(500).optional().default(''),
+      // Company logo: a small uploaded image (data URL, resized in the browser) or an https link.
+      logoUrl: z.string().trim().max(400_000)
+        .refine((v) => v === '' || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v) || /^https:\/\/\S+$/.test(v), 'Logo must be a PNG, JPG or WEBP image')
+        .optional().default(''),
     }),
     defaults: {
-      businessName: 'AMIR ZAMEER', tagline: "Men's Tailoring & Fabrics", phone: '', whatsapp: '', email: '',
+      businessName: 'My Tailoring Shop', tagline: "Men's Tailoring & Fabrics", phone: '', whatsapp: '', email: '',
       address: '', city: '', ntn: '', logoUrl: '',
     },
   },
@@ -73,7 +76,7 @@ export const SETTING_GROUPS = {
       receiptCopies: z.number().int().min(1).max(3),
     }),
     defaults: {
-      invoiceFooter: 'Thank you for choosing AMIR ZAMEER.', receiptWidth: '80mm', showLogoOnReceipt: true,
+      invoiceFooter: 'Thank you for your business.', receiptWidth: '80mm', showLogoOnReceipt: true,
       defaultOrderPrint: 'RECEIPT', invoiceTitle: 'INVOICE',
       invoiceTerms: 'Please bring this invoice when collecting your order.\nOrders not collected within 30 days of the delivery date may be disposed of.\nAdvance payments are not refundable once cutting has started.',
       showNtnOnInvoice: true, showSignatureLine: true, autoPrint: false, receiptCopies: 1,

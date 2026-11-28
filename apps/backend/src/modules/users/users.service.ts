@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant, byCompany } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -57,6 +58,7 @@ export class UsersService {
     if (policy) throw new BadRequestException(policy);
     await this.assertRolesAssignable(dto.roleIds, actor);
     await this.assertUnique(dto.email, dto.username);
+    if (dto.isActive ?? true) await this.assertUserLimit();
     const user = await this.prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
@@ -81,7 +83,7 @@ export class UsersService {
     if (dto.roleIds) {
       await this.assertRolesAssignable(dto.roleIds, actor);
       const wasOwner = before.roles.some((r) => r.code === 'OWNER');
-      const ownerRole = await this.prisma.role.findUnique({ where: { code: 'OWNER' } });
+      const ownerRole = await this.prisma.role.findUnique({ where: { companyId_code: byCompany({ code: 'OWNER' }) } });
       const staysOwner = ownerRole ? dto.roleIds.includes(ownerRole.id) : false;
       if (wasOwner && !staysOwner) await this.assertNotLastOwner(id);
     }
@@ -111,6 +113,7 @@ export class UsersService {
     if (id === actor.id && !isActive) throw new BadRequestException('You cannot deactivate your own account');
     const before = await this.get(id);
     if (!isActive && before.roles.some((r) => r.code === 'OWNER')) await this.assertNotLastOwner(id);
+    if (isActive && !before.isActive) await this.assertUserLimit();
     const u = await this.prisma.user.update({ where: { id }, data: { isActive, ...(isActive ? { lockedUntil: null, failedLoginAttempts: 0 } : {}) }, select: userSelect });
     if (!isActive) await this.sessions.revokeAllForUser(id);
     await this.audit.log({ action: isActive ? 'ACTIVATE' : 'DEACTIVATE', module: 'users', recordId: id, oldValues: { isActive: before.isActive }, newValues: { isActive } }, ctx);
@@ -150,7 +153,18 @@ export class UsersService {
     if (email) or.push({ email: { equals: email.trim(), mode: 'insensitive' } });
     if (username) or.push({ username: { equals: username.trim(), mode: 'insensitive' } });
     if (or.length === 0) return;
-    const existing = await this.prisma.user.findFirst({ where: { OR: or, ...(exceptId ? { id: { not: exceptId } } : {}) } });
-    if (existing) throw new ConflictException('A user with this email or username already exists');
+    // Usernames and emails are unique across ALL companies (login has no company field).
+    const existing = await Tenant.system(() => this.prisma.user.findFirst({ where: { OR: or, ...(exceptId ? { id: { not: exceptId } } : {}) } }));
+    if (existing) throw new ConflictException('A user with this email or username already exists. Please choose another one.');
+  }
+
+  /** The company's plan limits how many active users it can have. */
+  private async assertUserLimit() {
+    const company = await this.prisma.company.findUnique({ where: { id: Tenant.require() }, include: { plan: true } });
+    if (!company) return;
+    const active = await this.prisma.user.count({ where: { deletedAt: null, isActive: true } });
+    if (active >= company.plan.maxUsers) {
+      throw new BadRequestException(`Your plan (${company.plan.name}) allows ${company.plan.maxUsers} active users. Deactivate a user or upgrade your plan.`);
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant, byCompany } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { ORDER_ADJUSTMENT_TYPES, STAGE_CANCELLED, STAGE_DELIVERED, STAGE_NEW, normalizePhone } from '@az/shared';
 import { randomUUID } from 'crypto';
@@ -471,7 +472,7 @@ export class OrdersService {
   // ================================================================ delivery & money
 
   async deliver(id: string, dto: DeliverDto, ctx: RequestContext) {
-    const deliveredStage = await this.prisma.workflowStage.findUniqueOrThrow({ where: { code: STAGE_DELIVERED } });
+    const deliveredStage = await this.prisma.workflowStage.findUniqueOrThrow({ where: { companyId_code: byCompany({ code: STAGE_DELIVERED }) } });
     let paymentId: string | null = null;
     let fullyDelivered = false;
     await this.prisma.$transaction(async (tx) => {
@@ -542,7 +543,7 @@ export class OrdersService {
   }
 
   async cancel(id: string, dto: CancelOrderDto, ctx: RequestContext) {
-    const cancelled = await this.prisma.workflowStage.findUniqueOrThrow({ where: { code: STAGE_CANCELLED } });
+    const cancelled = await this.prisma.workflowStage.findUniqueOrThrow({ where: { companyId_code: byCompany({ code: STAGE_CANCELLED }) } });
     await this.prisma.$transaction(async (tx) => {
       await this.lock(tx, id);
       const o = await tx.order.findFirst({ where: { id, deletedAt: null } });
@@ -604,7 +605,7 @@ export class OrdersService {
 
   /** Row lock: serialises payments, deliveries and edits on the same order. */
   private async lock(tx: PrismaTx, id: string) {
-    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
   }
 
   private async openOrder(tx: PrismaTx, id: string) {
@@ -616,7 +617,7 @@ export class OrdersService {
   }
 
   private async initialStage() {
-    const s = (await this.prisma.workflowStage.findUnique({ where: { code: STAGE_NEW } }))
+    const s = (await this.prisma.workflowStage.findUnique({ where: { companyId_code: byCompany({ code: STAGE_NEW }) } }))
       ?? (await this.prisma.workflowStage.findFirst({ where: { isActive: true, isTerminal: false }, orderBy: { sortOrder: 'asc' } }));
     if (!s) throw new BadRequestException('No workflow stages are set up. Run the database seed.');
     return s;

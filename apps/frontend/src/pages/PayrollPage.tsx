@@ -1,16 +1,17 @@
 import { PAYMENT_METHODS, monthLabel } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Calculator, HandCoins, Plus, Wallet } from 'lucide-react';
+import { Calculator, HandCoins, Plus, Printer, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common';
+import { EmptyState, PageHeader } from '@/components/common';
+import { DataTable } from '@/components/data-table/DataTable';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { AdvanceStatusBadge, PayrollStatusBadge, shiftMonth, thisMonthPK } from '@/features/hr/shared';
@@ -63,6 +64,7 @@ function RunPayrollDialog({ open, onOpenChange, existing }: { open: boolean; onO
 }
 
 function AdvancesTab() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState('OPEN');
   const q = useQuery({ queryKey: ['advances', status], queryFn: () => api.get<Advance[]>('/advances', { status }) });
   const total = (q.data ?? []).reduce((a, x) => a + Number(x.balanceAmount), 0);
@@ -75,27 +77,29 @@ function AdvancesTab() {
         <p className="text-sm text-muted-foreground">Give an advance from the employee's page.</p>
       </div>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.length ? (
-          <EmptyState icon={<HandCoins />} title="No advances" />
-        ) : (
-          <Table>
-            <THead><TR><TH>Date</TH><TH>Advance</TH><TH>Employee</TH><TH className="text-right">Amount</TH><TH className="hidden sm:table-cell text-right">Per salary</TH><TH className="text-right">Balance</TH><TH>Status</TH></TR></THead>
-            <TBody>
-              {q.data!.map((a) => (
-                <TR key={a.id}>
-                  <TD className="whitespace-nowrap">{formatDate(a.advanceDate)}</TD>
-                  <TD><span className="font-mono text-xs font-semibold">{a.advanceNo}</span><span className="block text-xs text-muted-foreground">{METHOD[a.paymentMethod]}{a.reason ? ` · ${a.reason}` : ''}</span></TD>
-                  <TD>{a.employee && <Link to={`/employees/${a.employee.id}`} className="font-medium hover:text-primary">{a.employee.name}</Link>}</TD>
-                  <TD className="text-right tabular-nums">{formatPKR(a.amount)}</TD>
-                  <TD className="hidden text-right tabular-nums sm:table-cell">{Number(a.installmentAmount) ? formatPKR(a.installmentAmount) : 'Full'}</TD>
-                  <TD className="text-right font-semibold tabular-nums">{formatPKR(a.balanceAmount)}</TD>
-                  <TD><AdvanceStatusBadge status={a.status} /></TD>
-                </TR>
-              ))}
-              <TR className="bg-muted/50 font-semibold"><TD colSpan={5}>Total balance</TD><TD className="text-right tabular-nums">{formatPKR(total)}</TD><TD /></TR>
-            </TBody>
-          </Table>
-        )}
+        <DataTable
+          title="Employee advances"
+          module="payroll"
+          noun="advance"
+          rows={q.data}
+          getRowId={(a) => a.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          onView={(a) => a.employee && navigate(`/employees/${a.employee.id}`)}
+          columns={[
+            { id: 'date', header: 'Date', value: (a) => a.advanceDate, text: (a) => formatDate(a.advanceDate), className: 'whitespace-nowrap' },
+            { id: 'advance', header: 'Advance', value: (a) => a.advanceNo, text: (a) => `${a.advanceNo} - ${METHOD[a.paymentMethod]}${a.reason ? ` · ${a.reason}` : ''}`,
+              cell: (a) => <><span className="font-mono text-xs font-semibold">{a.advanceNo}</span><span className="block text-xs text-muted-foreground">{METHOD[a.paymentMethod]}{a.reason ? ` · ${a.reason}` : ''}</span></> },
+            { id: 'employee', header: 'Employee', value: (a) => a.employee?.name, cell: (a) => (a.employee ? <Link to={`/employees/${a.employee.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-primary">{a.employee.name}</Link> : '-') },
+            { id: 'amount', header: 'Amount', type: 'money', value: (a) => a.amount, cell: (a) => formatPKR(a.amount) },
+            { id: 'installment', header: 'Per salary', type: 'money', value: (a) => a.installmentAmount, cell: (a) => (Number(a.installmentAmount) ? formatPKR(a.installmentAmount) : 'Full'), className: 'hidden sm:table-cell' },
+            { id: 'balance', header: 'Balance', type: 'money', value: (a) => a.balanceAmount, cell: (a) => <span className="font-semibold">{formatPKR(a.balanceAmount)}</span> },
+            { id: 'status', header: 'Status', value: (a) => a.status, cell: (a) => <AdvanceStatusBadge status={a.status} /> },
+          ]}
+          footer={() => ({ advance: 'Total balance', balance: formatPKR(total) })}
+          empty={<EmptyState icon={<HandCoins />} title="No advances" />}
+        />
       </Card>
     </div>
   );
@@ -103,6 +107,7 @@ function AdvancesTab() {
 
 export function PayrollPage() {
   const can = useCan();
+  const qc = useQueryClient();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') ?? 'runs';
@@ -127,27 +132,34 @@ export function PayrollPage() {
         </TabsList>
         <TabsContent value="runs">
           <Card>
-            {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !runs.length ? (
-              <EmptyState icon={<Wallet />} title="No payroll yet" description="At the end of each month, run payroll to calculate every employee's salary."
-                action={can('payroll', 'CREATE') ? <Button onClick={() => setOpen(true)}><Plus /> Run payroll</Button> : undefined} />
-            ) : (
-              <Table>
-                <THead><TR><TH>Month</TH><TH className="hidden sm:table-cell">Payroll</TH><TH className="hidden md:table-cell text-right">Staff</TH><TH className="hidden md:table-cell text-right">Gross</TH><TH className="text-right">Net</TH><TH className="text-right">Paid</TH><TH>Status</TH></TR></THead>
-                <TBody>
-                  {runs.map((r) => (
-                    <TR key={r.id} className="cursor-pointer" onClick={() => navigate(`/payroll/${r.id}`)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/payroll/${r.id}`)}>
-                      <TD className="font-semibold">{monthLabel(r.periodKey)}</TD>
-                      <TD className="hidden font-mono text-xs sm:table-cell">{r.payrollNo}</TD>
-                      <TD className="hidden text-right tabular-nums md:table-cell">{r.employees}</TD>
-                      <TD className="hidden text-right tabular-nums md:table-cell">{formatPKR(r.totalGross)}</TD>
-                      <TD className="text-right font-semibold tabular-nums">{formatPKR(r.totalNet)}</TD>
-                      <TD className="text-right tabular-nums">{formatPKR(r.totalPaid)}</TD>
-                      <TD><PayrollStatusBadge status={r.status} /></TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            )}
+            <DataTable
+              title="Payroll"
+              module="payroll"
+              noun="payroll"
+              rows={q.data}
+              getRowId={(r) => r.id}
+              loading={q.isLoading}
+              error={q.error}
+              onRetry={() => q.refetch()}
+              onRowClick={(r) => navigate(`/payroll/${r.id}`)}
+              onView={(r) => navigate(`/payroll/${r.id}`)}
+              deleteRow={can('payroll', 'DELETE') ? (r) => api.delete(`/payroll/${r.id}`) : undefined}
+              canRow={(act, r) => act !== 'delete' || r.status === 'DRAFT'}
+              deleteWarning="Only draft payrolls can be deleted."
+              onChanged={() => qc.invalidateQueries({ queryKey: ['payroll'] })}
+              rowMenu={can('payroll', 'PRINT') ? (r) => <DropdownMenuItem onSelect={() => window.open(`/print/payroll/${r.id}`, '_blank')}><Printer /> Print payroll sheet</DropdownMenuItem> : undefined}
+              columns={[
+                { id: 'month', header: 'Month', value: (r) => r.periodKey, text: (r) => monthLabel(r.periodKey), cell: (r) => <span className="font-semibold">{monthLabel(r.periodKey)}</span> },
+                { id: 'no', header: 'Payroll', value: (r) => r.payrollNo, className: 'hidden font-mono text-xs sm:table-cell' },
+                { id: 'staff', header: 'Staff', type: 'number', value: (r) => r.employees, className: 'hidden md:table-cell' },
+                { id: 'gross', header: 'Gross', type: 'money', value: (r) => r.totalGross, cell: (r) => formatPKR(r.totalGross), className: 'hidden md:table-cell' },
+                { id: 'net', header: 'Net', type: 'money', value: (r) => r.totalNet, cell: (r) => <span className="font-semibold">{formatPKR(r.totalNet)}</span> },
+                { id: 'paid', header: 'Paid', type: 'money', value: (r) => r.totalPaid, cell: (r) => formatPKR(r.totalPaid) },
+                { id: 'status', header: 'Status', value: (r) => r.status, cell: (r) => <PayrollStatusBadge status={r.status} /> },
+              ]}
+              empty={<EmptyState icon={<Wallet />} title="No payroll yet" description="At the end of each month, run payroll to calculate every employee's salary."
+                action={can('payroll', 'CREATE') ? <Button onClick={() => setOpen(true)}><Plus /> Run payroll</Button> : undefined} />}
+            />
           </Card>
         </TabsContent>
         <TabsContent value="advances"><AdvancesTab /></TabsContent>

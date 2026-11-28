@@ -10,7 +10,8 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { FieldError, Label } from '@/components/ui/label';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable } from '@/components/data-table/DataTable';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { PayrollStatusBadge, SALARY_TYPE_LABEL, todayPK } from '@/features/hr/shared';
@@ -117,26 +118,20 @@ function PayDialog({ payroll, line, all, onOpenChange }: { payroll: PayrollDetai
   );
 }
 
-function PaymentsTab({ id }: { id: string }) {
+function PaymentsTab({ id, title }: { id: string; title: string }) {
   const q = useQuery({ queryKey: ['payroll', 'payments', id], queryFn: () => api.get<SalaryPaymentRow[]>(`/payroll/${id}/payments`) });
-  if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
-  if (q.isLoading) return <LoadingState />;
-  if (!q.data!.length) return <EmptyState icon={<Banknote />} title="No salary paid yet" />;
   return (
-    <Table>
-      <THead><TR><TH>Date</TH><TH>Payment</TH><TH>Employee</TH><TH>Method</TH><TH className="text-right">Amount</TH></TR></THead>
-      <TBody>
-        {q.data!.map((p) => (
-          <TR key={p.id}>
-            <TD className="whitespace-nowrap">{formatDate(p.paymentDate)}</TD>
-            <TD><span className="font-mono text-xs font-semibold">{p.paymentNo}</span>{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</TD>
-            <TD>{p.employee.name}</TD>
-            <TD>{METHOD[p.method]}</TD>
-            <TD className="text-right font-semibold tabular-nums">{formatPKR(p.amount)}</TD>
-          </TR>
-        ))}
-      </TBody>
-    </Table>
+    <DataTable title={`${title} - salary payments`} module="payroll" noun="payment" rows={q.data} getRowId={(p) => p.id}
+      loading={q.isLoading} error={q.error} onRetry={() => q.refetch()}
+      columns={[
+        { id: 'date', header: 'Date', value: (p) => p.paymentDate, text: (p) => formatDate(p.paymentDate), className: 'whitespace-nowrap' },
+        { id: 'payment', header: 'Payment', value: (p) => p.paymentNo, text: (p) => p.paymentNo, cell: (p) => <><span className="font-mono text-xs font-semibold">{p.paymentNo}</span>{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</> },
+        { id: 'employee', header: 'Employee', value: (p) => p.employee.name },
+        { id: 'method', header: 'Method', value: (p) => METHOD[p.method] ?? p.method },
+        { id: 'amount', header: 'Amount', type: 'money', value: (p) => Number(p.amount), cell: (p) => <span className="font-semibold">{formatPKR(p.amount)}</span>, text: (p) => formatPKR(p.amount) },
+      ]}
+      footer={(rows) => ({ date: 'Total', amount: formatPKR(rows.reduce((t, p) => t + Number(p.amount), 0)) })}
+      empty={<EmptyState icon={<Banknote />} title="No salary paid yet" />} />
   );
 }
 
@@ -206,65 +201,46 @@ export function PayrollDetailPage() {
         <TabsList><TabsTrigger value="salaries">Salaries</TabsTrigger><TabsTrigger value="payments">Payments</TabsTrigger></TabsList>
         <TabsContent value="salaries" className="mt-4">
           <Card>
-            <ul className="divide-y lg:hidden">
-              {p.items.map((i) => (
-                <li key={i.id} className="space-y-2 px-3 py-3">
+            <DataTable title={`Payroll ${p.periodLabel}`} module="payroll" noun="salary line" rows={p.items} getRowId={(i) => i.id} defaultPageSize={50}
+              onView={(i) => navigate(`/employees/${i.employee.id}`)}
+              onEdit={draft && can('payroll', 'EDIT') ? (i) => setEditLine(i) : undefined}
+              rowMenu={!draft && (can('payroll', 'CREATE') || can('payroll', 'PRINT')) ? (i) => <>
+                {can('payroll', 'CREATE') && Number(i.balance) > 0 && <DropdownMenuItem onSelect={() => setPayLine(i)}><Banknote /> Pay salary</DropdownMenuItem>}
+                {can('payroll', 'PRINT') && <DropdownMenuItem onSelect={() => window.open(`/print/payslips/${i.id}`, '_blank')}><Printer /> Print payslip</DropdownMenuItem>}
+              </> : undefined}
+              mobileCard={(i) => (
+                <div className="space-y-1 py-3 pr-1">
                   <div className="flex items-start justify-between gap-2">
-                    <div><Link to={`/employees/${i.employee.id}`} className="font-semibold hover:text-primary">{i.employee.name}</Link><span className="block text-xs text-muted-foreground">{i.employee.code} · {SALARY_TYPE_LABEL[i.salaryType]}</span></div>
+                    <div><span className="font-semibold">{i.employee.name}</span><span className="block text-xs text-muted-foreground">{i.employee.code} · {SALARY_TYPE_LABEL[i.salaryType]}</span></div>
                     <div className="text-right"><p className="font-bold tabular-nums">{formatPKR(i.netAmount)}</p>{!draft && <p className={cn('text-xs tabular-nums', Number(i.balance) > 0 ? 'text-rose-700' : 'text-emerald-700')}>{Number(i.balance) > 0 ? `${formatPKR(i.balance)} due` : 'Paid'}</p>}</div>
                   </div>
-                  <p className="text-xs text-muted-foreground">Basic {formatPKR(i.basicAmount)}{Number(i.pieceAmount) ? ` · ${i.completedPieces} pcs ${formatPKR(i.pieceAmount)}` : ''}{Number(i.overtimeAmount) ? ` · OT ${formatPKR(i.overtimeAmount)}` : ''}{Number(i.bonus) + Number(i.incentives) ? ` · bonus ${formatPKR(Number(i.bonus) + Number(i.incentives))}` : ''} · present {i.presentDays}, absent {i.absentDays}{Number(i.absenceDeduction) ? ` (-${formatPKR(i.absenceDeduction)})` : ''}{Number(i.advanceDeduction) ? ` · advance -${formatPKR(i.advanceDeduction)}` : ''}{Number(i.otherDeductions) ? ` · other -${formatPKR(i.otherDeductions)}` : ''}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {draft && can('payroll', 'EDIT') && <Button variant="outline" size="sm" onClick={() => setEditLine(i)}><Pencil /> Adjust</Button>}
-                    {!draft && can('payroll', 'CREATE') && Number(i.balance) > 0 && <Button size="sm" onClick={() => setPayLine(i)}><Banknote /> Pay</Button>}
-                    {!draft && can('payroll', 'PRINT') && <Button variant="outline" size="sm" asChild><a href={`/print/payslips/${i.id}`} target="_blank" rel="noreferrer"><Printer /> Payslip</a></Button>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <div className="hidden lg:block [&_td]:whitespace-nowrap">
-              <Table>
-                <THead><TR>
-                  <TH>Employee</TH><TH className="text-right">Days P / A</TH><TH className="text-right">Basic</TH><TH className="text-right">Pieces</TH><TH className="text-right">Overtime</TH><TH className="text-right">Bonus</TH>
-                  <TH className="text-right">Deductions</TH><TH className="text-right">Net</TH>{!draft && <TH className="text-right">Due</TH>}<TH className="w-24" />
-                </TR></THead>
-                <TBody>
-                  {p.items.map((i) => (
-                    <TR key={i.id}>
-                      <TD className="!whitespace-normal"><Link to={`/employees/${i.employee.id}`} className="font-medium hover:text-primary">{i.employee.name}</Link><span className="block text-xs text-muted-foreground">{i.employee.code} · {SALARY_TYPE_LABEL[i.salaryType]}</span>{i.notes && <span className="block text-xs italic text-muted-foreground">{i.notes}</span>}</TD>
-                      <TD className="whitespace-nowrap text-right tabular-nums">{Number(i.presentDays)} / {Number(i.absentDays)}</TD>
-                      <TD className="text-right tabular-nums">{formatPKR(i.basicAmount)}</TD>
-                      <TD className="whitespace-nowrap text-right tabular-nums">{Number(i.pieceAmount) ? <>{formatPKR(i.pieceAmount)}<span className="block text-xs text-muted-foreground">{i.completedPieces} pcs</span></> : '-'}</TD>
-                      <TD className="text-right tabular-nums">{Number(i.overtimeAmount) ? formatPKR(i.overtimeAmount) : '-'}</TD>
-                      <TD className="text-right tabular-nums">{Number(i.bonus) + Number(i.incentives) ? formatPKR(Number(i.bonus) + Number(i.incentives)) : '-'}</TD>
-                      <TD className="text-right tabular-nums">
-                        {deductions(i) ? <span className="font-medium text-rose-700 dark:text-rose-400">-{formatPKR(deductions(i))}</span> : '-'}
-                        {Number(i.absenceDeduction) > 0 && <span className="block text-[11px] text-muted-foreground">Absent {formatPKR(i.absenceDeduction)}</span>}
-                        {Number(i.advanceDeduction) > 0 && <span className="block text-[11px] text-muted-foreground">Advance {formatPKR(i.advanceDeduction)}</span>}
-                        {Number(i.otherDeductions) > 0 && <span className="block text-[11px] text-muted-foreground">Other {formatPKR(i.otherDeductions)}</span>}
-                      </TD>
-                      <TD className="text-right font-bold tabular-nums">{formatPKR(i.netAmount)}</TD>
-                      {!draft && <TD className={cn('text-right tabular-nums', Number(i.balance) > 0 ? 'font-semibold text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400')}>{Number(i.balance) > 0 ? formatPKR(i.balance) : 'Paid'}</TD>}
-                      <TD>
-                        <div className="flex justify-end gap-1">
-                          {draft && can('payroll', 'EDIT') && <Button variant="ghost" size="icon" aria-label={`Adjust ${i.employee.name}`} onClick={() => setEditLine(i)}><Pencil /></Button>}
-                          {!draft && can('payroll', 'CREATE') && Number(i.balance) > 0 && <Button variant="ghost" size="icon" aria-label={`Pay ${i.employee.name}`} onClick={() => setPayLine(i)}><Banknote /></Button>}
-                          {!draft && can('payroll', 'PRINT') && <Button variant="ghost" size="icon" aria-label={`Payslip for ${i.employee.name}`} asChild><a href={`/print/payslips/${i.id}`} target="_blank" rel="noreferrer"><Printer /></a></Button>}
-                        </div>
-                      </TD>
-                    </TR>
-                  ))}
-                  <TR className="bg-muted/50 font-semibold">
-                    <TD colSpan={2}>Total</TD><TD className="text-right tabular-nums">{formatPKR(t.basic)}</TD><TD className="text-right tabular-nums">{formatPKR(t.pieces)}</TD>
-                    <TD className="text-right tabular-nums">{formatPKR(t.ot)}</TD><TD className="text-right tabular-nums">{formatPKR(t.extra)}</TD><TD className="text-right tabular-nums">-{formatPKR(t.absence + t.adv + t.other)}</TD><TD className="text-right tabular-nums">{formatPKR(p.totals.net)}</TD>
-                    {!draft && <TD className="text-right tabular-nums">{formatPKR(p.totals.balance)}</TD>}<TD />
-                  </TR>
-                </TBody>
-              </Table>
-            </div>
+                  <p className="text-xs text-muted-foreground">Basic {formatPKR(i.basicAmount)}{Number(i.pieceAmount) ? ` · ${i.completedPieces} pcs ${formatPKR(i.pieceAmount)}` : ''}{Number(i.overtimeAmount) ? ` · OT ${formatPKR(i.overtimeAmount)}` : ''} · present {i.presentDays}, absent {i.absentDays}{deductions(i) ? ` · deductions -${formatPKR(deductions(i))}` : ''}</p>
+                </div>
+              )}
+              columns={[
+                { id: 'employee', header: 'Employee', value: (i) => i.employee.name, text: (i) => `${i.employee.name} (${i.employee.code})`,
+                  cell: (i) => <><Link to={`/employees/${i.employee.id}`} onClick={(ev) => ev.stopPropagation()} className="font-medium hover:text-primary">{i.employee.name}</Link><span className="block text-xs text-muted-foreground">{i.employee.code} · {SALARY_TYPE_LABEL[i.salaryType]}</span>{i.notes && <span className="block text-xs italic text-muted-foreground">{i.notes}</span>}</> },
+                { id: 'days', header: 'Days P / A', type: 'number', value: (i) => Number(i.presentDays), text: (i) => `${Number(i.presentDays)} / ${Number(i.absentDays)}`, className: 'whitespace-nowrap' },
+                { id: 'basic', header: 'Basic', type: 'money', value: (i) => Number(i.basicAmount), cell: (i) => formatPKR(i.basicAmount) },
+                { id: 'pieces', header: 'Pieces', type: 'money', value: (i) => Number(i.pieceAmount), text: (i) => (Number(i.pieceAmount) ? formatPKR(i.pieceAmount) : '-'), className: 'hidden lg:table-cell whitespace-nowrap',
+                  cell: (i) => (Number(i.pieceAmount) ? <>{formatPKR(i.pieceAmount)}<span className="block text-xs text-muted-foreground">{i.completedPieces} pcs</span></> : '-') },
+                { id: 'ot', header: 'Overtime', type: 'money', value: (i) => Number(i.overtimeAmount), text: (i) => (Number(i.overtimeAmount) ? formatPKR(i.overtimeAmount) : '-'), className: 'hidden lg:table-cell' },
+                { id: 'bonus', header: 'Bonus', type: 'money', value: (i) => Number(i.bonus) + Number(i.incentives), text: (i) => (Number(i.bonus) + Number(i.incentives) ? formatPKR(Number(i.bonus) + Number(i.incentives)) : '-'), className: 'hidden xl:table-cell' },
+                { id: 'deductions', header: 'Deductions', type: 'money', value: (i) => deductions(i), text: (i) => (deductions(i) ? `-${formatPKR(deductions(i))}` : '-'),
+                  cell: (i) => <>
+                    {deductions(i) ? <span className="font-medium text-rose-700 dark:text-rose-400">-{formatPKR(deductions(i))}</span> : '-'}
+                    {Number(i.absenceDeduction) > 0 && <span className="block text-[11px] text-muted-foreground">Absent {formatPKR(i.absenceDeduction)}</span>}
+                    {Number(i.advanceDeduction) > 0 && <span className="block text-[11px] text-muted-foreground">Advance {formatPKR(i.advanceDeduction)}</span>}
+                    {Number(i.otherDeductions) > 0 && <span className="block text-[11px] text-muted-foreground">Other {formatPKR(i.otherDeductions)}</span>}
+                  </> },
+                { id: 'net', header: 'Net', type: 'money', value: (i) => Number(i.netAmount), cell: (i) => <span className="font-bold">{formatPKR(i.netAmount)}</span>, text: (i) => formatPKR(i.netAmount) },
+                ...(!draft ? [{ id: 'due', header: 'Due', type: 'money' as const, value: (i: PayrollLine) => Number(i.balance), text: (i: PayrollLine) => (Number(i.balance) > 0 ? formatPKR(i.balance) : 'Paid'),
+                  cell: (i: PayrollLine) => <span className={cn(Number(i.balance) > 0 ? 'font-semibold text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400')}>{Number(i.balance) > 0 ? formatPKR(i.balance) : 'Paid'}</span> }] : []),
+              ]}
+              footer={() => ({ employee: 'Total', basic: formatPKR(t.basic), pieces: formatPKR(t.pieces), ot: formatPKR(t.ot), bonus: formatPKR(t.extra), deductions: `-${formatPKR(t.absence + t.adv + t.other)}`, net: formatPKR(p.totals.net), due: formatPKR(p.totals.balance) })} />
           </Card>
         </TabsContent>
-        <TabsContent value="payments" className="mt-4"><Card><PaymentsTab id={p.id} /></Card></TabsContent>
+        <TabsContent value="payments" className="mt-4"><Card><PaymentsTab id={p.id} title={`Payroll ${p.periodLabel}`} /></Card></TabsContent>
       </Tabs>
       <EditLineDialog payroll={p} line={editLine} onOpenChange={(o) => !o && setEditLine(null)} />
       <PayDialog payroll={p} line={payLine} all={payAll} onOpenChange={(o) => { if (!o) { setPayLine(null); setPayAll(false); } }} />

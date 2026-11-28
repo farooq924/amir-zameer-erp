@@ -1,15 +1,16 @@
 import { formatPhone } from '@az/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Pencil, Plus, Ruler, Search } from 'lucide-react';
+import { Pencil, Plus, Printer, Ruler, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common';
+import { type DataColumn, DataTable, fetchAllPages } from '@/components/data-table/DataTable';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTemplates } from '@/features/measurements/CustomerMeasurements';
 import { TemplateEditorDialog } from '@/features/measurements/TemplateEditorDialog';
@@ -31,63 +32,68 @@ function useDebounced<T>(value: T, ms = 300): T {
 
 function RecentTab() {
   const navigate = useNavigate();
+  const can = useCan();
   const templates = useTemplates(true);
   const [search, setSearch] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [latestOnly, setLatestOnly] = useState('true');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const q = useDebounced(search);
+  const listParams = { search: q, templateId, latestOnly };
   const recent = useQuery({
-    queryKey: ['measurements', 'recent', { q, templateId, latestOnly, page }],
-    queryFn: () => api.get<Paginated<RecentRow>>('/measurements', { search: q, templateId, latestOnly, page, pageSize: 25 }),
+    queryKey: ['measurements', 'recent', { q, templateId, latestOnly, page, pageSize }],
+    queryFn: () => api.get<Paginated<RecentRow>>('/measurements', { ...listParams, page, pageSize }),
     placeholderData: keepPreviousData,
   });
   const open = (r: RecentRow) => navigate(`/customers/${r.customer.id}?tab=measurements`);
+  const columns: DataColumn<RecentRow>[] = [
+    { id: 'customer', header: 'Customer', value: (r) => r.customer.name, text: (r) => `${r.customer.name} (${r.customer.code})`,
+      cell: (r) => <><span className="font-medium">{r.customer.name}</span><span className="block font-mono text-xs text-muted-foreground">{r.customer.code}</span></> },
+    { id: 'mobile', header: 'Mobile', value: (r) => formatPhone(r.customer.mobile), className: 'hidden whitespace-nowrap sm:table-cell' },
+    { id: 'garment', header: 'Garment', value: (r) => r.template.name },
+    { id: 'version', header: 'Version', value: (r) => r.versionNo, text: (r) => `V${r.versionNo}${r.isLatest ? ' (Latest)' : ''}`,
+      cell: (r) => <><span className="tabular-nums">V{r.versionNo}</span> {r.isLatest && <Badge variant="success" className="ml-1">Latest</Badge>}</> },
+    { id: 'by', header: 'Measured by', value: (r) => r.takenByName ?? '-', className: 'hidden md:table-cell' },
+    { id: 'date', header: 'Date', value: (r) => r.takenAt, text: (r) => formatDateTime(r.takenAt), className: 'whitespace-nowrap' },
+  ];
 
   return (
     <Card>
-      <div className="flex flex-wrap items-center gap-2 border-b p-3">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Customer name, code or mobile" aria-label="Search measurements" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-        </div>
-        <NativeSelect aria-label="Garment" className="w-44" value={templateId} onChange={(e) => { setTemplateId(e.target.value); setPage(1); }}>
-          <option value="">All garments</option>
-          {templates.data?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </NativeSelect>
-        <NativeSelect aria-label="Versions" className="w-44" value={latestOnly} onChange={(e) => { setLatestOnly(e.target.value); setPage(1); }}>
-          <option value="true">Latest versions only</option><option value="false">All versions</option>
-        </NativeSelect>
-      </div>
-      {recent.isError ? <ErrorState message={errorMessage(recent.error)} onRetry={() => recent.refetch()} /> : recent.isLoading ? (
-        <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
-      ) : !recent.data!.data.length ? (
-        <EmptyState icon={<Ruler className="h-5 w-5" />} title={q || templateId ? 'No measurements match your search' : 'No measurements yet'}
-          description="Open a customer's profile and use the Measurements tab to take measurements." />
-      ) : (
-        <>
-          <Table>
-            <THead><TR><TH>Customer</TH><TH className="hidden sm:table-cell">Mobile</TH><TH>Garment</TH><TH>Version</TH><TH className="hidden md:table-cell">Measured by</TH><TH>Date</TH></TR></THead>
-            <TBody>{recent.data!.data.map((r) => (
-              <TR key={r.id} className="cursor-pointer" tabIndex={0} onClick={() => open(r)} onKeyDown={(e) => e.key === 'Enter' && open(r)}>
-                <TD><span className="font-medium">{r.customer.name}</span><span className="block font-mono text-xs text-muted-foreground">{r.customer.code}</span></TD>
-                <TD className="hidden whitespace-nowrap sm:table-cell">{formatPhone(r.customer.mobile)}</TD>
-                <TD>{r.template.name}</TD>
-                <TD><span className="tabular-nums">V{r.versionNo}</span> {r.isLatest && <Badge variant="success" className="ml-1">Latest</Badge>}</TD>
-                <TD className="hidden md:table-cell">{r.takenByName ?? '-'}</TD>
-                <TD className="whitespace-nowrap">{formatDateTime(r.takenAt)}</TD>
-              </TR>
-            ))}</TBody>
-          </Table>
-          <div className="flex items-center justify-between border-t p-3 text-sm text-muted-foreground">
-            <span>{recent.data!.meta.total} records</span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button size="sm" variant="outline" disabled={page >= recent.data!.meta.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+      <DataTable
+        title="Measurements"
+        module="measurements"
+        noun="measurement"
+        rows={recent.data?.data}
+        columns={columns}
+        getRowId={(r) => r.id}
+        loading={recent.isLoading}
+        error={recent.error}
+        onRetry={() => recent.refetch()}
+        pagination={{ page, pageSize, total: recent.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+        fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<RecentRow>>('/measurements', { ...listParams, page: pg, pageSize: size }))}
+        onRowClick={open}
+        onView={open}
+        onEdit={can('measurements', 'EDIT') || can('measurements', 'CREATE') ? open : undefined}
+        rowMenu={can('measurements', 'PRINT') ? (r) => <DropdownMenuItem onSelect={() => window.open(`/print/measurements/${r.id}`, '_blank')}><Printer /> Print measurement slip</DropdownMenuItem> : undefined}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-8" placeholder="Customer name, code or mobile" aria-label="Search measurements" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
             </div>
+            <NativeSelect aria-label="Garment" className="w-44" value={templateId} onChange={(e) => { setTemplateId(e.target.value); setPage(1); }}>
+              <option value="">All garments</option>
+              {templates.data?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </NativeSelect>
+            <NativeSelect aria-label="Versions" className="w-44" value={latestOnly} onChange={(e) => { setLatestOnly(e.target.value); setPage(1); }}>
+              <option value="true">Latest versions only</option><option value="false">All versions</option>
+            </NativeSelect>
           </div>
-        </>
-      )}
+        }
+        empty={<EmptyState icon={<Ruler className="h-5 w-5" />} title={q || templateId ? 'No measurements match your search' : 'No measurements yet'}
+          description="Open a customer's profile and use the Measurements tab to take measurements." />}
+      />
     </Card>
   );
 }

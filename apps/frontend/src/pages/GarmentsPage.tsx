@@ -1,18 +1,17 @@
 import { GARMENT_CATEGORIES } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Shirt } from 'lucide-react';
+import { Plus, Shirt } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { EmptyState, ErrorState, PageHeader } from '@/components/common';
+import { EmptyState, PageHeader } from '@/components/common';
+import { type DataColumn, DataTable } from '@/components/data-table/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { FieldError, Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { useTemplates } from '@/features/measurements/CustomerMeasurements';
 import { useCan } from '@/hooks/use-permission';
 import { api, errorMessage } from '@/services/api';
@@ -97,11 +96,24 @@ function GarmentDialog({ open, onOpenChange, garment }: { open: boolean; onOpenC
 
 export function GarmentsPage() {
   const can = useCan();
+  const qc = useQueryClient();
   const [editing, setEditing] = useState<Garment | null>(null);
   const [open, setOpen] = useState(false);
   const q = useQuery({ queryKey: ['garments', 'all'], queryFn: () => api.get<Garment[]>('/garments', { all: 'true' }) });
   const edit = (g: Garment | null) => { setEditing(g); setOpen(true); };
   const canEdit = can('garments', 'EDIT');
+  const refresh = () => { void qc.invalidateQueries({ queryKey: ['garments'] }); void qc.invalidateQueries({ queryKey: ['order-form-options'] }); };
+  const columns: DataColumn<Garment>[] = [
+    { id: 'name', header: 'Garment', value: (g) => g.name, cell: (g) => <span className="font-medium">{g.name}</span> },
+    { id: 'category', header: 'Category', value: (g) => CATEGORY_LABEL[g.category] ?? g.category, className: 'hidden md:table-cell' },
+    { id: 'template', header: 'Measurement form', value: (g) => g.measurementTemplate?.name ?? 'None', cell: (g) => g.measurementTemplate?.name ?? <span className="text-muted-foreground">None</span> },
+    { id: 'price', header: 'Stitching price', type: 'money', value: (g) => g.defaultStitchingPrice,
+      cell: (g) => (Number(g.defaultStitchingPrice) ? formatPKR(g.defaultStitchingPrice) : <span className="text-amber-700 dark:text-amber-300">Not set</span>) },
+    { id: 'fabric', header: 'Fabric / piece', type: 'number', value: (g) => Number(g.defaultFabricConsumption), text: (g) => `${Number(g.defaultFabricConsumption)} m` },
+    { id: 'wage', header: 'Tailor wage', type: 'money', value: (g) => g.defaultPieceRate, cell: (g) => formatPKR(g.defaultPieceRate), className: 'hidden lg:table-cell' },
+    { id: 'pieces', header: 'Pieces ordered', type: 'number', value: (g) => g.piecesOrdered ?? 0, className: 'hidden lg:table-cell' },
+    { id: 'status', header: 'Status', value: (g) => (g.isActive ? 'Active' : 'Inactive'), cell: (g) => (g.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="secondary">Inactive</Badge>) },
+  ];
   const unpriced = q.data?.filter((g) => g.isActive && !Number(g.defaultStitchingPrice)).length ?? 0;
 
   return (
@@ -114,46 +126,55 @@ export function GarmentsPage() {
         </p>
       )}
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? (
-          <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-        ) : !q.data!.length ? <EmptyState icon={<Shirt />} title="No garments yet" description="Add the garments you stitch, with their prices." /> : (
-          <>
-            <ul className="divide-y sm:hidden">
-              {q.data!.map((g) => (
-                <li key={g.id}>
-                  <button type="button" disabled={!canEdit} onClick={() => edit(g)} className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-accent/50">
-                    <span className="icon-tile h-11 w-11 shrink-0 rounded-xl bg-gold-soft text-[#8a6a1f] dark:text-gold"><Shirt className="h-5 w-5" /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-semibold">{g.name}</span>
-                      <span className="block text-xs text-muted-foreground">{g.measurementTemplate?.name ?? 'No measurement form'} · {Number(g.defaultFabricConsumption)} m</span>
-                    </span>
-                    <span className="flex flex-col items-end gap-1"><span className="font-semibold tabular-nums">{formatPKR(g.defaultStitchingPrice)}</span>{!g.isActive && <Badge variant="secondary">Inactive</Badge>}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <div className="hidden sm:block">
-              <Table>
-                <THead><TR><TH>Garment</TH><TH className="hidden md:table-cell">Category</TH><TH>Measurement form</TH><TH className="text-right">Stitching price</TH><TH className="text-right">Fabric / piece</TH><TH className="hidden lg:table-cell text-right">Tailor wage</TH><TH className="hidden lg:table-cell text-right">Pieces ordered</TH><TH>Status</TH><TH className="w-12"><span className="sr-only">Edit</span></TH></TR></THead>
-                <TBody>
-                  {q.data!.map((g) => (
-                    <TR key={g.id}>
-                      <TD className="font-medium">{g.name}</TD>
-                      <TD className="hidden md:table-cell">{CATEGORY_LABEL[g.category] ?? g.category}</TD>
-                      <TD>{g.measurementTemplate?.name ?? <span className="text-muted-foreground">None</span>}</TD>
-                      <TD className="text-right tabular-nums">{Number(g.defaultStitchingPrice) ? formatPKR(g.defaultStitchingPrice) : <span className="text-amber-700 dark:text-amber-300">Not set</span>}</TD>
-                      <TD className="text-right tabular-nums">{Number(g.defaultFabricConsumption)} m</TD>
-                      <TD className="hidden text-right tabular-nums lg:table-cell">{formatPKR(g.defaultPieceRate)}</TD>
-                      <TD className="hidden text-right tabular-nums lg:table-cell">{g.piecesOrdered ?? 0}</TD>
-                      <TD>{g.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="secondary">Inactive</Badge>}</TD>
-                      <TD>{canEdit && <Button variant="ghost" size="icon" aria-label={`Edit ${g.name}`} onClick={() => edit(g)}><Pencil /></Button>}</TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            </div>
-          </>
-        )}
+        <DataTable
+          title="Garments"
+          module="garments"
+          noun="garment"
+          rows={q.data}
+          columns={columns}
+          getRowId={(g) => g.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          defaultSort={{ id: 'name', desc: false }}
+          onRowClick={canEdit ? (g) => edit(g) : undefined}
+          onEdit={canEdit ? (g) => edit(g) : undefined}
+          duplicateRow={can('garments', 'CREATE') ? (g) => api.post('/garments', {
+            name: `${g.name} (Copy)`, category: g.category, measurementTemplateId: g.measurementTemplate?.id ?? null,
+            defaultStitchingPrice: g.defaultStitchingPrice, defaultFabricConsumption: g.defaultFabricConsumption, defaultPieceRate: g.defaultPieceRate, isActive: g.isActive,
+          }) : undefined}
+          deleteRow={can('garments', 'DELETE') ? (g) => api.delete(`/garments/${g.id}`) : undefined}
+          deleteWarning="Garments already used on orders cannot be deleted; mark them inactive instead."
+          onChanged={refresh}
+          importer={can('garments', 'CREATE') ? {
+            fields: [
+              { key: 'name', label: 'Name', required: true, example: 'Sherwani' },
+              { key: 'category', label: 'Category', example: 'CUSTOM' },
+              { key: 'defaultStitchingPrice', label: 'Stitching price', example: '2500' },
+              { key: 'defaultFabricConsumption', label: 'Fabric per piece', example: '4.5' },
+              { key: 'defaultPieceRate', label: 'Tailor wage', example: '600' },
+            ],
+            note: `Category: ${GARMENT_CATEGORIES.map((c) => c.key).join(', ')}.`,
+            createRow: (d) => {
+              const cat = (d.category || 'CUSTOM').toUpperCase().replace(/[^A-Z]+/g, '_');
+              return api.post('/garments', {
+                name: d.name, category: GARMENT_CATEGORIES.some((c) => c.key === cat) ? cat : 'CUSTOM', measurementTemplateId: null,
+                defaultStitchingPrice: d.defaultStitchingPrice || '0', defaultFabricConsumption: d.defaultFabricConsumption || '0', defaultPieceRate: d.defaultPieceRate || '0', isActive: true,
+              });
+            },
+          } : undefined}
+          empty={<EmptyState icon={<Shirt />} title="No garments yet" description="Add the garments you stitch, with their prices." />}
+          mobileCard={(g) => (
+            <button type="button" disabled={!canEdit} onClick={() => edit(g)} className="flex w-full items-center gap-3 px-1 py-3 text-left">
+              <span className="icon-tile h-11 w-11 shrink-0 rounded-xl bg-gold-soft text-[#8a6a1f] dark:text-gold"><Shirt className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold">{g.name}</span>
+                <span className="block text-xs text-muted-foreground">{g.measurementTemplate?.name ?? 'No measurement form'} · {Number(g.defaultFabricConsumption)} m</span>
+              </span>
+              <span className="flex flex-col items-end gap-1"><span className="font-semibold tabular-nums">{formatPKR(g.defaultStitchingPrice)}</span>{!g.isActive && <Badge variant="secondary">Inactive</Badge>}</span>
+            </button>
+          )}
+        />
       </Card>
       <GarmentDialog open={open} onOpenChange={setOpen} garment={editing} />
     </div>

@@ -2,7 +2,7 @@ import { PAYMENT_METHODS } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Banknote, Printer, Undo2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ErrorState, LoadingState } from '@/components/common';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, Textarea } from '@/components/ui/input';
 import { FieldError, Label } from '@/components/ui/label';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable } from '@/components/data-table/DataTable';
 import { SupplierPaymentDialog } from '@/features/inventory/SupplierDialogs';
 import { PurchasePaymentBadge, QTY_RE, formatQty } from '@/features/inventory/shared';
 import { useCan } from '@/hooks/use-permission';
@@ -85,6 +85,7 @@ function ReturnDialog({ open, onOpenChange, purchase }: { open: boolean; onOpenC
 }
 
 export function PurchaseDetailPage() {
+  const navigate = useNavigate();
   const { id = '' } = useParams();
   const can = useCan();
   const [returnOpen, setReturnOpen] = useState(false);
@@ -118,20 +119,17 @@ export function PurchaseDetailPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <Card>
           <CardHeader><CardTitle className="text-base">Fabrics</CardTitle></CardHeader>
-          <Table>
-            <THead><TR><TH>Fabric</TH><TH className="text-right">Quantity</TH><TH className="text-right">Rate</TH><TH className="text-right">Amount</TH><TH className="hidden sm:table-cell text-right">Returned</TH></TR></THead>
-            <TBody>
-              {p.items.map((i) => (
-                <TR key={i.id}>
-                  <TD><Link className="font-medium hover:underline" to={`/inventory/fabrics/${i.fabric.id}`}>{i.fabric.name}</Link><span className="block font-mono text-[11px] text-muted-foreground">{i.fabric.code}{i.fabric.color ? ` · ${i.fabric.color}` : ''}</span></TD>
-                  <TD className="whitespace-nowrap text-right tabular-nums">{formatQty(i.quantity, i.fabric.unit)}</TD>
-                  <TD className="whitespace-nowrap text-right tabular-nums">{formatPKR(i.rate)}</TD>
-                  <TD className="whitespace-nowrap text-right font-medium tabular-nums">{formatPKR(i.amount)}</TD>
-                  <TD className="hidden whitespace-nowrap text-right tabular-nums sm:table-cell">{Number(i.returnedQuantity) ? formatQty(i.returnedQuantity, i.fabric.unit) : '-'}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
+          <DataTable title={`${p.purchaseNo} - fabrics`} module="purchases" noun="fabric line" rows={p.items} getRowId={(i) => i.id}
+            onView={(i) => navigate(`/inventory/fabrics/${i.fabric.id}`)}
+            columns={[
+              { id: 'fabric', header: 'Fabric', value: (i) => i.fabric.name, text: (i) => `${i.fabric.name} (${i.fabric.code})`,
+                cell: (i) => <><Link className="font-medium hover:underline" to={`/inventory/fabrics/${i.fabric.id}`}>{i.fabric.name}</Link><span className="block font-mono text-[11px] text-muted-foreground">{i.fabric.code}{i.fabric.color ? ` · ${i.fabric.color}` : ''}</span></> },
+              { id: 'qty', header: 'Quantity', type: 'number', value: (i) => Number(i.quantity), text: (i) => formatQty(i.quantity, i.fabric.unit), className: 'whitespace-nowrap' },
+              { id: 'rate', header: 'Rate', type: 'money', value: (i) => Number(i.rate), cell: (i) => formatPKR(i.rate), className: 'whitespace-nowrap' },
+              { id: 'amount', header: 'Amount', type: 'money', value: (i) => Number(i.amount), cell: (i) => <span className="font-medium">{formatPKR(i.amount)}</span>, text: (i) => formatPKR(i.amount), className: 'whitespace-nowrap' },
+              { id: 'returned', header: 'Returned', type: 'number', value: (i) => Number(i.returnedQuantity), text: (i) => (Number(i.returnedQuantity) ? formatQty(i.returnedQuantity, i.fabric.unit) : '-'), className: 'hidden sm:table-cell whitespace-nowrap' },
+            ]}
+            footer={() => ({ fabric: 'Fabrics total', amount: formatPKR(p.subtotal) })} />
           {p.notes && <p className="m-4 rounded-md bg-muted p-3 text-sm"><span className="font-medium">Notes: </span>{p.notes}</p>}
         </Card>
         <Card className="self-start">
@@ -151,28 +149,27 @@ export function PurchaseDetailPage() {
       {!!p.payments.length && (
         <Card>
           <CardHeader><CardTitle className="text-base">Payments</CardTitle></CardHeader>
-          <Table>
-            <THead><TR><TH>Date</TH><TH>Payment</TH><TH>Method</TH><TH className="text-right">Amount</TH></TR></THead>
-            <TBody>{p.payments.map((x) => (
-              <TR key={x.id}><TD>{formatDate(x.paymentDate)}</TD><TD className="font-mono text-xs">{x.paymentNo}{x.reference ? ` · ${x.reference}` : ''}</TD><TD>{METHOD[x.method] ?? x.method}</TD><TD className="text-right tabular-nums">{formatPKR(x.amount)}</TD></TR>
-            ))}</TBody>
-          </Table>
+          <DataTable title={`${p.purchaseNo} - payments`} module="purchases" noun="payment" rows={p.payments} getRowId={(x) => x.id}
+            columns={[
+              { id: 'date', header: 'Date', value: (x) => x.paymentDate, text: (x) => formatDate(x.paymentDate), className: 'whitespace-nowrap' },
+              { id: 'payment', header: 'Payment', value: (x) => x.paymentNo, text: (x) => `${x.paymentNo}${x.reference ? ` · ${x.reference}` : ''}`, cell: (x) => <span className="font-mono text-xs">{x.paymentNo}{x.reference ? ` · ${x.reference}` : ''}</span> },
+              { id: 'method', header: 'Method', value: (x) => METHOD[x.method] ?? x.method },
+              { id: 'amount', header: 'Amount', type: 'money', value: (x) => Number(x.amount), cell: (x) => formatPKR(x.amount) },
+            ]}
+            footer={(rows) => ({ date: 'Total', amount: formatPKR(rows.reduce((t, x) => t + Number(x.amount), 0)) })} />
         </Card>
       )}
       {!!p.returns.length && (
         <Card>
           <CardHeader><CardTitle className="text-base">Returns to supplier</CardTitle></CardHeader>
-          <Table>
-            <THead><TR><TH>Date</TH><TH>Return</TH><TH>Fabrics</TH><TH className="text-right">Amount</TH></TR></THead>
-            <TBody>{p.returns.map((r) => (
-              <TR key={r.id}>
-                <TD className="whitespace-nowrap">{formatDate(r.returnDate)}</TD>
-                <TD><span className="font-mono text-xs font-semibold">{r.returnNo}</span>{r.reason && <span className="block text-xs text-muted-foreground">{r.reason}</span>}</TD>
-                <TD className="text-sm">{r.items.map((i) => `${formatQty(i.quantity, i.fabric.unit)} ${i.fabric.name}`).join(', ')}</TD>
-                <TD className="text-right tabular-nums">{formatPKR(r.totalAmount)}</TD>
-              </TR>
-            ))}</TBody>
-          </Table>
+          <DataTable title={`${p.purchaseNo} - returns`} module="purchases" noun="return" rows={p.returns} getRowId={(r) => r.id}
+            columns={[
+              { id: 'date', header: 'Date', value: (r) => r.returnDate, text: (r) => formatDate(r.returnDate), className: 'whitespace-nowrap' },
+              { id: 'return', header: 'Return', value: (r) => r.returnNo, text: (r) => r.returnNo, cell: (r) => <><span className="font-mono text-xs font-semibold">{r.returnNo}</span>{r.reason && <span className="block text-xs text-muted-foreground">{r.reason}</span>}</> },
+              { id: 'fabrics', header: 'Fabrics', value: (r) => r.items.map((i) => `${formatQty(i.quantity, i.fabric.unit)} ${i.fabric.name}`).join(', '), className: 'text-sm' },
+              { id: 'amount', header: 'Amount', type: 'money', value: (r) => Number(r.totalAmount), cell: (r) => formatPKR(r.totalAmount) },
+            ]}
+            footer={(rows) => ({ date: 'Total', amount: formatPKR(rows.reduce((t, r) => t + Number(r.totalAmount), 0)) })} />
         </Card>
       )}
       <ReturnDialog open={returnOpen} onOpenChange={setReturnOpen} purchase={p} />

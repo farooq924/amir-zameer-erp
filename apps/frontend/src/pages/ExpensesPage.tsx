@@ -1,10 +1,12 @@
 import { PAYMENT_METHODS, RECURRENCE_FREQUENCIES } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, CalendarClock, Check, Clock, Pencil, Plus, Printer, Receipt, Repeat, Search, Tags, X } from 'lucide-react';
+import { Ban, CalendarClock, Check, Clock, Plus, Printer, Receipt, Repeat, Search, Tags, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common';
+import { EmptyState, PageHeader } from '@/components/common';
+import { type DataColumn, DataTable, fetchAllPages } from '@/components/data-table/DataTable';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +14,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { DateRange, ExpenseStatusBadge, FREQ_LABEL, METHOD_LABEL, monthStartPK, todayPK } from '@/features/finance/shared';
@@ -117,13 +118,25 @@ function ExpensesTab({ onEdit }: { onEdit: (x: Expense) => void }) {
   const [from, setFrom] = useState(monthStartPK());
   const [to, setTo] = useState(todayPK());
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [reject, setReject] = useState<Expense | null>(null);
   const [cancel, setCancel] = useState<Expense | null>(null);
   useEffect(() => setPage(1), [search, status, categoryId, from, to]);
+  const listParams = { search: search.trim() || undefined, status, categoryId: categoryId || undefined, from: from || undefined, to: to || undefined };
   const q = useQuery({
-    queryKey: ['expenses', 'list', { search, status, categoryId, from, to, page }],
-    queryFn: () => api.get<ExpenseList>('/expenses', { search: search.trim() || undefined, status, categoryId: categoryId || undefined, from: from || undefined, to: to || undefined, page, pageSize: 25 }),
+    queryKey: ['expenses', 'list', { search, status, categoryId, from, to, page, pageSize }],
+    queryFn: () => api.get<ExpenseList>('/expenses', { ...listParams, page, pageSize }),
   });
+  const columns: DataColumn<Expense>[] = [
+    { id: 'date', header: 'Date', value: (x) => x.expenseDate, text: (x) => formatDate(x.expenseDate), className: 'whitespace-nowrap' },
+    { id: 'expense', header: 'Expense', value: (x) => x.expenseNo, text: (x) => `${x.expenseNo} - ${x.description}${x.paidTo ? ` (to ${x.paidTo})` : ''}`,
+      cell: (x) => <><span className="font-mono text-xs font-semibold">{x.expenseNo}</span><span className="block font-medium">{x.description}</span>
+        <span className="block text-xs text-muted-foreground md:hidden">{x.category.name}</span>{x.paidTo && <span className="block text-xs text-muted-foreground">To {x.paidTo}</span>}</> },
+    { id: 'category', header: 'Category', value: (x) => x.category.name, className: 'hidden md:table-cell' },
+    { id: 'method', header: 'Paid by', value: (x) => METHOD_LABEL[x.paymentMethod] ?? x.paymentMethod, className: 'hidden sm:table-cell' },
+    { id: 'amount', header: 'Amount', type: 'money', value: (x) => x.amount, cell: (x) => <span className="font-semibold">{formatPKR(x.amount)}</span> },
+    { id: 'status', header: 'Status', value: (x) => x.status, cell: (x) => <ExpenseStatusBadge status={x.status} /> },
+  ];
   const act = useMutation({
     mutationFn: ({ x, action, reason }: { x: Expense; action: 'approve' | 'reject' | 'cancel'; reason?: string }) => api.post<Expense>(`/expenses/${x.id}/${action}`, reason ? { reason } : {}),
     onSuccess: (x, v) => {
@@ -150,45 +163,40 @@ function ExpensesTab({ onEdit }: { onEdit: (x: Expense) => void }) {
         <DateRange idPrefix="ex" from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </Card>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.data.length ? (
-          <EmptyState icon={<Receipt />} title="No expenses" description="Shop rent, bills, tea, transport and other running costs recorded here go straight into Profit & Loss." />
-        ) : (
-          <>
-            <Table>
-              <THead><TR><TH>Date</TH><TH>Expense</TH><TH className="hidden md:table-cell">Category</TH><TH className="hidden sm:table-cell">Paid by</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH className="w-32"><span className="sr-only">Actions</span></TH></TR></THead>
-              <TBody>
-                {q.data!.data.map((x) => (
-                  <TR key={x.id} className={x.status === 'CANCELLED' || x.status === 'REJECTED' ? 'opacity-60' : undefined}>
-                    <TD className="whitespace-nowrap">{formatDate(x.expenseDate)}</TD>
-                    <TD><span className="font-mono text-xs font-semibold">{x.expenseNo}</span><span className="block font-medium">{x.description}</span>
-                      <span className="block text-xs text-muted-foreground md:hidden">{x.category.name}</span>{x.paidTo && <span className="block text-xs text-muted-foreground">To {x.paidTo}</span>}</TD>
-                    <TD className="hidden md:table-cell">{x.category.name}</TD>
-                    <TD className="hidden sm:table-cell">{METHOD_LABEL[x.paymentMethod] ?? x.paymentMethod}</TD>
-                    <TD className="text-right font-semibold tabular-nums">{formatPKR(x.amount)}</TD>
-                    <TD><ExpenseStatusBadge status={x.status} /></TD>
-                    <TD>
-                      <div className="flex justify-end gap-1">
-                        {x.status === 'PENDING_APPROVAL' && can('expenses', 'APPROVE') && <Button size="icon" variant="ghost" aria-label={`Approve ${x.expenseNo}`} onClick={() => act.mutate({ x, action: 'approve' })}><Check className="text-emerald-600" /></Button>}
-                        {x.status === 'PENDING_APPROVAL' && can('expenses', 'APPROVE') && <Button size="icon" variant="ghost" aria-label={`Reject ${x.expenseNo}`} onClick={() => setReject(x)}><X className="text-rose-600" /></Button>}
-                        {x.status === 'PENDING_APPROVAL' && can('expenses', 'EDIT') && <Button size="icon" variant="ghost" aria-label={`Edit ${x.expenseNo}`} onClick={() => onEdit(x)}><Pencil /></Button>}
-                        {x.status === 'APPROVED' && can('expenses', 'APPROVE') && <Button size="icon" variant="ghost" aria-label={`Cancel ${x.expenseNo}`} onClick={() => setCancel(x)}><Ban /></Button>}
-                        {can('expenses', 'PRINT') && <Button size="icon" variant="ghost" asChild aria-label={`Print ${x.expenseNo}`}><Link to={`/print/expenses/${x.id}`} target="_blank"><Printer /></Link></Button>}
-                      </div>
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-            <div className="flex justify-end border-t bg-muted/50 px-4 py-3 text-sm font-semibold">Total (approved + pending) <span className="ml-2 tabular-nums">{formatPKR(q.data!.totalAmount)}</span></div>
-            {q.data!.meta.totalPages > 1 && (
-              <div className="flex items-center justify-end gap-2 border-t px-4 py-3 text-sm">
-                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                <span>Page {page} of {q.data!.meta.totalPages}</span>
-                <Button size="sm" variant="outline" disabled={page >= q.data!.meta.totalPages} onClick={() => setPage(page + 1)}>Next</Button>
-              </div>
-            )}
-          </>
-        )}
+        <DataTable
+          title="Expenses"
+          module="expenses"
+          noun="expense"
+          rows={q.data?.data}
+          columns={columns}
+          getRowId={(x) => x.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<ExpenseList>('/expenses', { ...listParams, page: pg, pageSize: size }))}
+          rowClassName={(x) => (x.status === 'CANCELLED' || x.status === 'REJECTED' ? 'opacity-60' : undefined)}
+          onView={can('expenses', 'PRINT') ? (x) => window.open(`/print/expenses/${x.id}`, '_blank') : undefined}
+          onEdit={can('expenses', 'EDIT') ? onEdit : undefined}
+          duplicateRow={can('expenses', 'CREATE') ? (x) => api.post('/expenses', {
+            expenseDate: todayPK(), categoryId: x.category.id, description: x.description, amount: x.amount, paymentMethod: x.paymentMethod,
+            paidTo: x.paidTo || undefined, reference: x.reference || undefined, notes: x.notes || undefined, idempotencyKey: newId(),
+          }) : undefined}
+          deleteRow={can('expenses', 'APPROVE') ? (x) => api.post(`/expenses/${x.id}/${x.status === 'APPROVED' ? 'cancel' : 'reject'}`, { reason: 'Deleted from the expense list' }) : undefined}
+          canRow={(a, x) => (a === 'edit' ? x.status === 'PENDING_APPROVAL' : a === 'delete' ? x.status === 'PENDING_APPROVAL' || x.status === 'APPROVED' : true)}
+          deleteWarning="Expenses are kept for the accounts: a pending expense is rejected and an approved one is cancelled with a reversal entry."
+          onChanged={() => qc.invalidateQueries({ queryKey: ['expenses'] })}
+          rowMenu={(x) => (
+            <>
+              {x.status === 'PENDING_APPROVAL' && can('expenses', 'APPROVE') && <DropdownMenuItem onSelect={() => act.mutate({ x, action: 'approve' })}><Check className="text-emerald-600" /> Approve</DropdownMenuItem>}
+              {x.status === 'PENDING_APPROVAL' && can('expenses', 'APPROVE') && <DropdownMenuItem onSelect={() => setReject(x)}><X className="text-rose-600" /> Reject with reason</DropdownMenuItem>}
+              {x.status === 'APPROVED' && can('expenses', 'APPROVE') && <DropdownMenuItem onSelect={() => setCancel(x)}><Ban /> Cancel with reason</DropdownMenuItem>}
+              {can('expenses', 'PRINT') && <DropdownMenuItem onSelect={() => window.open(`/print/expenses/${x.id}`, '_blank')}><Printer /> Print voucher</DropdownMenuItem>}
+            </>
+          )}
+          footer={() => ({ expense: 'Total (approved + pending, all pages)', amount: formatPKR(q.data?.totalAmount) })}
+          empty={<EmptyState icon={<Receipt />} title="No expenses" description="Shop rent, bills, tea, transport and other running costs recorded here go straight into Profit & Loss." />}
+        />
       </Card>
       <ReasonDialog open={!!reject} onOpenChange={(o) => !o && setReject(null)} title={`Reject ${reject?.expenseNo ?? ''}`} description="The expense will not be paid or posted." action="Reject"
         loading={act.isPending} onSubmit={(reason) => reject && act.mutate({ x: reject, action: 'reject', reason })} />
@@ -250,22 +258,26 @@ function CategoriesTab() {
     <div className="space-y-4">
       {can('expenses', 'EDIT') && <div className="flex justify-end"><Button variant="gold" onClick={() => setEdit('new')}><Plus /> Add category</Button></div>}
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : (
-          <Table>
-            <THead><TR><TH>Category</TH><TH className="hidden sm:table-cell">Posts to account</TH><TH className="text-right">Expenses</TH><TH>Active</TH><TH className="w-12"><span className="sr-only">Edit</span></TH></TR></THead>
-            <TBody>
-              {q.data!.map((c) => (
-                <TR key={c.id}>
-                  <TD className="font-medium">{c.name}<span className="block text-xs text-muted-foreground sm:hidden">{c.account ? `${c.account.code} ${c.account.name}` : '-'}</span></TD>
-                  <TD className="hidden sm:table-cell">{c.account ? <span><span className="font-mono text-xs">{c.account.code}</span> {c.account.name}</span> : '-'}</TD>
-                  <TD className="text-right tabular-nums">{c.expenses}</TD>
-                  <TD><Switch checked={c.isActive} onCheckedChange={() => can('expenses', 'EDIT') && toggle.mutate(c)} aria-label={`${c.name} active`} /></TD>
-                  <TD>{can('expenses', 'EDIT') && <Button size="icon" variant="ghost" aria-label={`Edit ${c.name}`} onClick={() => setEdit(c)}><Pencil /></Button>}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        )}
+        <DataTable
+          title="Expense categories"
+          module="expenses"
+          noun="category"
+          rows={q.data}
+          getRowId={(c) => c.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          onEdit={can('expenses', 'EDIT') ? (c) => setEdit(c) : undefined}
+          duplicateRow={can('expenses', 'EDIT') ? (c) => api.post('/expenses/categories', { name: `${c.name} (Copy)`, accountId: c.account?.id }) : undefined}
+          onChanged={() => qc.invalidateQueries({ queryKey: ['expenses', 'categories'] })}
+          columns={[
+            { id: 'name', header: 'Category', value: (c) => c.name, cell: (c) => <><span className="font-medium">{c.name}</span><span className="block text-xs text-muted-foreground sm:hidden">{c.account ? `${c.account.code} ${c.account.name}` : '-'}</span></> },
+            { id: 'account', header: 'Posts to account', value: (c) => (c.account ? `${c.account.code} ${c.account.name}` : '-'), className: 'hidden sm:table-cell',
+              cell: (c) => (c.account ? <span><span className="font-mono text-xs">{c.account.code}</span> {c.account.name}</span> : '-') },
+            { id: 'expenses', header: 'Expenses', type: 'number', value: (c) => c.expenses },
+            { id: 'active', header: 'Active', value: (c) => (c.isActive ? 'Yes' : 'No'), cell: (c) => <span onClick={(e) => e.stopPropagation()}><Switch checked={c.isActive} onCheckedChange={() => can('expenses', 'EDIT') && toggle.mutate(c)} aria-label={`${c.name} active`} /></span> },
+          ]}
+        />
       </Card>
       <CategoryDialog open={edit !== null} onOpenChange={(o) => !o && setEdit(null)} category={edit === 'new' ? null : edit} />
     </div>
@@ -340,25 +352,28 @@ function RecurringTab() {
         {can('expenses', 'EDIT') && <Button variant="gold" onClick={() => setEdit('new')}><Plus /> Add recurring</Button>}
       </div>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.length ? (
-          <EmptyState icon={<Repeat />} title="No recurring expenses" description="Add rent, internet and other fixed monthly costs once; create them each month with one click." />
-        ) : (
-          <Table>
-            <THead><TR><TH>Expense</TH><TH className="hidden sm:table-cell">Repeats</TH><TH>Next date</TH><TH className="text-right">Amount</TH><TH>Active</TH><TH className="w-12"><span className="sr-only">Edit</span></TH></TR></THead>
-            <TBody>
-              {q.data!.map((r) => (
-                <TR key={r.id} className={!r.isActive ? 'opacity-60' : undefined}>
-                  <TD><span className="font-medium">{r.description}</span><span className="block text-xs text-muted-foreground">{r.category.name} · {METHOD_LABEL[r.paymentMethod]} · {r.created} created</span></TD>
-                  <TD className="hidden sm:table-cell">{FREQ_LABEL[r.frequency]}</TD>
-                  <TD className="whitespace-nowrap">{formatDate(r.nextRunDate)} {r.isDue && <Badge variant="warning" className="ml-1">Due</Badge>}</TD>
-                  <TD className="text-right font-semibold tabular-nums">{formatPKR(r.amount)}</TD>
-                  <TD><Switch checked={r.isActive} onCheckedChange={() => can('expenses', 'EDIT') && toggle.mutate(r)} aria-label={`${r.description} active`} /></TD>
-                  <TD>{can('expenses', 'EDIT') && <Button size="icon" variant="ghost" aria-label={`Edit ${r.description}`} onClick={() => setEdit(r)}><Pencil /></Button>}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        )}
+        <DataTable
+          title="Recurring expenses"
+          module="expenses"
+          noun="recurring expense"
+          rows={q.data}
+          getRowId={(r) => r.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          rowClassName={(r) => (!r.isActive ? 'opacity-60' : undefined)}
+          onEdit={can('expenses', 'EDIT') ? (r) => setEdit(r) : undefined}
+          columns={[
+            { id: 'description', header: 'Expense', value: (r) => r.description, text: (r) => `${r.description} (${r.category.name})`,
+              cell: (r) => <><span className="font-medium">{r.description}</span><span className="block text-xs text-muted-foreground">{r.category.name} · {METHOD_LABEL[r.paymentMethod]} · {r.created} created</span></> },
+            { id: 'frequency', header: 'Repeats', value: (r) => FREQ_LABEL[r.frequency], className: 'hidden sm:table-cell' },
+            { id: 'next', header: 'Next date', value: (r) => r.nextRunDate, text: (r) => formatDate(r.nextRunDate),
+              cell: (r) => <span className="whitespace-nowrap">{formatDate(r.nextRunDate)} {r.isDue && <Badge variant="warning" className="ml-1">Due</Badge>}</span> },
+            { id: 'amount', header: 'Amount', type: 'money', value: (r) => r.amount, cell: (r) => <span className="font-semibold">{formatPKR(r.amount)}</span> },
+            { id: 'active', header: 'Active', value: (r) => (r.isActive ? 'Yes' : 'No'), cell: (r) => <span onClick={(e) => e.stopPropagation()}><Switch checked={r.isActive} onCheckedChange={() => can('expenses', 'EDIT') && toggle.mutate(r)} aria-label={`${r.description} active`} /></span> },
+          ]}
+          empty={<EmptyState icon={<Repeat />} title="No recurring expenses" description="Add rent, internet and other fixed monthly costs once; create them each month with one click." />}
+        />
       </Card>
       <RecurringDialog open={edit !== null} onOpenChange={(o) => !o && setEdit(null)} item={edit === 'new' ? null : edit} />
     </div>

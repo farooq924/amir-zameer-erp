@@ -369,10 +369,101 @@ enum BackupStatus {
 }
 
 // -----------------------------------------------------------------------------
+// SAAS PLATFORM (TailoringERP By Brandistan): companies (tenants), plans, billing
+// Every business table carries "companyId". The Prisma client extension in
+// src/common/tenant adds it to every query automatically, so one company can
+// never read or change another company's data.
+// NOTE: companyId columns are plain scalars on purpose (no Prisma relation);
+// their foreign keys to "companies" are created in the SQL migration.
+// -----------------------------------------------------------------------------
+
+enum CompanyStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+}
+
+model Plan {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique @db.VarChar(30)
+  name         String   @db.VarChar(80)
+  description  String?
+  monthlyPrice Decimal  @default(0) @db.Decimal(14, 2)
+  maxUsers     Int      @default(5)
+  modules      String[] // module keys included in this plan (core modules are always included)
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companies Company[]
+
+  @@map("plans")
+}
+
+model Company {
+  id              String        @id @default(uuid()) @db.Uuid
+  code            String        @unique @db.VarChar(30) // short id, e.g. "zameer-ansari"
+  name            String        @db.VarChar(160)
+  ownerName       String?       @db.VarChar(120)
+  phone           String?       @db.VarChar(30)
+  email           String?       @db.VarChar(160)
+  address         String?
+  city            String?       @db.VarChar(80)
+  docPrefix       String        @default("AZ") @db.VarChar(6) // document number prefix (orders, receipts ...)
+  status          CompanyStatus @default(TRIAL)
+  planId          String        @db.Uuid
+  trialEndsAt     DateTime?
+  paidUntil       DateTime? // null while ACTIVE = no expiry
+  graceDays       Int           @default(7)
+  notes           String?
+  suspendedReason String?       @db.VarChar(300)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  plan     Plan             @relation(fields: [planId], references: [id])
+  payments CompanyPayment[]
+
+  @@index([status])
+  @@map("companies")
+}
+
+model CompanyPayment {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @db.Uuid
+  amount       Decimal  @db.Decimal(14, 2)
+  months       Int      @default(1)
+  method       String   @db.VarChar(20) // JAZZCASH | EASYPAISA | BANK | CASH | OTHER
+  reference    String?  @db.VarChar(120)
+  paidAt       DateTime @db.Date
+  periodFrom   DateTime @db.Date
+  periodTo     DateTime @db.Date
+  notes        String?
+  recordedById String?  @db.Uuid
+  createdAt    DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, paidAt])
+  @@map("company_payments")
+}
+
+/// Platform-wide settings (not per company), e.g. backup configuration.
+model PlatformSetting {
+  key         String   @id @db.VarChar(100)
+  value       Json
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
+// -----------------------------------------------------------------------------
 // AUTHENTICATION & RBAC
 // -----------------------------------------------------------------------------
 
 model User {
+  companyId           String?   @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                  String    @id @default(uuid()) @db.Uuid
   fullName            String    @db.VarChar(120)
   email               String    @unique @db.VarChar(160)
@@ -383,6 +474,7 @@ model User {
   lockedUntil         DateTime?
   lastLoginAt         DateTime?
   passwordChangedAt   DateTime?
+  isSuperAdmin        Boolean   @default(false) // TailoringERP platform admin (companyId is null)
   employeeId          String?   @unique @db.Uuid
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -409,13 +501,15 @@ model User {
   backups               BackupRecord[]
   settingsUpdated       SystemSetting[]
 
+  @@index([companyId])
   @@map("users")
 }
 
 model Role {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique @db.VarChar(40)
-  name        String   @unique @db.VarChar(80)
+  code        String   @db.VarChar(40)
+  name        String   @db.VarChar(80)
   description String?
   isSystem    Boolean  @default(false)
   isActive    Boolean  @default(true)
@@ -425,6 +519,9 @@ model Role {
   users       UserRole[]
   permissions RolePermission[]
 
+  @@unique([companyId, code])
+  @@unique([companyId, name])
+  @@index([companyId])
   @@map("roles")
 }
 
@@ -442,6 +539,7 @@ model Permission {
 }
 
 model UserRole {
+  companyId    String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   userId       String   @db.Uuid
   roleId       String   @db.Uuid
   assignedById String?  @db.Uuid
@@ -452,10 +550,12 @@ model UserRole {
   assignedBy User? @relation("UserRoleAssignedBy", fields: [assignedById], references: [id])
 
   @@id([userId, roleId])
+  @@index([companyId])
   @@map("user_roles")
 }
 
 model RolePermission {
+  companyId    String @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   roleId       String @db.Uuid
   permissionId String @db.Uuid
 
@@ -463,30 +563,35 @@ model RolePermission {
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
+  @@index([companyId])
   @@map("role_permissions")
 }
 
 model Session {
-  id         String    @id @default(uuid()) @db.Uuid
-  tokenHash  String    @unique @db.VarChar(128) // SHA-256 of the cookie token; raw token is never stored
-  csrfToken  String    @db.VarChar(128)
-  userId     String    @db.Uuid
-  ipAddress  String?   @db.VarChar(64)
-  userAgent  String?   @db.VarChar(400)
-  deviceId   String?   @db.VarChar(100)
-  createdAt  DateTime  @default(now())
-  lastSeenAt DateTime  @default(now())
-  expiresAt  DateTime
-  revokedAt  DateTime?
+  companyId       String?   @db.Uuid // tenant (company) - set automatically, see common/tenant
+  id              String    @id @default(uuid()) @db.Uuid
+  tokenHash       String    @unique @db.VarChar(128) // SHA-256 of the cookie token; raw token is never stored
+  csrfToken       String    @db.VarChar(128)
+  userId          String    @db.Uuid
+  ipAddress       String?   @db.VarChar(64)
+  userAgent       String?   @db.VarChar(400)
+  deviceId        String?   @db.VarChar(100)
+  actingCompanyId String?   @db.Uuid // super admin "login as" a company (support access)
+  createdAt       DateTime  @default(now())
+  lastSeenAt      DateTime  @default(now())
+  expiresAt       DateTime
+  revokedAt       DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([companyId])
   @@map("sessions")
 }
 
 model LoginAttempt {
+  companyId  String?  @db.Uuid // tenant (company) - set automatically, see common/tenant
   id         String   @id @default(uuid()) @db.Uuid
   identifier String   @db.VarChar(160)
   ipAddress  String?  @db.VarChar(64)
@@ -496,6 +601,7 @@ model LoginAttempt {
 
   @@index([identifier, createdAt])
   @@index([ipAddress, createdAt])
+  @@index([companyId])
   @@map("login_attempts")
 }
 
@@ -504,7 +610,8 @@ model LoginAttempt {
 // -----------------------------------------------------------------------------
 
 model SystemSetting {
-  key         String   @id @db.VarChar(100)
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
+  key         String   @db.VarChar(100)
   group       String   @db.VarChar(40)
   value       Json
   description String?
@@ -513,12 +620,14 @@ model SystemSetting {
 
   updatedBy User? @relation(fields: [updatedById], references: [id])
 
+  @@id([companyId, key])
   @@index([group])
   @@map("system_settings")
 }
 
 /// Gap-free, transaction-safe document numbers, e.g. AZ-2026-00001.
 model NumberSequence {
+  companyId String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @db.VarChar(40) // ORDER, CUSTOMER, RECEIPT, EXPENSE ...
   period    String   @default("") @db.VarChar(10) // "2026" for yearly sequences, "" for global
@@ -527,12 +636,14 @@ model NumberSequence {
   nextValue Int      @default(1)
   updatedAt DateTime @updatedAt
 
-  @@unique([key, period])
+  @@unique([companyId, key, period])
+  @@index([companyId])
   @@map("number_sequences")
 }
 
 /// Append-only. UPDATE/DELETE are blocked by a database trigger.
 model AuditLog {
+  companyId String?  @db.Uuid // tenant (company) - set automatically, see common/tenant
   id        String   @id @default(uuid()) @db.Uuid
   userId    String?  @db.Uuid
   action    String   @db.VarChar(60)
@@ -551,10 +662,12 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([recordId])
   @@index([createdAt])
+  @@index([companyId])
   @@map("audit_logs")
 }
 
 model Notification {
+  companyId String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id        String   @id @default(uuid()) @db.Uuid
   userId    String?  @db.Uuid // null = broadcast to owner/admins
   type      String   @db.VarChar(40)
@@ -567,10 +680,12 @@ model Notification {
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+  @@index([companyId])
   @@map("notifications")
 }
 
 model Attachment {
+  companyId    String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id           String   @id @default(uuid()) @db.Uuid
   entityType   String   @db.VarChar(40)
   entityId     String   @db.Uuid
@@ -585,11 +700,13 @@ model Attachment {
   uploadedBy User? @relation(fields: [uploadedById], references: [id])
 
   @@index([entityType, entityId])
+  @@index([companyId])
   @@map("attachments")
 }
 
 /// Idempotency keys for non-sync API calls that create financial / stock records.
 model IdempotencyKey {
+  companyId      String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   key            String   @id @db.VarChar(100)
   userId         String?  @db.Uuid
   endpoint       String   @db.VarChar(200)
@@ -600,12 +717,14 @@ model IdempotencyKey {
   expiresAt      DateTime
 
   @@index([expiresAt])
+  @@index([companyId])
   @@map("idempotency_keys")
 }
 
 /// Every offline operation pushed by a client. `id` is the client-generated operation id,
 /// so re-sending the same operation can never apply it twice.
 model SyncOperation {
+  companyId       String     @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id              String     @id @db.Uuid
   deviceId        String     @db.VarChar(100)
   userId          String?    @db.Uuid
@@ -626,10 +745,12 @@ model SyncOperation {
   @@index([deviceId, serverTimestamp])
   @@index([entityType, entityId])
   @@index([status])
+  @@index([companyId])
   @@map("sync_operations")
 }
 
 model SyncConflict {
+  companyId       String             @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id              String             @id @default(uuid()) @db.Uuid
   syncOperationId String             @db.Uuid
   entityType      String             @db.VarChar(40)
@@ -647,6 +768,7 @@ model SyncConflict {
   syncOperation SyncOperation @relation(fields: [syncOperationId], references: [id], onDelete: Cascade)
 
   @@index([resolution])
+  @@index([companyId])
   @@map("sync_conflicts")
 }
 
@@ -678,8 +800,9 @@ model BackupRecord {
 // -----------------------------------------------------------------------------
 
 model Customer {
+  companyId        String         @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id               String         @id @default(uuid()) @db.Uuid
-  code             String         @unique @db.VarChar(20) // AZC-00001
+  code             String         @db.VarChar(20) // AZC-00001
   name             String         @db.VarChar(120)
   mobile           String         @db.VarChar(20) // normalised E.164-ish, e.g. 923001234567
   whatsapp         String?        @db.VarChar(20)
@@ -708,15 +831,18 @@ model Customer {
   messages      WhatsAppMessage[]
   journalLines  JournalEntryLine[]
 
+  @@unique([companyId, code])
   @@index([mobile])
   @@index([whatsapp])
   @@index([name])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_name_trgm_idx")
   @@index([status])
+  @@index([companyId])
   @@map("customers")
 }
 
 model CustomerAddress {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
   customerId  String   @db.Uuid
   label       String   @default("Home") @db.VarChar(40)
@@ -729,10 +855,12 @@ model CustomerAddress {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId])
+  @@index([companyId])
   @@map("customer_addresses")
 }
 
 model CustomerNote {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
   customerId  String   @db.Uuid
   note        String
@@ -742,6 +870,7 @@ model CustomerNote {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId])
+  @@index([companyId])
   @@map("customer_notes")
 }
 
@@ -750,8 +879,9 @@ model CustomerNote {
 // -----------------------------------------------------------------------------
 
 model MeasurementTemplate {
+  companyId       String          @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id              String          @id @default(uuid()) @db.Uuid
-  code            String          @unique @db.VarChar(40)
+  code            String          @db.VarChar(40)
   name            String          @db.VarChar(80)
   garmentCategory GarmentCategory
   defaultUnit     MeasurementUnit @default(INCH)
@@ -764,10 +894,13 @@ model MeasurementTemplate {
   measurements CustomerMeasurement[]
   garmentTypes GarmentType[]
 
+  @@unique([companyId, code])
+  @@index([companyId])
   @@map("measurement_templates")
 }
 
 model MeasurementField {
+  companyId  String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id         String   @id @default(uuid()) @db.Uuid
   templateId String   @db.Uuid
   key        String   @db.VarChar(40) // e.g. "chest"
@@ -782,11 +915,13 @@ model MeasurementField {
   values   MeasurementValue[]
 
   @@unique([templateId, key])
+  @@index([companyId])
   @@map("measurement_fields")
 }
 
 /// One immutable version of a customer's measurements for one template.
 model CustomerMeasurement {
+  companyId   String          @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String          @id @default(uuid()) @db.Uuid
   customerId  String          @db.Uuid
   templateId  String          @db.Uuid
@@ -807,10 +942,12 @@ model CustomerMeasurement {
 
   @@unique([customerId, templateId, versionNo])
   @@index([customerId, templateId, isLatest])
+  @@index([companyId])
   @@map("customer_measurements")
 }
 
 model MeasurementValue {
+  companyId     String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String   @id @default(uuid()) @db.Uuid
   measurementId String   @db.Uuid
   fieldId       String?  @db.Uuid // null for custom one-off fields
@@ -823,6 +960,7 @@ model MeasurementValue {
   field       MeasurementField?   @relation(fields: [fieldId], references: [id])
 
   @@unique([measurementId, fieldKey])
+  @@index([companyId])
   @@map("measurement_values")
 }
 
@@ -831,8 +969,9 @@ model MeasurementValue {
 // -----------------------------------------------------------------------------
 
 model GarmentType {
+  companyId                String          @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                       String          @id @default(uuid()) @db.Uuid
-  code                     String          @unique @db.VarChar(40)
+  code                     String          @db.VarChar(40)
   name                     String          @db.VarChar(80)
   category                 GarmentCategory
   measurementTemplateId    String?         @db.Uuid
@@ -846,13 +985,16 @@ model GarmentType {
   measurementTemplate MeasurementTemplate? @relation(fields: [measurementTemplateId], references: [id])
   orderItems          OrderItem[]
 
+  @@unique([companyId, code])
+  @@index([companyId])
   @@map("garments")
 }
 
 /// Configurable production workflow stages (New Order ... Delivered / Cancelled).
 model WorkflowStage {
+  companyId  String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id         String   @id @default(uuid()) @db.Uuid
-  code       String   @unique @db.VarChar(40)
+  code       String   @db.VarChar(40)
   name       String   @db.VarChar(60)
   sortOrder  Int
   color      String   @default("slate") @db.VarChar(20)
@@ -867,12 +1009,15 @@ model WorkflowStage {
   historyFrom OrderStatusHistory[] @relation("HistoryFrom")
   historyTo   OrderStatusHistory[] @relation("HistoryTo")
 
+  @@unique([companyId, code])
+  @@index([companyId])
   @@map("workflow_stages")
 }
 
 model Order {
+  companyId            String         @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                   String         @id @default(uuid()) @db.Uuid
-  orderNumber          String         @unique @db.VarChar(30) // AZ-2026-00001
+  orderNumber          String         @db.VarChar(30) // AZ-2026-00001
   customerId           String         @db.Uuid
   orderType            OrderType      @default(STITCHING)
   orderDate            DateTime       @default(now()) @db.Date
@@ -916,16 +1061,19 @@ model Order {
   reservations     StockReservation[]
   saleReturns      SaleReturn[]
 
+  @@unique([companyId, orderNumber])
   @@index([customerId])
   @@index([orderDate])
   @@index([stageId])
   @@index([lifecycle])
   @@index([expectedDeliveryDate])
   @@index([orderNumber(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_number_trgm_idx")
+  @@index([companyId])
   @@map("orders")
 }
 
 model OrderItem {
+  companyId          String       @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                 String       @id @default(uuid()) @db.Uuid
   orderId            String       @db.Uuid
   lineNo             Int
@@ -966,11 +1114,13 @@ model OrderItem {
   @@unique([orderId, lineNo])
   @@index([assignedEmployeeId])
   @@index([stageId])
+  @@index([companyId])
   @@map("order_items")
 }
 
 /// Frozen copy of the measurements used for one order item.
 model GarmentMeasurement {
+  companyId           String          @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                  String          @id @default(uuid()) @db.Uuid
   orderItemId         String          @unique @db.Uuid
   sourceMeasurementId String?         @db.Uuid
@@ -983,10 +1133,12 @@ model GarmentMeasurement {
   orderItem         OrderItem            @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
   sourceMeasurement CustomerMeasurement? @relation(fields: [sourceMeasurementId], references: [id])
 
+  @@index([companyId])
   @@map("garment_measurements")
 }
 
 model OrderStatusHistory {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
   orderId     String   @db.Uuid
   orderItemId String?  @db.Uuid // null = whole-order change
@@ -1003,10 +1155,12 @@ model OrderStatusHistory {
   changedBy User?          @relation(fields: [changedById], references: [id])
 
   @@index([orderId, changedAt])
+  @@index([companyId])
   @@map("order_status_history")
 }
 
 model OrderDelivery {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
   orderId     String   @db.Uuid
   deliveryNo  Int
@@ -1019,10 +1173,12 @@ model OrderDelivery {
   items OrderDeliveryItem[]
 
   @@unique([orderId, deliveryNo])
+  @@index([companyId])
   @@map("order_deliveries")
 }
 
 model OrderDeliveryItem {
+  companyId   String @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String @id @default(uuid()) @db.Uuid
   deliveryId  String @db.Uuid
   orderItemId String @db.Uuid
@@ -1032,11 +1188,13 @@ model OrderDeliveryItem {
   orderItem OrderItem     @relation(fields: [orderItemId], references: [id])
 
   @@unique([deliveryId, orderItemId])
+  @@index([companyId])
   @@map("order_delivery_items")
 }
 
 /// Authorised financial adjustments (the only way to change a delivered order's value).
 model OrderAdjustment {
+  companyId    String              @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id           String              @id @default(uuid()) @db.Uuid
   orderId      String              @db.Uuid
   type         OrderAdjustmentType
@@ -1049,6 +1207,7 @@ model OrderAdjustment {
   order Order @relation(fields: [orderId], references: [id])
 
   @@index([orderId])
+  @@index([companyId])
   @@map("order_adjustments")
 }
 
@@ -1057,6 +1216,7 @@ model OrderAdjustment {
 // -----------------------------------------------------------------------------
 
 model EmployeeAssignment {
+  companyId        String           @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id               String           @id @default(uuid()) @db.Uuid
   orderItemId      String           @db.Uuid
   employeeId       String           @db.Uuid
@@ -1075,10 +1235,12 @@ model EmployeeAssignment {
 
   @@index([employeeId, status])
   @@index([orderItemId])
+  @@index([companyId])
   @@map("employee_assignments")
 }
 
 model ProductionRecord {
+  companyId          String    @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                 String    @id @default(uuid()) @db.Uuid
   assignmentId       String    @db.Uuid
   employeeId         String    @db.Uuid
@@ -1103,6 +1265,7 @@ model ProductionRecord {
 
   @@index([employeeId, workDate])
   @@index([payrollItemId])
+  @@index([companyId])
   @@map("production_records")
 }
 
@@ -1111,8 +1274,9 @@ model ProductionRecord {
 // -----------------------------------------------------------------------------
 
 model FabricCategory {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique @db.VarChar(80)
+  name        String   @db.VarChar(80)
   description String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -1120,12 +1284,15 @@ model FabricCategory {
 
   fabrics Fabric[]
 
+  @@unique([companyId, name])
+  @@index([companyId])
   @@map("fabric_categories")
 }
 
 model Fabric {
+  companyId     String     @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String     @id @default(uuid()) @db.Uuid
-  code          String     @unique @db.VarChar(30)
+  code          String     @db.VarChar(30)
   name          String     @db.VarChar(120)
   brand         String?    @db.VarChar(80)
   categoryId    String?    @db.Uuid
@@ -1157,15 +1324,18 @@ model Fabric {
   purchaseReturnItems PurchaseReturnItem[]
   saleReturnItems     SaleReturnItem[]
 
+  @@unique([companyId, code])
   @@index([name])
   @@index([categoryId])
+  @@index([companyId])
   @@map("fabrics")
 }
 
 /// Inventory ledger. Every stock change is one row; `idempotencyKey` makes duplicate deductions impossible.
 model InventoryMovement {
+  companyId      String            @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id             String            @id @default(uuid()) @db.Uuid
-  movementNo     String            @unique @db.VarChar(30)
+  movementNo     String            @db.VarChar(30)
   fabricId       String            @db.Uuid
   type           MovementType
   direction      MovementDirection
@@ -1185,13 +1355,16 @@ model InventoryMovement {
   fabric    Fabric @relation(fields: [fabricId], references: [id])
   createdBy User?  @relation(fields: [createdById], references: [id])
 
+  @@unique([companyId, movementNo])
   @@index([fabricId, movementDate])
   @@index([referenceType, referenceId])
   @@index([type, movementDate])
+  @@index([companyId])
   @@map("inventory_movements")
 }
 
 model StockReservation {
+  companyId   String            @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String            @id @default(uuid()) @db.Uuid
   fabricId    String            @db.Uuid
   orderId     String            @db.Uuid
@@ -1208,12 +1381,14 @@ model StockReservation {
 
   @@unique([orderItemId, fabricId])
   @@index([fabricId, status])
+  @@index([companyId])
   @@map("stock_reservations")
 }
 
 model SaleReturn {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
-  returnNo    String   @unique @db.VarChar(30)
+  returnNo    String   @db.VarChar(30)
   orderId     String?  @db.Uuid
   customerId  String   @db.Uuid
   returnDate  DateTime @default(now()) @db.Date
@@ -1226,10 +1401,13 @@ model SaleReturn {
   customer Customer         @relation(fields: [customerId], references: [id])
   items    SaleReturnItem[]
 
+  @@unique([companyId, returnNo])
+  @@index([companyId])
   @@map("sale_returns")
 }
 
 model SaleReturnItem {
+  companyId    String  @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id           String  @id @default(uuid()) @db.Uuid
   saleReturnId String  @db.Uuid
   fabricId     String  @db.Uuid
@@ -1240,6 +1418,7 @@ model SaleReturnItem {
   saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
   fabric     Fabric     @relation(fields: [fabricId], references: [id])
 
+  @@index([companyId])
   @@map("sale_return_items")
 }
 
@@ -1248,8 +1427,9 @@ model SaleReturnItem {
 // -----------------------------------------------------------------------------
 
 model Supplier {
+  companyId      String       @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id             String       @id @default(uuid()) @db.Uuid
-  code           String       @unique @db.VarChar(20)
+  code           String       @db.VarChar(20)
   name           String       @db.VarChar(120)
   contactNumber  String?      @db.VarChar(20)
   whatsapp       String?      @db.VarChar(20)
@@ -1271,13 +1451,16 @@ model Supplier {
   ledger          SupplierLedger[]
   journalLines    JournalEntryLine[]
 
+  @@unique([companyId, code])
   @@index([name])
+  @@index([companyId])
   @@map("suppliers")
 }
 
 model PurchaseOrder {
+  companyId    String              @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id           String              @id @default(uuid()) @db.Uuid
-  poNumber     String              @unique @db.VarChar(30)
+  poNumber     String              @db.VarChar(30)
   supplierId   String              @db.Uuid
   orderDate    DateTime            @default(now()) @db.Date
   expectedDate DateTime?           @db.Date
@@ -1293,10 +1476,13 @@ model PurchaseOrder {
   items     PurchaseOrderItem[]
   purchases Purchase[]
 
+  @@unique([companyId, poNumber])
+  @@index([companyId])
   @@map("purchase_orders")
 }
 
 model PurchaseOrderItem {
+  companyId        String  @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id               String  @id @default(uuid()) @db.Uuid
   purchaseOrderId  String  @db.Uuid
   fabricId         String  @db.Uuid
@@ -1308,13 +1494,15 @@ model PurchaseOrderItem {
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   fabric        Fabric        @relation(fields: [fabricId], references: [id])
 
+  @@index([companyId])
   @@map("purchase_order_items")
 }
 
 /// Goods received / supplier invoice.
 model Purchase {
+  companyId         String         @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                String         @id @default(uuid()) @db.Uuid
-  purchaseNo        String         @unique @db.VarChar(30)
+  purchaseNo        String         @db.VarChar(30)
   supplierId        String         @db.Uuid
   purchaseOrderId   String?        @db.Uuid
   supplierInvoiceNo String?        @db.VarChar(60)
@@ -1338,11 +1526,14 @@ model Purchase {
   payments      SupplierPayment[]
 
   @@unique([supplierId, supplierInvoiceNo])
+  @@unique([companyId, purchaseNo])
   @@index([purchaseDate])
+  @@index([companyId])
   @@map("purchases")
 }
 
 model PurchaseItem {
+  companyId  String  @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id         String  @id @default(uuid()) @db.Uuid
   purchaseId String  @db.Uuid
   fabricId   String  @db.Uuid
@@ -1353,12 +1544,14 @@ model PurchaseItem {
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   fabric   Fabric   @relation(fields: [fabricId], references: [id])
 
+  @@index([companyId])
   @@map("purchase_items")
 }
 
 model PurchaseReturn {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
-  returnNo    String   @unique @db.VarChar(30)
+  returnNo    String   @db.VarChar(30)
   supplierId  String   @db.Uuid
   purchaseId  String?  @db.Uuid
   returnDate  DateTime @default(now()) @db.Date
@@ -1371,10 +1564,13 @@ model PurchaseReturn {
   purchase Purchase?            @relation(fields: [purchaseId], references: [id])
   items    PurchaseReturnItem[]
 
+  @@unique([companyId, returnNo])
+  @@index([companyId])
   @@map("purchase_returns")
 }
 
 model PurchaseReturnItem {
+  companyId        String  @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id               String  @id @default(uuid()) @db.Uuid
   purchaseReturnId String  @db.Uuid
   fabricId         String  @db.Uuid
@@ -1385,12 +1581,14 @@ model PurchaseReturnItem {
   purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
   fabric         Fabric         @relation(fields: [fabricId], references: [id])
 
+  @@index([companyId])
   @@map("purchase_return_items")
 }
 
 model SupplierPayment {
+  companyId      String            @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id             String            @id @default(uuid()) @db.Uuid
-  paymentNo      String            @unique @db.VarChar(30)
+  paymentNo      String            @db.VarChar(30)
   supplierId     String            @db.Uuid
   purchaseId     String?           @db.Uuid
   paymentDate    DateTime          @default(now()) @db.Date
@@ -1406,12 +1604,15 @@ model SupplierPayment {
   supplier Supplier  @relation(fields: [supplierId], references: [id])
   purchase Purchase? @relation(fields: [purchaseId], references: [id])
 
+  @@unique([companyId, paymentNo])
   @@index([supplierId, paymentDate])
+  @@index([companyId])
   @@map("supplier_payments")
 }
 
 /// Supplier sub-ledger. Credit = we owe more (purchase), Debit = we owe less (payment/return).
 model SupplierLedger {
+  companyId     String          @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String          @id @default(uuid()) @db.Uuid
   supplierId    String          @db.Uuid
   entryDate     DateTime        @db.Date
@@ -1427,6 +1628,7 @@ model SupplierLedger {
 
   @@unique([referenceType, referenceId, entryType])
   @@index([supplierId, entryDate])
+  @@index([companyId])
   @@map("supplier_ledger")
 }
 
@@ -1435,13 +1637,14 @@ model SupplierLedger {
 // -----------------------------------------------------------------------------
 
 model Employee {
+  companyId         String         @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                String         @id @default(uuid()) @db.Uuid
-  code              String         @unique @db.VarChar(20) // AZE-0001
+  code              String         @db.VarChar(20) // AZE-0001
   name              String         @db.VarChar(120)
   fatherName        String?        @db.VarChar(120)
   contactNumber     String?        @db.VarChar(20)
   address           String?        @db.VarChar(300)
-  cnic              String?        @unique @db.VarChar(15) // 12345-1234567-1
+  cnic              String?        @db.VarChar(15) // 12345-1234567-1
   joiningDate       DateTime       @db.Date
   leavingDate       DateTime?      @db.Date
   designation       String?        @db.VarChar(80)
@@ -1472,13 +1675,17 @@ model Employee {
   orderItemsAssigned OrderItem[]          @relation("OrderItemAssignedEmployee")
   journalLines       JournalEntryLine[]
 
+  @@unique([companyId, code])
+  @@unique([companyId, cnic])
   @@index([name])
   @@index([status])
+  @@index([companyId])
   @@map("employees")
 }
 
 /// Salary history: a new row per change, never edited in place.
 model SalaryStructure {
+  companyId           String     @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                  String     @id @default(uuid()) @db.Uuid
   employeeId          String     @db.Uuid
   salaryType          SalaryType
@@ -1496,10 +1703,12 @@ model SalaryStructure {
   employee Employee @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId, effectiveFrom])
+  @@index([companyId])
   @@map("salary_structures")
 }
 
 model EmploymentHistory {
+  companyId     String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String   @id @default(uuid()) @db.Uuid
   employeeId    String   @db.Uuid
   changeType    String   @db.VarChar(40) // DESIGNATION, STATUS, TYPE ...
@@ -1513,10 +1722,12 @@ model EmploymentHistory {
   employee Employee @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId])
+  @@index([companyId])
   @@map("employment_history")
 }
 
 model Attendance {
+  companyId        String           @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id               String           @id @default(uuid()) @db.Uuid
   employeeId       String           @db.Uuid
   date             DateTime         @db.Date
@@ -1538,10 +1749,12 @@ model Attendance {
 
   @@unique([employeeId, date])
   @@index([date])
+  @@index([companyId])
   @@map("attendance")
 }
 
 model LeaveRecord {
+  companyId    String         @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id           String         @id @default(uuid()) @db.Uuid
   employeeId   String         @db.Uuid
   leaveType    LeaveType
@@ -1557,10 +1770,12 @@ model LeaveRecord {
   employee Employee @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId, fromDate])
+  @@index([companyId])
   @@map("leave_records")
 }
 
 model OvertimeRecord {
+  companyId     String         @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String         @id @default(uuid()) @db.Uuid
   employeeId    String         @db.Uuid
   date          DateTime       @db.Date
@@ -1577,12 +1792,14 @@ model OvertimeRecord {
   payrollItem PayrollItem? @relation(fields: [payrollItemId], references: [id])
 
   @@index([employeeId, date])
+  @@index([companyId])
   @@map("overtime_records")
 }
 
 model EmployeeAdvance {
+  companyId         String        @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                String        @id @default(uuid()) @db.Uuid
-  advanceNo         String        @unique @db.VarChar(30)
+  advanceNo         String        @db.VarChar(30)
   employeeId        String        @db.Uuid
   advanceDate       DateTime      @db.Date
   amount            Decimal       @db.Decimal(14, 2)
@@ -1599,11 +1816,14 @@ model EmployeeAdvance {
   employee   Employee          @relation(fields: [employeeId], references: [id])
   recoveries AdvanceRecovery[]
 
+  @@unique([companyId, advanceNo])
   @@index([employeeId, status])
+  @@index([companyId])
   @@map("employee_advances")
 }
 
 model AdvanceRecovery {
+  companyId     String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String   @id @default(uuid()) @db.Uuid
   advanceId     String   @db.Uuid
   payrollItemId String?  @db.Uuid
@@ -1615,13 +1835,15 @@ model AdvanceRecovery {
   payrollItem PayrollItem?    @relation(fields: [payrollItemId], references: [id])
 
   @@unique([advanceId, payrollItemId])
+  @@index([companyId])
   @@map("advance_recoveries")
 }
 
 model Payroll {
+  companyId       String        @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id              String        @id @default(uuid()) @db.Uuid
-  payrollNo       String        @unique @db.VarChar(30)
-  periodKey       String        @unique @db.VarChar(10) // "2026-11" - one payroll run per month
+  payrollNo       String        @db.VarChar(30)
+  periodKey       String        @db.VarChar(10) // "2026-11" - one payroll run per month
   periodStart     DateTime      @db.Date
   periodEnd       DateTime      @db.Date
   status          PayrollStatus @default(DRAFT)
@@ -1639,10 +1861,14 @@ model Payroll {
   approvedBy User?         @relation(fields: [approvedById], references: [id])
   items      PayrollItem[]
 
+  @@unique([companyId, payrollNo])
+  @@unique([companyId, periodKey])
+  @@index([companyId])
   @@map("payrolls")
 }
 
 model PayrollItem {
+  companyId        String     @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id               String     @id @default(uuid()) @db.Uuid
   payrollId        String     @db.Uuid
   employeeId       String     @db.Uuid
@@ -1674,12 +1900,14 @@ model PayrollItem {
   payments          SalaryPayment[]
 
   @@unique([employeeId, periodKey]) // never two payrolls for the same employee & period
+  @@index([companyId])
   @@map("payroll_items")
 }
 
 model SalaryPayment {
+  companyId      String            @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id             String            @id @default(uuid()) @db.Uuid
-  paymentNo      String            @unique @db.VarChar(30)
+  paymentNo      String            @db.VarChar(30)
   payrollItemId  String            @db.Uuid
   employeeId     String            @db.Uuid
   paymentDate    DateTime          @db.Date
@@ -1694,7 +1922,9 @@ model SalaryPayment {
   payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id])
   employee    Employee    @relation(fields: [employeeId], references: [id])
 
+  @@unique([companyId, paymentNo])
   @@index([employeeId, paymentDate])
+  @@index([companyId])
   @@map("salary_payments")
 }
 
@@ -1703,8 +1933,9 @@ model SalaryPayment {
 // -----------------------------------------------------------------------------
 
 model ExpenseCategory {
+  companyId String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id        String   @id @default(uuid()) @db.Uuid
-  name      String   @unique @db.VarChar(80)
+  name      String   @db.VarChar(80)
   accountId String?  @db.Uuid // expense account in chart of accounts
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -1714,12 +1945,15 @@ model ExpenseCategory {
   expenses  Expense[]
   recurring RecurringExpense[]
 
+  @@unique([companyId, name])
+  @@index([companyId])
   @@map("expense_categories")
 }
 
 model Expense {
+  companyId          String        @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id                 String        @id @default(uuid()) @db.Uuid
-  expenseNo          String        @unique @db.VarChar(30)
+  expenseNo          String        @db.VarChar(30)
   expenseDate        DateTime      @db.Date
   categoryId         String        @db.Uuid
   description        String        @db.VarChar(300)
@@ -1744,12 +1978,15 @@ model Expense {
   createdBy        User?             @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
   approvedBy       User?             @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
 
+  @@unique([companyId, expenseNo])
   @@index([expenseDate])
   @@index([categoryId, expenseDate])
+  @@index([companyId])
   @@map("expenses")
 }
 
 model RecurringExpense {
+  companyId     String              @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String              @id @default(uuid()) @db.Uuid
   categoryId    String              @db.Uuid
   description   String              @db.VarChar(300)
@@ -1765,6 +2002,7 @@ model RecurringExpense {
   category ExpenseCategory @relation(fields: [categoryId], references: [id])
   expenses Expense[]
 
+  @@index([companyId])
   @@map("recurring_expenses")
 }
 
@@ -1773,8 +2011,9 @@ model RecurringExpense {
 // -----------------------------------------------------------------------------
 
 model Payment {
+  companyId      String              @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id             String              @id @default(uuid()) @db.Uuid
-  receiptNo      String              @unique @db.VarChar(30)
+  receiptNo      String              @db.VarChar(30)
   customerId     String              @db.Uuid
   orderId        String?             @db.Uuid
   paymentDate    DateTime            @default(now())
@@ -1795,15 +2034,18 @@ model Payment {
   reversedBy Payment? @relation("PaymentReversal")
   createdBy  User?    @relation(fields: [createdById], references: [id])
 
+  @@unique([companyId, receiptNo])
   @@index([customerId, paymentDate])
   @@index([orderId])
   @@index([orderId, status], map: "payments_order_status_idx")
   @@index([paymentDate])
+  @@index([companyId])
   @@map("payments")
 }
 
 /// Customer sub-ledger. Debit = customer owes more, Credit = customer paid / owes less.
 model CustomerLedger {
+  companyId     String          @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String          @id @default(uuid()) @db.Uuid
   customerId    String          @db.Uuid
   entryDate     DateTime        @db.Date
@@ -1819,6 +2061,7 @@ model CustomerLedger {
 
   @@unique([referenceType, referenceId, entryType])
   @@index([customerId, entryDate])
+  @@index([companyId])
   @@map("customer_ledger")
 }
 
@@ -1827,8 +2070,9 @@ model CustomerLedger {
 // -----------------------------------------------------------------------------
 
 model ChartOfAccount {
+  companyId     String      @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id            String      @id @default(uuid()) @db.Uuid
-  code          String      @unique @db.VarChar(20) // 1000 Cash, 4000 Stitching Revenue ...
+  code          String      @db.VarChar(20) // 1000 Cash, 4000 Stitching Revenue ...
   name          String      @db.VarChar(120)
   type          AccountType
   subType       String?     @db.VarChar(40) // CURRENT_ASSET, COGS, DIRECT_LABOUR, OPERATING_EXPENSE ...
@@ -1845,13 +2089,16 @@ model ChartOfAccount {
   lines             JournalEntryLine[]
   expenseCategories ExpenseCategory[]
 
+  @@unique([companyId, code])
   @@index([type])
+  @@index([companyId])
   @@map("chart_of_accounts")
 }
 
 model AccountingPeriod {
+  companyId  String       @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id         String       @id @default(uuid()) @db.Uuid
-  name       String       @unique @db.VarChar(40) // "Nov 2026"
+  name       String       @db.VarChar(40) // "Nov 2026"
   startDate  DateTime     @db.Date
   endDate    DateTime     @db.Date
   status     PeriodStatus @default(OPEN)
@@ -1861,14 +2108,17 @@ model AccountingPeriod {
 
   journalEntries JournalEntry[]
 
-  @@unique([startDate, endDate])
+  @@unique([companyId, startDate, endDate])
+  @@unique([companyId, name])
+  @@index([companyId])
   @@map("accounting_periods")
 }
 
 /// Posted entries are immutable (DB trigger); corrections use a reversal entry.
 model JournalEntry {
+  companyId    String        @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id           String        @id @default(uuid()) @db.Uuid
-  entryNo      String        @unique @db.VarChar(30)
+  entryNo      String        @db.VarChar(30)
   entryDate    DateTime      @db.Date
   periodId     String?       @db.Uuid
   description  String        @db.VarChar(300)
@@ -1891,12 +2141,15 @@ model JournalEntry {
   postedBy   User?              @relation("JournalPostedBy", fields: [postedById], references: [id])
   lines      JournalEntryLine[]
 
+  @@unique([companyId, entryNo])
   @@index([entryDate])
   @@index([sourceType, sourceId])
+  @@index([companyId])
   @@map("journal_entries")
 }
 
 model JournalEntryLine {
+  companyId      String  @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id             String  @id @default(uuid()) @db.Uuid
   journalEntryId String  @db.Uuid
   lineNo         Int
@@ -1916,6 +2169,7 @@ model JournalEntryLine {
 
   @@unique([journalEntryId, lineNo])
   @@index([accountId])
+  @@index([companyId])
   @@map("journal_entry_lines")
 }
 
@@ -1924,6 +2178,7 @@ model JournalEntryLine {
 // -----------------------------------------------------------------------------
 
 model WhatsAppTemplate {
+  companyId   String   @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id          String   @id @default(uuid()) @db.Uuid
   name        String   @db.VarChar(100) // Meta template name
   language    String   @default("en") @db.VarChar(10)
@@ -1938,11 +2193,13 @@ model WhatsAppTemplate {
 
   messages WhatsAppMessage[]
 
-  @@unique([name, language])
+  @@unique([companyId, name, language])
+  @@index([companyId])
   @@map("whatsapp_templates")
 }
 
 model WhatsAppMessage {
+  companyId    String         @default(dbgenerated("az_require_company()")) @db.Uuid // tenant (company) - set automatically, see common/tenant
   id           String         @id @default(uuid()) @db.Uuid
   customerId   String?        @db.Uuid
   toNumber     String         @db.VarChar(20)
@@ -1972,6 +2229,7 @@ model WhatsAppMessage {
 
   @@index([status, nextRetryAt])
   @@index([customerId])
+  @@index([companyId])
   @@map("whatsapp_messages")
 }
 

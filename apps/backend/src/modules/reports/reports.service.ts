@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { byCompany } from '../../common/tenant';
 import { randomUUID } from 'node:crypto';
 import {
   REPORTS, REPORT_FILTERS, STOCK_STATUSES, type ReportDefinition, type ReportFilterKey, type ReportResult, type ReportRow, type SavedReportFilter,
@@ -158,7 +159,7 @@ export class ReportsService {
 
   async business() {
     const b = (await this.settings.getGroup('business')) as Record<string, string>;
-    return { name: b.businessName || 'AMIR ZAMEER', line: [b.address, b.city].filter(Boolean).join(', '), phone: b.phone || '' };
+    return { name: b.businessName || 'My Tailoring Shop', line: [b.address, b.city].filter(Boolean).join(', '), phone: b.phone || '' };
   }
 
   async logExport(key: string, format: string, q: ReportQuery, rows: number, ctx: RequestContext) {
@@ -227,7 +228,7 @@ export class ReportsService {
   // ---------------------------------------------------------------- saved filters (per user)
 
   private async readSaved(userId: string): Promise<SavedReportFilter[]> {
-    const row = await this.prisma.systemSetting.findUnique({ where: { key: SAVED_KEY(userId) } });
+    const row = await this.prisma.systemSetting.findUnique({ where: { companyId_key: byCompany({ key: SAVED_KEY(userId) }) } });
     return Array.isArray(row?.value) ? (row!.value as unknown as SavedReportFilter[]) : [];
   }
 
@@ -252,7 +253,7 @@ export class ReportsService {
     const item: SavedReportFilter = { id: randomUUID(), reportKey: def.key, name: dto.name.trim(), params, createdAt: new Date().toISOString() };
     const next = [...others, item];
     await this.prisma.systemSetting.upsert({
-      where: { key: SAVED_KEY(user.id) },
+      where: { companyId_key: byCompany({ key: SAVED_KEY(user.id) }) },
       create: { key: SAVED_KEY(user.id), group: 'report_filters', value: next as unknown as object, description: 'Saved report filters', updatedById: user.id },
       update: { value: next as unknown as object, updatedById: user.id },
     });
@@ -263,7 +264,7 @@ export class ReportsService {
     const all = await this.readSaved(userId);
     const next = all.filter((s) => s.id !== id);
     if (next.length === all.length) throw new NotFoundException('Saved filter not found');
-    await this.prisma.systemSetting.update({ where: { key: SAVED_KEY(userId) }, data: { value: next as unknown as object } });
+    await this.prisma.systemSetting.update({ where: { companyId_key: byCompany({ key: SAVED_KEY(userId) }) }, data: { value: next as unknown as object } });
     return { ok: true };
   }
 }

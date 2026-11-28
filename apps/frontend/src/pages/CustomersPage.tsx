@@ -1,21 +1,20 @@
 import { formatPhone } from '@az/shared';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { EmptyState, ErrorState, PageHeader } from '@/components/common';
+import { EmptyState, PageHeader } from '@/components/common';
+import { type DataColumn, DataTable, type SortState, fetchAllPages } from '@/components/data-table/DataTable';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, NativeSelect } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { CustomerStatusBadge, CustomerTypeBadge } from '@/features/customers/badges';
 import { CustomerFormDialog } from '@/features/customers/CustomerFormDialog';
 import { useCan } from '@/hooks/use-permission';
-import { api, errorMessage } from '@/services/api';
+import { api } from '@/services/api';
 import type { Customer, Paginated } from '@/types';
 import { cn } from '@/utils/cn';
-import { formatPKR, initials } from '@/utils/format';
+import { formatDate, formatPKR, initials } from '@/utils/format';
 
 function useDebounced<T>(value: T, ms = 300): T {
   const [v, setV] = useState(value);
@@ -25,13 +24,17 @@ function useDebounced<T>(value: T, ms = 300): T {
 
 export function CustomersPage() {
   const can = useCan();
+  const qc = useQueryClient();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState(() => params.get('search') ?? '');
   const [status, setStatus] = useState('');
   const [type, setType] = useState('');
-  const [sort, setSort] = useState('createdAt:desc');
+  const [sort, setSort] = useState<SortState | null>(null);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [editing, setEditing] = useState<Customer | null>(null);
+  const [copyFrom, setCopyFrom] = useState<Customer | null>(null);
   const [formOpen, setFormOpen] = useState(() => params.get('new') === '1' && can('customers', 'CREATE'));
   // Links such as the header search and "Add Customer" quick action pass ?search= / ?new=1.
   useEffect(() => {
@@ -42,93 +45,115 @@ export function CustomersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
   const q = useDebounced(search);
-  const [sortBy, sortOrder] = sort.split(':');
+  const sortBy = sort?.id ?? 'createdAt';
+  const sortOrder = sort ? (sort.desc ? 'desc' : 'asc') : 'desc';
+  const filters = { search: q, status, customerType: type, sortBy, sortOrder };
 
   const customers = useQuery({
-    queryKey: ['customers', { q, status, type, sort, page }],
-    queryFn: () => api.get<Paginated<Customer>>('/customers', { search: q, status, customerType: type, sortBy, sortOrder, page, pageSize: 25 }),
+    queryKey: ['customers', { q, status, type, sortBy, sortOrder, page, pageSize }],
+    queryFn: () => api.get<Paginated<Customer>>('/customers', { ...filters, page, pageSize }),
     placeholderData: keepPreviousData,
   });
+  const refresh = () => qc.invalidateQueries({ queryKey: ['customers'] });
+  const openNew = () => { setEditing(null); setCopyFrom(null); setFormOpen(true); };
+
+  const columns: DataColumn<Customer>[] = [
+    { id: 'code', header: 'Code', sortKey: 'code', value: (c) => c.code, cell: (c) => <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">{c.code}</span> },
+    { id: 'name', header: 'Name', sortKey: 'name', value: (c) => c.name, cell: (c) => <span className="font-medium">{c.name}</span> },
+    { id: 'mobile', header: 'Mobile', value: (c) => formatPhone(c.mobile), className: 'whitespace-nowrap' },
+    { id: 'city', header: 'City', value: (c) => c.city, className: 'hidden md:table-cell' },
+    { id: 'type', header: 'Type', value: (c) => c.customerType, text: (c) => c.customerType.replace('_', '-'), cell: (c) => <CustomerTypeBadge type={c.customerType} />, className: 'hidden md:table-cell' },
+    { id: 'status', header: 'Status', value: (c) => c.status, cell: (c) => <CustomerStatusBadge status={c.status} /> },
+    { id: 'registrationDate', header: 'Registered', sortKey: 'registrationDate', value: (c) => c.registrationDate, text: (c) => formatDate(c.registrationDate), className: 'hidden whitespace-nowrap lg:table-cell' },
+    { id: 'outstanding', header: 'Outstanding', type: 'money', value: (c) => c.outstanding ?? '0',
+      cell: (c) => <span className={cn(Number(c.outstanding) > 0 && 'font-medium text-red-700')}>{formatPKR(c.outstanding)}</span> },
+  ];
 
   return (
     <div>
       <PageHeader
         title="Customers"
         description="Search by name, customer code or mobile number."
-        actions={can('customers', 'CREATE') && <Button onClick={() => setFormOpen(true)}><Plus /> Add customer</Button>}
+        actions={can('customers', 'CREATE') && <Button onClick={openNew}><Plus /> Add customer</Button>}
       />
       <Card>
-        <div className="grid grid-cols-2 items-center gap-2 border-b p-3 sm:flex sm:flex-wrap">
-          <div className="relative col-span-2 w-full sm:w-72">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Name, code or mobile" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} aria-label="Search customers" />
-          </div>
-          <NativeSelect aria-label="Status" className="sm:w-36" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-            <option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="BLOCKED">Blocked</option>
-          </NativeSelect>
-          <NativeSelect aria-label="Customer type" className="sm:w-36" value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
-            <option value="">All types</option><option value="REGULAR">Regular</option><option value="WALK_IN">Walk-in</option><option value="VIP">VIP</option><option value="CORPORATE">Corporate</option>
-          </NativeSelect>
-          <NativeSelect aria-label="Sort" className="col-span-2 sm:w-40" value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="createdAt:desc">Newest first</option><option value="createdAt:asc">Oldest first</option>
-            <option value="name:asc">Name A-Z</option><option value="name:desc">Name Z-A</option><option value="code:asc">Code</option>
-          </NativeSelect>
-        </div>
-        {customers.isError ? <ErrorState message={errorMessage(customers.error)} onRetry={() => customers.refetch()} /> : customers.isLoading ? (
-          <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
-        ) : customers.data!.data.length === 0 ? (
-          <EmptyState icon={<Users className="h-5 w-5" />} title={q || status || type ? 'No customers match your search' : 'No customers yet'}
-            description={q ? 'Check the spelling or search by mobile number.' : 'Add your first customer to start taking measurements and orders.'}
-            action={can('customers', 'CREATE') && !q ? <Button size="sm" onClick={() => setFormOpen(true)}><Plus /> Add customer</Button> : undefined} />
-        ) : (
-          <>
-          {/* Phones: card list */}
-          <ul className="divide-y sm:hidden">
-            {customers.data!.data.map((c) => (
-              <li key={c.id}>
-                <button type="button" onClick={() => navigate(`/customers/${c.id}`)} className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-accent/50">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-soft text-sm font-semibold text-[#8a6a1f] dark:text-gold">{initials(c.name)}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{c.name}</span>
-                    <span className="block text-xs text-muted-foreground">{c.code} · {formatPhone(c.mobile)}</span>
-                    <span className={cn('block text-xs tabular-nums', Number(c.outstanding) > 0 ? 'font-medium text-rose-700 dark:text-rose-400' : 'text-muted-foreground')}>Balance {formatPKR(c.outstanding)}</span>
-                  </span>
-                  <CustomerStatusBadge status={c.status} />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="hidden sm:block">
-          <Table>
-            <THead><TR><TH>Code</TH><TH>Name</TH><TH>Mobile</TH><TH className="hidden md:table-cell">City</TH><TH className="hidden md:table-cell">Type</TH><TH>Status</TH><TH className="text-right">Outstanding</TH></TR></THead>
-            <TBody>
-              {customers.data!.data.map((c) => (
-                <TR key={c.id} className="cursor-pointer" onClick={() => navigate(`/customers/${c.id}`)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/customers/${c.id}`)}>
-                  <TD className="whitespace-nowrap font-mono text-xs text-muted-foreground">{c.code}</TD>
-                  <TD className="font-medium">{c.name}</TD>
-                  <TD className="whitespace-nowrap">{formatPhone(c.mobile)}</TD>
-                  <TD className="hidden md:table-cell">{c.city ?? '-'}</TD>
-                  <TD className="hidden md:table-cell"><CustomerTypeBadge type={c.customerType} /></TD>
-                  <TD><CustomerStatusBadge status={c.status} /></TD>
-                  <TD className={cn('whitespace-nowrap text-right tabular-nums', Number(c.outstanding) > 0 && 'font-medium text-red-700')}>{formatPKR(c.outstanding)}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-          </div>
-          </>
-        )}
-        {customers.data && customers.data.meta.total > 0 && (
-          <div className="flex items-center justify-between border-t p-3 text-sm">
-            <span className="text-muted-foreground">{customers.data.meta.total} customers · page {customers.data.meta.page} of {customers.data.meta.totalPages}</span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="outline" size="sm" disabled={page >= customers.data.meta.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+        <DataTable
+          title="Customers"
+          module="customers"
+          noun="customer"
+          rows={customers.data?.data}
+          columns={columns}
+          getRowId={(c) => c.id}
+          loading={customers.isLoading}
+          error={customers.error}
+          onRetry={() => customers.refetch()}
+          pagination={{ page, pageSize, total: customers.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          sort={sort}
+          onSortChange={(s) => { setSort(s); setPage(1); }}
+          fetchAll={() => fetchAllPages((p, size) => api.get<Paginated<Customer>>('/customers', { ...filters, page: p, pageSize: size }))}
+          onRowClick={(c) => navigate(`/customers/${c.id}`)}
+          onView={(c) => navigate(`/customers/${c.id}`)}
+          onEdit={can('customers', 'EDIT') ? (c) => { setCopyFrom(null); setEditing(c); setFormOpen(true); } : undefined}
+          onDuplicate={can('customers', 'CREATE') ? (c) => { setEditing(null); setCopyFrom(c); setFormOpen(true); } : undefined}
+          deleteRow={can('customers', 'DELETE') ? (c) => api.delete(`/customers/${c.id}`) : undefined}
+          deleteWarning="Customers with orders, payments or ledger entries cannot be deleted; mark them Inactive instead."
+          onChanged={refresh}
+          importer={can('customers', 'CREATE') ? {
+            fields: [
+              { key: 'name', label: 'Name', required: true, example: 'Ali Raza' },
+              { key: 'mobile', label: 'Mobile', required: true, example: '0300-1234567', aliases: ['phone'] },
+              { key: 'whatsapp', label: 'WhatsApp', example: '0300-1234567' },
+              { key: 'email', label: 'Email' },
+              { key: 'city', label: 'City', example: 'Karachi' },
+              { key: 'address', label: 'Address' },
+              { key: 'customerType', label: 'Type', example: 'REGULAR', aliases: ['customer type'] },
+              { key: 'openingBalance', label: 'Opening balance', example: '0' },
+              { key: 'notes', label: 'Notes' },
+            ],
+            note: 'Type: Regular, Walk-in, VIP or Corporate. Rows with a mobile number that already exists are skipped.',
+            createRow: (d) => {
+              const t = (d.customerType || 'REGULAR').toUpperCase().replace(/[^A-Z]/g, '_').replace('WALK_IN', 'WALK_IN');
+              return api.post('/customers', {
+                name: d.name, mobile: d.mobile, whatsapp: d.whatsapp || undefined, email: d.email || undefined, city: d.city || undefined,
+                address: d.address || undefined, notes: d.notes || undefined, openingBalance: d.openingBalance && Number(d.openingBalance) > 0 ? d.openingBalance : undefined,
+                customerType: ['WALK_IN', 'REGULAR', 'VIP', 'CORPORATE'].includes(t) ? t : 'REGULAR',
+              });
+            },
+          } : undefined}
+          toolbar={
+            <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
+              <div className="relative col-span-2 w-full sm:w-72">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input className="pl-8" placeholder="Name, code or mobile" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} aria-label="Search customers" />
+              </div>
+              <NativeSelect aria-label="Status" className="sm:w-36" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+                <option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="BLOCKED">Blocked</option>
+              </NativeSelect>
+              <NativeSelect aria-label="Customer type" className="sm:w-36" value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
+                <option value="">All types</option><option value="REGULAR">Regular</option><option value="WALK_IN">Walk-in</option><option value="VIP">VIP</option><option value="CORPORATE">Corporate</option>
+              </NativeSelect>
             </div>
-          </div>
-        )}
+          }
+          empty={
+            <EmptyState icon={<Users className="h-5 w-5" />} title={q || status || type ? 'No customers match your search' : 'No customers yet'}
+              description={q ? 'Check the spelling or search by mobile number.' : 'Add your first customer to start taking measurements and orders.'}
+              action={can('customers', 'CREATE') && !q ? <Button size="sm" onClick={openNew}><Plus /> Add customer</Button> : undefined} />
+          }
+          mobileCard={(c) => (
+            <button type="button" onClick={() => navigate(`/customers/${c.id}`)} className="flex w-full items-center gap-3 px-1 py-3 text-left">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-soft text-sm font-semibold text-[#8a6a1f] dark:text-gold">{initials(c.name)}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">{c.name}</span>
+                <span className="block text-xs text-muted-foreground">{c.code} · {formatPhone(c.mobile)}</span>
+                <span className={cn('block text-xs tabular-nums', Number(c.outstanding) > 0 ? 'font-medium text-rose-700 dark:text-rose-400' : 'text-muted-foreground')}>Balance {formatPKR(c.outstanding)}</span>
+              </span>
+              <CustomerStatusBadge status={c.status} />
+            </button>
+          )}
+        />
       </Card>
-      <CustomerFormDialog open={formOpen} onOpenChange={setFormOpen} onSaved={(c) => navigate(`/customers/${c.id}`)} />
+      <CustomerFormDialog open={formOpen} onOpenChange={setFormOpen} customer={editing} copyFrom={copyFrom}
+        onSaved={(c) => { if (!editing) navigate(`/customers/${c.id}`); }} />
     </div>
   );
 }

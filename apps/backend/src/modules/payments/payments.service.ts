@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { paginate } from '../../common/dto/pagination.dto';
 import { PrismaService, PrismaTx } from '../../common/prisma/prisma.service';
@@ -246,7 +247,7 @@ export class PaymentsService {
   }
 
   private async lockOrder(tx: PrismaTx, id: string) {
-    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
     const o = await tx.order.findFirst({ where: { id, deletedAt: null } });
     if (!o) throw new NotFoundException('Order not found');
     return o;

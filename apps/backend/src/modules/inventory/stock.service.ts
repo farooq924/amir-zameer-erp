@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { MovementType, Prisma } from '@prisma/client';
 import { MOVEMENT_TYPES, unitShort } from '@az/shared';
 import { PrismaTx } from '../../common/prisma/prisma.service';
@@ -50,7 +51,7 @@ export class StockService {
   /** Locks fabric rows in a fixed order (prevents deadlocks when one document touches many fabrics). */
   async lockFabrics(tx: PrismaTx, ids: string[]) {
     const unique = [...new Set(ids)].sort();
-    for (const id of unique) await tx.$queryRaw`SELECT id FROM fabrics WHERE id = ${id}::uuid FOR UPDATE`;
+    for (const id of unique) await tx.$queryRaw`SELECT id FROM fabrics WHERE id = ${id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
   }
 
   async post(tx: PrismaTx, m: MovementInput, ctx: RequestContext) {

@@ -86,9 +86,11 @@ export interface NewOp {
 const PULL_EVERY_MS = 5 * 60_000;
 const TICK_MS = 45_000;
 
+/** `userId` is the cache owner: user + company, so a Super Admin opening another company never sees the last one's copy. */
 async function pull(full: boolean, userId: string): Promise<void> {
   const cachedFor = await getMeta<string>('userId');
-  if (cachedFor && cachedFor !== userId) await clearCachedData();
+  // A v1 cache (user id only) belongs to the same user: a full pull refreshes it without dropping unsent work.
+  if (cachedFor && cachedFor !== userId && cachedFor !== userId.split(':')[0]) await clearCachedData();
   const since = full || cachedFor !== userId ? undefined : await getMeta<string>('serverTime');
   const snap = await api.get<Snapshot>('/sync/snapshot', { since });
   await db.transaction('rw', [db.customers, db.templates, db.garments, db.orders, db.meta], async () => {
@@ -192,7 +194,8 @@ export const useSync = create<SyncState>((set, get) => ({
 
   syncNow: async (opts = {}) => {
     const user = useAuth.getState().user;
-    if (!user || get().syncing) return null;
+    // Super Admin platform area has no company data to sync.
+    if (!user || get().syncing || (user.isSuperAdmin && !user.company)) return null;
     set({ syncing: true, lastError: null });
     let sent = 0;
     let saved = 0;
@@ -228,7 +231,7 @@ export const useSync = create<SyncState>((set, get) => ({
         }
         if (!progressed) break;
       }
-      await pull(!!opts.full, user.id);
+      await pull(!!opts.full, user.company ? `${user.id}:${user.company.id}` : user.id);
       const now = new Date().toISOString();
       set({ online: true, lastSyncAt: now, lastPullAt: now });
     } catch (e) {

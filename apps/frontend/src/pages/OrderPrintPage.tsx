@@ -92,7 +92,7 @@ export function OrderPrintPage() {
         {toolbar}
         <article className="print-sheet mx-auto max-w-[210mm] bg-white p-10 text-black shadow print:max-w-none print:p-0 print:shadow-none">
           <header className="flex items-start justify-between border-b-2 border-black pb-3">
-            <div><h1 className="text-2xl font-bold tracking-wide">{String(biz.businessName || 'AMIR ZAMEER')}</h1><p className="text-sm">Workshop job card</p></div>
+            <div><h1 className="text-2xl font-bold tracking-wide">{String(biz.businessName || '')}</h1><p className="text-sm">Workshop job card</p></div>
             <div className="text-right"><p className="text-2xl font-bold">{o.orderNumber}</p><p className="text-sm">Delivery: <b>{formatDate(o.expectedDeliveryDate)}</b></p></div>
           </header>
           <section className="mt-3 grid grid-cols-2 gap-x-8 text-sm">
@@ -135,8 +135,8 @@ export function OrderPrintPage() {
   const receipt = (n: number) => (
       <article key={n} className={cn('receipt mx-auto bg-white p-3 font-mono leading-snug text-black shadow print:shadow-none', narrow ? 'text-[10px]' : 'text-[11px]', n > 0 && 'mt-6 print:mt-0 print:break-before-page')} style={{ width }}>
         <header className="text-center">
-          {logo && <SewingMachineMark className="mx-auto mb-1 h-7 w-9 text-black" />}
-          <p className="text-sm font-bold">{String(biz.businessName || 'AMIR ZAMEER')}</p>
+          {logo && (biz.logoUrl ? <img src={String(biz.logoUrl)} alt="" className="mx-auto mb-1 max-h-12 max-w-[60%] object-contain grayscale" /> : <SewingMachineMark className="mx-auto mb-1 h-7 w-9 text-black" />)}
+          <p className="text-sm font-bold">{String(biz.businessName || '')}</p>
           {biz.tagline ? <p>{String(biz.tagline)}</p> : null}
           {biz.address || biz.city ? <p>{[biz.address, biz.city].filter(Boolean).join(', ')}</p> : null}
           {biz.phone ? <p>{String(biz.phone)}</p> : null}
@@ -216,9 +216,11 @@ function InvoiceSheet({ o, biz, printing, toolbar, logo, thanks }: {
       <article className="invoice print-sheet mx-auto max-w-[210mm] bg-white p-10 text-[13px] text-black shadow print:max-w-none print:p-0 print:shadow-none">
         <header className="flex items-start justify-between gap-6 border-b-4 border-[#101f3d] pb-4">
           <div className="flex items-start gap-3">
-            {logo && <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#101f3d] text-[#be9637] print-color-exact"><SewingMachineMark className="h-9 w-11" /></div>}
+            {logo && (biz.logoUrl
+              ? <img src={String(biz.logoUrl)} alt="" className="h-14 max-w-[120px] shrink-0 object-contain" />
+              : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#101f3d] text-[#be9637] print-color-exact"><SewingMachineMark className="h-9 w-11" /></div>)}
             <div>
-              <h1 className="text-2xl font-bold tracking-wide text-[#101f3d]">{String(biz.businessName || 'AMIR ZAMEER')}</h1>
+              <h1 className="text-2xl font-bold tracking-wide text-[#101f3d]">{String(biz.businessName || '')}</h1>
               {biz.tagline ? <p className="text-sm text-black/70">{String(biz.tagline)}</p> : null}
               {address && <p className="text-xs text-black/70">{address}</p>}
               <p className="text-xs text-black/70">{[biz.phone && `Phone ${String(biz.phone)}`, biz.whatsapp && `WhatsApp ${String(biz.whatsapp)}`, biz.email && String(biz.email)].filter(Boolean).join(' · ')}</p>
@@ -316,7 +318,7 @@ function InvoiceSheet({ o, biz, printing, toolbar, logo, thanks }: {
         {printing.showSignatureLine !== false && (
           <section className="mt-12 grid grid-cols-2 gap-16 text-xs">
             <p className="border-t border-black pt-1 text-center">Customer signature</p>
-            <p className="border-t border-black pt-1 text-center">For {String(biz.businessName || 'AMIR ZAMEER')}</p>
+            <p className="border-t border-black pt-1 text-center">For {String(biz.businessName || '')}</p>
           </section>
         )}
         <p className="mt-6 text-center text-sm font-medium">{thanks}</p>

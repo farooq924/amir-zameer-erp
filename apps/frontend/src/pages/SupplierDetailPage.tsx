@@ -7,7 +7,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from '@/components/common';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable, type DataColumn } from '@/components/data-table/DataTable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { SupplierFormDialog, SupplierPaymentDialog } from '@/features/inventory/SupplierDialogs';
@@ -23,31 +23,24 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   return <div><dt className="text-xs font-medium text-muted-foreground">{label}</dt><dd className="mt-0.5 text-sm font-medium">{children || '-'}</dd></div>;
 }
 
-function LedgerTab({ id }: { id: string }) {
+type LedgerRow = SupplierLedger['entries'][number];
+
+function LedgerTab({ id, name }: { id: string; name: string }) {
   const q = useQuery({ queryKey: ['suppliers', id, 'ledger'], queryFn: () => api.get<SupplierLedger>(`/suppliers/${id}/ledger`) });
-  if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
-  if (q.isLoading) return <LoadingState />;
-  const d = q.data!;
-  if (!d.entries.length) return <EmptyState title="No ledger entries" description="Opening balance, purchases, returns and payments are recorded here automatically." />;
+  const d = q.data;
+  const columns: DataColumn<LedgerRow>[] = [
+    { id: 'date', header: 'Date', value: (e) => e.date, text: (e) => formatDate(e.date), className: 'whitespace-nowrap', sortable: false },
+    { id: 'entry', header: 'Entry', value: (e) => humanize(e.entryType), text: (e) => `${humanize(e.entryType)}${e.description ? ` - ${e.description}` : ''}`, sortable: false,
+      cell: (e) => <><span className="font-medium">{humanize(e.entryType)}</span>{e.description && <span className="block text-xs text-muted-foreground">{e.description}</span>}</> },
+    { id: 'debit', header: 'Paid / returned', type: 'money', value: (e) => Number(e.debit), text: (e) => (Number(e.debit) ? formatPKR(e.debit) : '-'), sortable: false },
+    { id: 'credit', header: 'Bought', type: 'money', value: (e) => Number(e.credit), text: (e) => (Number(e.credit) ? formatPKR(e.credit) : '-'), sortable: false },
+    { id: 'balance', header: 'You owe', type: 'money', value: (e) => Number(e.balance), cell: (e) => <span className="font-medium">{formatPKR(e.balance)}</span>, text: (e) => formatPKR(e.balance), sortable: false },
+  ];
   return (
-    <Table>
-      <THead><TR><TH>Date</TH><TH>Entry</TH><TH className="text-right">Paid / returned</TH><TH className="text-right">Bought</TH><TH className="text-right">You owe</TH></TR></THead>
-      <TBody>
-        {d.entries.map((e) => (
-          <TR key={e.id}>
-            <TD className="whitespace-nowrap">{formatDate(e.date)}</TD>
-            <TD><span className="font-medium">{humanize(e.entryType)}</span>{e.description && <span className="block text-xs text-muted-foreground">{e.description}</span>}</TD>
-            <TD className="text-right tabular-nums">{Number(e.debit) ? formatPKR(e.debit) : '-'}</TD>
-            <TD className="text-right tabular-nums">{Number(e.credit) ? formatPKR(e.credit) : '-'}</TD>
-            <TD className="text-right font-medium tabular-nums">{formatPKR(e.balance)}</TD>
-          </TR>
-        ))}
-        <TR className="bg-muted/50 font-semibold">
-          <TD colSpan={2}>Total</TD><TD className="text-right tabular-nums">{formatPKR(d.totals.debit)}</TD>
-          <TD className="text-right tabular-nums">{formatPKR(d.totals.credit)}</TD><TD className="text-right tabular-nums">{formatPKR(d.totals.balance)}</TD>
-        </TR>
-      </TBody>
-    </Table>
+    <DataTable title={`${name} - ledger`} module="suppliers" noun="entry" rows={d?.entries} columns={columns} getRowId={(e) => e.id}
+      loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} defaultPageSize={50}
+      footer={() => (d ? { date: 'Total', debit: formatPKR(d.totals.debit), credit: formatPKR(d.totals.credit), balance: formatPKR(d.totals.balance) } : {})}
+      empty={<EmptyState title="No ledger entries" description="Opening balance, purchases, returns and payments are recorded here automatically." />} />
   );
 }
 
@@ -101,46 +94,35 @@ export function SupplierDetailPage() {
         </TabsList>
         <TabsContent value="purchases" className="mt-4">
           <Card>
-            {!s.purchases.length ? <EmptyState icon={<ShoppingCart />} title="No purchases yet" description="Supplier bills you enter appear here." /> : (
-              <Table>
-                <THead><TR><TH>Date</TH><TH>Purchase</TH><TH className="text-right">Total</TH><TH className="hidden sm:table-cell text-right">Paid</TH><TH className="text-right">Due</TH><TH>Payment</TH></TR></THead>
-                <TBody>
-                  {s.purchases.map((p) => (
-                    <TR key={p.id} className="cursor-pointer" onClick={() => navigate(`/purchases/${p.id}`)}>
-                      <TD className="whitespace-nowrap">{formatDate(p.purchaseDate)}</TD>
-                      <TD><span className="font-semibold">{p.purchaseNo}</span>{p.supplierInvoiceNo && <span className="block text-xs text-muted-foreground">Bill {p.supplierInvoiceNo}</span>}</TD>
-                      <TD className="text-right tabular-nums">{formatPKR(p.totalAmount)}</TD>
-                      <TD className="hidden text-right tabular-nums sm:table-cell">{formatPKR(p.paidAmount)}</TD>
-                      <TD className="text-right tabular-nums">{formatPKR(p.balanceAmount)}</TD>
-                      <TD><PurchasePaymentBadge total={p.totalAmount} balance={p.balanceAmount} /></TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            )}
+            <DataTable title={`${s.name} - purchases`} module="purchases" noun="purchase" rows={s.purchases} getRowId={(p) => p.id}
+              onRowClick={(p) => navigate(`/purchases/${p.id}`)} onView={(p) => navigate(`/purchases/${p.id}`)}
+              columns={[
+                { id: 'date', header: 'Date', value: (p) => p.purchaseDate, text: (p) => formatDate(p.purchaseDate), className: 'whitespace-nowrap' },
+                { id: 'purchase', header: 'Purchase', value: (p) => p.purchaseNo, text: (p) => p.purchaseNo, cell: (p) => <><span className="font-semibold">{p.purchaseNo}</span>{p.supplierInvoiceNo && <span className="block text-xs text-muted-foreground">Bill {p.supplierInvoiceNo}</span>}</> },
+                { id: 'total', header: 'Total', type: 'money', value: (p) => Number(p.totalAmount), cell: (p) => formatPKR(p.totalAmount) },
+                { id: 'paid', header: 'Paid', type: 'money', value: (p) => Number(p.paidAmount), cell: (p) => formatPKR(p.paidAmount), className: 'hidden sm:table-cell' },
+                { id: 'due', header: 'Due', type: 'money', value: (p) => Number(p.balanceAmount), cell: (p) => formatPKR(p.balanceAmount) },
+                { id: 'payment', header: 'Payment', value: (p) => (Number(p.balanceAmount) > 0 ? 'To pay' : 'Paid'), cell: (p) => <PurchasePaymentBadge total={p.totalAmount} balance={p.balanceAmount} /> },
+              ]}
+              footer={(rows) => ({ date: 'Total', total: formatPKR(rows.reduce((t, p) => t + Number(p.totalAmount), 0)), paid: formatPKR(rows.reduce((t, p) => t + Number(p.paidAmount), 0)), due: formatPKR(rows.reduce((t, p) => t + Number(p.balanceAmount), 0)) })}
+              empty={<EmptyState icon={<ShoppingCart />} title="No purchases yet" description="Supplier bills you enter appear here." />} />
           </Card>
         </TabsContent>
         <TabsContent value="payments" className="mt-4">
           <Card>
-            {!s.payments.length ? <EmptyState icon={<Banknote />} title="No payments yet" description="Payments you make to this supplier appear here." /> : (
-              <Table>
-                <THead><TR><TH>Date</TH><TH>Payment</TH><TH>Method</TH><TH className="hidden sm:table-cell">For bill</TH><TH className="text-right">Amount</TH></TR></THead>
-                <TBody>
-                  {s.payments.map((p) => (
-                    <TR key={p.id}>
-                      <TD className="whitespace-nowrap">{formatDate(p.paymentDate)}</TD>
-                      <TD><span className="font-mono text-xs font-semibold">{p.paymentNo}</span>{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</TD>
-                      <TD>{METHOD[p.method] ?? p.method}</TD>
-                      <TD className="hidden sm:table-cell">{p.purchaseNo ?? 'Oldest bills first'}</TD>
-                      <TD className="text-right font-semibold tabular-nums">{formatPKR(p.amount)}</TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            )}
+            <DataTable title={`${s.name} - payments`} module="suppliers" noun="payment" rows={s.payments} getRowId={(p) => p.id}
+              columns={[
+                { id: 'date', header: 'Date', value: (p) => p.paymentDate, text: (p) => formatDate(p.paymentDate), className: 'whitespace-nowrap' },
+                { id: 'payment', header: 'Payment', value: (p) => p.paymentNo, text: (p) => p.paymentNo, cell: (p) => <><span className="font-mono text-xs font-semibold">{p.paymentNo}</span>{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</> },
+                { id: 'method', header: 'Method', value: (p) => METHOD[p.method] ?? p.method },
+                { id: 'bill', header: 'For bill', value: (p) => p.purchaseNo ?? 'Oldest bills first', className: 'hidden sm:table-cell' },
+                { id: 'amount', header: 'Amount', type: 'money', value: (p) => Number(p.amount), cell: (p) => <span className="font-semibold">{formatPKR(p.amount)}</span>, text: (p) => formatPKR(p.amount) },
+              ]}
+              footer={(rows) => ({ date: 'Total', amount: formatPKR(rows.reduce((t, p) => t + Number(p.amount), 0)) })}
+              empty={<EmptyState icon={<Banknote />} title="No payments yet" description="Payments you make to this supplier appear here." />} />
           </Card>
         </TabsContent>
-        <TabsContent value="ledger" className="mt-4"><Card><LedgerTab id={s.id} /></Card></TabsContent>
+        <TabsContent value="ledger" className="mt-4"><Card><LedgerTab id={s.id} name={s.name} /></Card></TabsContent>
         <TabsContent value="fabrics" className="mt-4">
           <Card>
             {!s.fabrics.length ? <EmptyState icon={<Layers />} title="No fabrics linked" description="Fabrics bought from this supplier are linked automatically." /> : (

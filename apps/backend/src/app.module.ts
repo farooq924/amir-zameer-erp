@@ -24,6 +24,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { BackupModule } from './modules/backup/backup.module';
 import { SecurityModule } from './modules/security/security.module';
+import { PlatformModule } from './modules/platform/platform.module';
 import { CsrfGuard, PermissionsGuard, SessionAuthGuard } from './modules/auth/guards';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthController } from './modules/health/health.controller';
@@ -62,6 +63,7 @@ import { UsersModule } from './modules/users/users.module';
     SyncModule,
     BackupModule,
     SecurityModule,
+    PlatformModule,
   ],
   controllers: [HealthController],
   providers: [

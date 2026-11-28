@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant, byCompany } from '../../common/tenant';
 import { Employee, PayrollItem, Prisma, SalaryStructure } from '@prisma/client';
 import { monthBounds, monthLabel } from '@az/shared';
 import { PrismaService, PrismaTx } from '../../common/prisma/prisma.service';
@@ -64,7 +65,7 @@ export class PayrollService {
   async create(dto: CreatePayrollDto, ctx: RequestContext) {
     const today = karachiToday();
     if (dto.periodKey > today.slice(0, 7)) throw new BadRequestException('Payroll cannot be made for a future month');
-    const exists = await this.prisma.payroll.findUnique({ where: { periodKey: dto.periodKey } });
+    const exists = await this.prisma.payroll.findUnique({ where: { companyId_periodKey: byCompany({ periodKey: dto.periodKey }) } });
     if (exists) throw new ConflictException(`Payroll for ${monthLabel(dto.periodKey)} already exists (${exists.payrollNo})`);
     const draft = await this.prisma.payroll.findFirst({ where: { status: 'DRAFT' } });
     if (draft) throw new BadRequestException(`Approve or delete the draft payroll for ${monthLabel(draft.periodKey)} first`);
@@ -176,7 +177,7 @@ export class PayrollService {
   /** Back to draft (only before any salary is paid). Undoes everything approval did. */
   async reopen(id: string, ctx: RequestContext) {
     await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM payrolls WHERE id = ${id}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM payrolls WHERE id = ${id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
       const p = await tx.payroll.findUnique({ where: { id } });
       if (!p) throw new NotFoundException('Payroll not found');
       if (p.status !== 'APPROVED') throw new BadRequestException(p.status === 'DRAFT' ? 'This payroll is already a draft' : 'Salaries are already paid from this payroll, so it cannot be reopened');
@@ -217,7 +218,7 @@ export class PayrollService {
   /** Pays the remaining salary of everyone in the payroll in one go. */
   async payAll(id: string, dto: PayAllDto, ctx: RequestContext) {
     await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM payrolls WHERE id = ${id}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM payrolls WHERE id = ${id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
       const items = await tx.payrollItem.findMany({ where: { payrollId: id } });
       if (!items.length) throw new NotFoundException('Payroll not found');
       let paid = 0;
@@ -274,7 +275,7 @@ export class PayrollService {
   // ------------------------------------------------------------------ internals
 
   private async lockDraft(tx: PrismaTx, id: string) {
-    await tx.$queryRaw`SELECT id FROM payrolls WHERE id = ${id}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM payrolls WHERE id = ${id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
     const p = await tx.payroll.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('Payroll not found');
     if (p.status !== 'DRAFT') throw new BadRequestException('This payroll is approved. Reopen it first to make changes.');
@@ -352,7 +353,7 @@ export class PayrollService {
   }
 
   private async postPayment(tx: PrismaTx, itemId: string, amount: Prisma.Decimal, method: SalaryPaymentDto['method'], paymentDate: string | undefined, reference: string | undefined, key: string, ctx: RequestContext) {
-    await tx.$queryRaw`SELECT id FROM payroll_items WHERE id = ${itemId}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM payroll_items WHERE id = ${itemId}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
     const item = await tx.payrollItem.findUniqueOrThrow({ where: { id: itemId }, include: { payroll: true, employee: { select: { code: true } } } });
     if (item.payroll.status === 'DRAFT') throw new BadRequestException('Approve the payroll before paying salaries');
     if (amount.lte(0)) throw new BadRequestException('Amount must be more than 0');

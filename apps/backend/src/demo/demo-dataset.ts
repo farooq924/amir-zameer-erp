@@ -1,5 +1,5 @@
 /**
- * Demo data for AMIR ZAMEER ERP: a tailoring shop in Karachi.
+ * Demo data for TailoringERP: a tailoring shop in Karachi.
  * Everything here is fictional. Names, phone numbers and CNICs are made up for demonstration only.
  */
 

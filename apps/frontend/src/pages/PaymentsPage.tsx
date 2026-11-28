@@ -2,15 +2,16 @@ import { PAYMENT_METHODS } from '@az/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownLeft, ArrowUpRight, Banknote, HandCoins, MessageCircle, Printer, Search, Undo2, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common';
+import { EmptyState, LoadingState, PageHeader } from '@/components/common';
+import { type DataColumn, DataTable, fetchAllPages } from '@/components/data-table/DataTable';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { DateRange, METHOD_LABEL, ReceiptStatusBadge, monthStartPK, todayPK } from '@/features/finance/shared';
@@ -23,20 +24,6 @@ import { formatDate, formatDateTime, formatPKR, formatMonth } from '@/utils/form
 import { newId } from '@/utils/id';
 
 interface OrderOption { id: string; orderNumber: string; customer: { id: string; name: string; mobile: string }; totalAmount: string; paidAmount: string; balanceAmount: string; garments: string }
-
-function Pager({ meta, page, setPage }: { meta?: { page: number; totalPages: number; total: number }; page: number; setPage: (p: number) => void }) {
-  if (!meta || meta.totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground">
-      <span>{meta.total} record(s)</span>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-        <span className="self-center">Page {page} of {meta.totalPages}</span>
-        <Button size="sm" variant="outline" disabled={page >= meta.totalPages} onClick={() => setPage(page + 1)}>Next</Button>
-      </div>
-    </div>
-  );
-}
 
 /** Receive money against any open order: search, pick, enter amount. */
 function ReceivePaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -201,13 +188,29 @@ function ReceiptsTab() {
   const [from, setFrom] = useState(monthStartPK());
   const [to, setTo] = useState(todayPK());
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [reverse, setReverse] = useState<CustomerPayment | null>(null);
   const [wa, setWa] = useState<CustomerPayment | null>(null);
+  const navigate = useNavigate();
   useEffect(() => setPage(1), [search, method, kind, from, to]);
+  const listParams = { search: search.trim() || undefined, method: method || undefined, kind, from: from || undefined, to: to || undefined };
   const q = useQuery({
-    queryKey: ['payments', 'list', { search, method, kind, from, to, page }],
-    queryFn: () => api.get<PaymentList>('/payments', { search: search.trim() || undefined, method: method || undefined, kind, from: from || undefined, to: to || undefined, page, pageSize: 25 }),
+    queryKey: ['payments', 'list', { search, method, kind, from, to, page, pageSize }],
+    queryFn: () => api.get<PaymentList>('/payments', { ...listParams, page, pageSize }),
   });
+  const columns: DataColumn<CustomerPayment>[] = [
+    { id: 'receipt', header: 'Receipt', value: (p) => p.paymentDate, text: (p) => `${p.receiptNo} (${formatDateTime(p.paymentDate)})`,
+      cell: (p) => <><span className="font-mono text-xs font-semibold">{p.receiptNo}</span><span className="block whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(p.paymentDate)}</span></> },
+    { id: 'customer', header: 'Customer', value: (p) => p.customer.name, text: (p) => `${p.customer.name} (${p.customer.code})`,
+      cell: (p) => <><Link to={`/customers/${p.customer.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-primary">{p.customer.name}</Link><span className="block text-xs text-muted-foreground">{p.customer.code}</span></> },
+    { id: 'order', header: 'Order', value: (p) => p.order?.orderNumber ?? '-', className: 'hidden md:table-cell',
+      cell: (p) => (p.order ? <Link to={`/orders/${p.order.id}`} onClick={(e) => e.stopPropagation()} className="font-mono text-xs hover:text-primary">{p.order.orderNumber}</Link> : '-') },
+    { id: 'method', header: 'Method', value: (p) => METHOD_LABEL[p.method] ?? p.method, text: (p) => `${METHOD_LABEL[p.method] ?? p.method}${p.reference ? ` (${p.reference})` : ''}`, className: 'hidden sm:table-cell',
+      cell: (p) => <>{METHOD_LABEL[p.method] ?? p.method}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</> },
+    { id: 'amount', header: 'Amount', type: 'money', value: (p) => (p.type === 'REFUND' ? -Number(p.amount) : Number(p.amount)),
+      cell: (p) => <span className={`font-semibold ${p.type === 'REFUND' ? 'text-rose-700 dark:text-rose-400' : ''}`}>{p.type === 'REFUND' ? '-' : ''}{formatPKR(p.amount)}</span> },
+    { id: 'status', header: 'Status', value: (p) => `${p.type} ${p.status}`, cell: (p) => <ReceiptStatusBadge status={p.status} type={p.type} /> },
+  ];
   return (
     <div className="space-y-4">
       <Card className="flex flex-wrap items-end gap-2 p-3">
@@ -224,39 +227,30 @@ function ReceiptsTab() {
         <DateRange idPrefix="rc" from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </Card>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.data.length ? (
-          <EmptyState icon={<Wallet />} title="No receipts" description="Advance and balance payments from orders appear here with their receipt numbers." />
-        ) : (
-          <>
-            <Table>
-              <THead><TR><TH>Receipt</TH><TH>Customer</TH><TH className="hidden md:table-cell">Order</TH><TH className="hidden sm:table-cell">Method</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH className="w-28"><span className="sr-only">Actions</span></TH></TR></THead>
-              <TBody>
-                {q.data!.data.map((p) => (
-                  <TR key={p.id} className={p.status === 'REVERSED' ? 'opacity-60' : undefined}>
-                    <TD><span className="font-mono text-xs font-semibold">{p.receiptNo}</span><span className="block whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(p.paymentDate)}</span></TD>
-                    <TD><Link to={`/customers/${p.customer.id}`} className="font-medium hover:text-primary">{p.customer.name}</Link><span className="block text-xs text-muted-foreground">{p.customer.code}</span></TD>
-                    <TD className="hidden md:table-cell">{p.order ? <Link to={`/orders/${p.order.id}`} className="font-mono text-xs hover:text-primary">{p.order.orderNumber}</Link> : '-'}</TD>
-                    <TD className="hidden sm:table-cell">{METHOD_LABEL[p.method] ?? p.method}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</TD>
-                    <TD className={`text-right font-semibold tabular-nums ${p.type === 'REFUND' ? 'text-rose-700 dark:text-rose-400' : ''}`}>{p.type === 'REFUND' ? '-' : ''}{formatPKR(p.amount)}</TD>
-                    <TD><ReceiptStatusBadge status={p.status} type={p.type} /></TD>
-                    <TD>
-                      <div className="flex justify-end gap-1">
-                        {p.status === 'POSTED' && can('whatsapp', 'CREATE') && <Button variant="ghost" size="icon" aria-label={`WhatsApp ${p.receiptNo}`} onClick={() => setWa(p)}><MessageCircle className="text-emerald-600" /></Button>}
-                        {p.order && can('orders', 'PRINT') && <Button variant="ghost" size="icon" asChild aria-label={`Print ${p.receiptNo}`}><Link to={`/print/orders/${p.order.id}?receipt=${p.id}`} target="_blank"><Printer /></Link></Button>}
-                        {p.status === 'POSTED' && p.type !== 'REFUND' && can('payments', 'APPROVE') && <Button variant="ghost" size="icon" aria-label={`Reverse ${p.receiptNo}`} onClick={() => setReverse(p)}><Undo2 /></Button>}
-                      </div>
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-            <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 border-t bg-muted/50 px-4 py-3 text-sm font-semibold">
-              <span>Received <span className="tabular-nums">{formatPKR(q.data!.totals.received)}</span></span>
-              <span>Refunded <span className="tabular-nums text-rose-700 dark:text-rose-400">{formatPKR(q.data!.totals.refunded)}</span></span>
-            </div>
-            <Pager meta={q.data!.meta} page={page} setPage={setPage} />
-          </>
-        )}
+        <DataTable
+          title="Customer receipts"
+          module="payments"
+          noun="receipt"
+          rows={q.data?.data}
+          columns={columns}
+          getRowId={(p) => p.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<PaymentList>('/payments', { ...listParams, page: pg, pageSize: size }))}
+          rowClassName={(p) => (p.status === 'REVERSED' ? 'opacity-60' : undefined)}
+          onView={(p) => (p.order ? navigate(`/orders/${p.order.id}`) : navigate(`/customers/${p.customer.id}`))}
+          rowMenu={(p) => (
+            <>
+              {p.order && can('orders', 'PRINT') && <DropdownMenuItem onSelect={() => window.open(`/print/orders/${p.order!.id}?receipt=${p.id}`, '_blank')}><Printer /> Print receipt</DropdownMenuItem>}
+              {p.status === 'POSTED' && can('whatsapp', 'CREATE') && <DropdownMenuItem onSelect={() => setWa(p)}><MessageCircle className="text-emerald-600" /> Send on WhatsApp</DropdownMenuItem>}
+              {p.status === 'POSTED' && p.type !== 'REFUND' && can('payments', 'APPROVE') && <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setReverse(p)}><Undo2 /> Reverse (cancel) receipt</DropdownMenuItem>}
+            </>
+          )}
+          footer={() => ({ customer: 'Total (all pages)', amount: <span className="text-xs">Received {formatPKR(q.data?.totals.received)} · <span className="text-rose-700 dark:text-rose-400">Refunded {formatPKR(q.data?.totals.refunded)}</span></span> })}
+          empty={<EmptyState icon={<Wallet />} title="No receipts" description="Advance and balance payments from orders appear here with their receipt numbers." />}
+        />
       </Card>
       <ReverseDialog payment={reverse} onOpenChange={(o) => !o && setReverse(null)} />
       {wa && <SendWhatsAppDialog open={!!wa} onOpenChange={(o) => !o && setWa(null)} context={{ type: 'PAYMENT', id: wa.id }} purpose="PAYMENT_RECEIVED" title={`Send receipt ${wa.receiptNo} on WhatsApp`} />}
@@ -266,6 +260,7 @@ function ReceiptsTab() {
 
 function RefundsTab() {
   const can = useCan();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [order, setOrder] = useState<RefundableOrder | null>(null);
   const q = useQuery({ queryKey: ['payments', 'refundable', search], queryFn: () => api.get<RefundableOrder[]>('/payments/refundable', { search: search.trim() || undefined }) });
@@ -279,42 +274,68 @@ function RefundsTab() {
         <p className="text-sm text-muted-foreground">Orders where the customer paid more than the order is now worth (cancelled or reduced).</p>
       </div>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.length ? (
-          <EmptyState icon={<Undo2 />} title="Nothing to refund" description="When an order is cancelled or reduced after payment, the extra money shows here." />
-        ) : (
-          <Table>
-            <THead><TR><TH>Order</TH><TH>Customer</TH><TH className="hidden sm:table-cell text-right">Order worth</TH><TH className="hidden sm:table-cell text-right">Paid</TH><TH className="text-right">Can refund</TH><TH className="w-28"><span className="sr-only">Refund</span></TH></TR></THead>
-            <TBody>
-              {q.data!.map((o) => (
-                <TR key={o.id}>
-                  <TD><Link to={`/orders/${o.id}`} className="font-mono text-xs font-semibold hover:text-primary">{o.orderNumber}</Link>{o.lifecycle === 'CANCELLED' && <span className="block text-xs text-muted-foreground">Cancelled</span>}</TD>
-                  <TD className="font-medium">{o.customer.name}</TD>
-                  <TD className="hidden text-right tabular-nums sm:table-cell">{formatPKR(o.effectiveTotal)}</TD>
-                  <TD className="hidden text-right tabular-nums sm:table-cell">{formatPKR(o.paidAmount)}</TD>
-                  <TD className="text-right font-semibold tabular-nums text-blue-700 dark:text-blue-300">{formatPKR(o.refundable)}</TD>
-                  <TD className="text-right">{can('payments', 'APPROVE') && <Button size="sm" variant="gold" onClick={() => setOrder(o)}><Undo2 /> Refund</Button>}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        )}
+        <DataTable
+          title="Refunds due"
+          module="payments"
+          noun="order"
+          rows={q.data}
+          getRowId={(o) => o.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          onView={(o) => navigate(`/orders/${o.id}`)}
+          rowMenu={can('payments', 'APPROVE') ? (o) => <DropdownMenuItem onSelect={() => setOrder(o)}><Undo2 /> Refund</DropdownMenuItem> : undefined}
+          columns={[
+            { id: 'order', header: 'Order', value: (o) => o.orderNumber, text: (o) => `${o.orderNumber}${o.lifecycle === 'CANCELLED' ? ' (Cancelled)' : ''}`,
+              cell: (o) => <><span className="font-mono text-xs font-semibold">{o.orderNumber}</span>{o.lifecycle === 'CANCELLED' && <span className="block text-xs text-muted-foreground">Cancelled</span>}</> },
+            { id: 'customer', header: 'Customer', value: (o) => o.customer.name, cell: (o) => <span className="font-medium">{o.customer.name}</span> },
+            { id: 'worth', header: 'Order worth', type: 'money', value: (o) => o.effectiveTotal, cell: (o) => formatPKR(o.effectiveTotal), className: 'hidden sm:table-cell' },
+            { id: 'paid', header: 'Paid', type: 'money', value: (o) => o.paidAmount, cell: (o) => formatPKR(o.paidAmount), className: 'hidden sm:table-cell' },
+            { id: 'refundable', header: 'Can refund', type: 'money', value: (o) => o.refundable, cell: (o) => <span className="font-semibold text-blue-700 dark:text-blue-300">{formatPKR(o.refundable)}</span> },
+            { id: 'action', header: '', exportable: false, sortable: false, cell: (o) => (can('payments', 'APPROVE') ? <Button size="sm" variant="gold" onClick={(e) => { e.stopPropagation(); setOrder(o); }}><Undo2 /> Refund</Button> : null) },
+          ]}
+          empty={<EmptyState icon={<Undo2 />} title="Nothing to refund" description="When an order is cancelled or reduced after payment, the extra money shows here." />}
+        />
       </Card>
       <RefundDialog order={order} onOpenChange={(o) => !o && setOrder(null)} />
     </div>
   );
 }
 
+type OutRow = SupplierPaymentRow | SalaryPaymentRow;
+
 function OutgoingTab({ kind }: { kind: 'supplier' | 'salary' }) {
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState(monthStartPK());
   const [to, setTo] = useState(todayPK());
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const navigate = useNavigate();
   useEffect(() => setPage(1), [search, from, to]);
   const path = kind === 'supplier' ? '/payments/supplier-payments' : '/payments/salary-payments';
+  const listParams = { search: search.trim() || undefined, from: from || undefined, to: to || undefined };
   const q = useQuery({
-    queryKey: ['payments', kind, { search, from, to, page }],
-    queryFn: () => api.get<OutgoingList<SupplierPaymentRow | SalaryPaymentRow>>(path, { search: search.trim() || undefined, from: from || undefined, to: to || undefined, page, pageSize: 25 }),
+    queryKey: ['payments', kind, { search, from, to, page, pageSize }],
+    queryFn: () => api.get<OutgoingList<OutRow>>(path, { ...listParams, page, pageSize }),
   });
+  const sup = (p: OutRow) => p as SupplierPaymentRow;
+  const sal = (p: OutRow) => p as SalaryPaymentRow;
+  const columns: DataColumn<OutRow>[] = [
+    { id: 'payment', header: 'Payment', value: (p) => p.paymentDate, text: (p) => `${p.paymentNo} (${formatDate(p.paymentDate)})`,
+      cell: (p) => <><span className="font-mono text-xs font-semibold">{p.paymentNo}</span><span className="block text-xs text-muted-foreground">{formatDate(p.paymentDate)}</span></> },
+    { id: 'party', header: kind === 'supplier' ? 'Supplier' : 'Employee', value: (p) => (kind === 'supplier' ? sup(p).supplier.name : sal(p).employee.name),
+      cell: (p) => (kind === 'supplier'
+        ? <Link to={`/suppliers/${sup(p).supplier.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-primary">{sup(p).supplier.name}</Link>
+        : <Link to={`/employees/${sal(p).employee.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-primary">{sal(p).employee.name}</Link>) },
+    { id: 'for', header: kind === 'supplier' ? 'Purchase' : 'Month', className: 'hidden sm:table-cell',
+      value: (p) => (kind === 'supplier' ? sup(p).purchase?.purchaseNo ?? 'Oldest bills' : formatMonth(sal(p).periodKey)),
+      cell: (p) => (kind === 'supplier'
+        ? (sup(p).purchase ? <Link to={`/purchases/${sup(p).purchase!.id}`} onClick={(e) => e.stopPropagation()} className="font-mono text-xs hover:text-primary">{sup(p).purchase!.purchaseNo}</Link> : 'Oldest bills')
+        : <Link to={`/payroll/${sal(p).payrollId}`} onClick={(e) => e.stopPropagation()} className="hover:text-primary">{formatMonth(sal(p).periodKey)}</Link>) },
+    { id: 'method', header: 'Method', value: (p) => METHOD_LABEL[p.method] ?? p.method, text: (p) => `${METHOD_LABEL[p.method] ?? p.method}${p.reference ? ` (${p.reference})` : ''}`, className: 'hidden sm:table-cell',
+      cell: (p) => <>{METHOD_LABEL[p.method] ?? p.method}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</> },
+    { id: 'amount', header: 'Amount', type: 'money', value: (p) => p.amount, cell: (p) => <span className="font-semibold">{formatPKR(p.amount)}</span> },
+  ];
   return (
     <div className="space-y-4">
       <Card className="flex flex-wrap items-end gap-2 p-3">
@@ -325,36 +346,22 @@ function OutgoingTab({ kind }: { kind: 'supplier' | 'salary' }) {
         <DateRange idPrefix={kind} from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </Card>
       <Card>
-        {q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} /> : q.isLoading ? <LoadingState /> : !q.data!.data.length ? (
-          <EmptyState icon={<ArrowUpRight />} title="No payments" description={kind === 'supplier' ? 'Pay suppliers from the supplier page or when recording a purchase.' : 'Pay salaries from the payroll page.'} />
-        ) : (
-          <>
-            <Table>
-              <THead><TR><TH>Payment</TH><TH>{kind === 'supplier' ? 'Supplier' : 'Employee'}</TH><TH className="hidden sm:table-cell">{kind === 'supplier' ? 'Purchase' : 'Month'}</TH><TH className="hidden sm:table-cell">Method</TH><TH className="text-right">Amount</TH></TR></THead>
-              <TBody>
-                {q.data!.data.map((p) => {
-                  const s = p as SupplierPaymentRow;
-                  const e = p as SalaryPaymentRow;
-                  return (
-                    <TR key={p.id}>
-                      <TD><span className="font-mono text-xs font-semibold">{p.paymentNo}</span><span className="block text-xs text-muted-foreground">{formatDate(p.paymentDate)}</span></TD>
-                      <TD>{kind === 'supplier'
-                        ? <Link to={`/suppliers/${s.supplier.id}`} className="font-medium hover:text-primary">{s.supplier.name}</Link>
-                        : <Link to={`/employees/${e.employee.id}`} className="font-medium hover:text-primary">{e.employee.name}</Link>}</TD>
-                      <TD className="hidden sm:table-cell">{kind === 'supplier'
-                        ? (s.purchase ? <Link to={`/purchases/${s.purchase.id}`} className="font-mono text-xs hover:text-primary">{s.purchase.purchaseNo}</Link> : 'Oldest bills')
-                        : <Link to={`/payroll/${e.payrollId}`} className="hover:text-primary">{formatMonth(e.periodKey)}</Link>}</TD>
-                      <TD className="hidden sm:table-cell">{METHOD_LABEL[p.method] ?? p.method}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</TD>
-                      <TD className="text-right font-semibold tabular-nums">{formatPKR(p.amount)}</TD>
-                    </TR>
-                  );
-                })}
-              </TBody>
-            </Table>
-            <div className="flex justify-end border-t bg-muted/50 px-4 py-3 text-sm font-semibold">Total <span className="ml-2 tabular-nums">{formatPKR(q.data!.totalAmount)}</span></div>
-            <Pager meta={q.data!.meta} page={page} setPage={setPage} />
-          </>
-        )}
+        <DataTable
+          title={kind === 'supplier' ? 'Supplier payments' : 'Salary payments'}
+          module="payments"
+          noun="payment"
+          rows={q.data?.data}
+          columns={columns}
+          getRowId={(p) => p.id}
+          loading={q.isLoading}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+          fetchAll={() => fetchAllPages((pg, size) => api.get<OutgoingList<OutRow>>(path, { ...listParams, page: pg, pageSize: size }))}
+          onView={(p) => navigate(kind === 'supplier' ? `/suppliers/${sup(p).supplier.id}` : `/payroll/${sal(p).payrollId}`)}
+          footer={() => ({ party: 'Total (all pages)', amount: formatPKR(q.data?.totalAmount) })}
+          empty={<EmptyState icon={<ArrowUpRight />} title="No payments" description={kind === 'supplier' ? 'Pay suppliers from the supplier page or when recording a purchase.' : 'Pay salaries from the payroll page.'} />}
+        />
       </Card>
     </div>
   );

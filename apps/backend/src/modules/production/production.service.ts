@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { monthBounds } from '@az/shared';
 import { paginate } from '../../common/dto/pagination.dto';
@@ -86,7 +87,7 @@ export class ProductionService {
     const e = await this.prisma.employee.findFirst({ where: { id: dto.employeeId, ...employedBetween(date, date) }, include: { salaryStructures: { where: { isCurrent: true }, take: 1 } } });
     if (!e) throw new BadRequestException('Select an employee who worked on this date');
     const id = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM order_items WHERE id = ${dto.orderItemId}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM order_items WHERE id = ${dto.orderItemId}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
       const item = await tx.orderItem.findUnique({ where: { id: dto.orderItemId }, include: { order: { select: { orderNumber: true, lifecycle: true } }, garmentType: { select: { defaultPieceRate: true } } } });
       if (!item) throw new NotFoundException('Order item not found');
       if (item.order.lifecycle === 'CANCELLED') throw new BadRequestException('This order is cancelled');

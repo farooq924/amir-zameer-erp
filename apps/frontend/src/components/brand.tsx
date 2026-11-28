@@ -1,6 +1,6 @@
 import { cn } from '@/utils/cn';
 
-/** Original line-art sewing machine used as the AMIR ZAMEER logo mark. */
+/** Original line-art sewing machine used as the TailoringERP logo mark. */
 export function SewingMachineMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 48" fill="none" className={cn('h-8 w-10', className)} aria-hidden>
@@ -19,7 +19,7 @@ export function SewingMachineMark({ className }: { className?: string }) {
   );
 }
 
-export function BrandLogo({ name = 'AMIR ZAMEER', subtitle = 'Tailoring ERP', size = 'md', className, stacked }: {
+export function BrandLogo({ name = 'TailoringERP', subtitle = 'By Brandistan', size = 'md', className, stacked }: {
   name?: string; subtitle?: string; size?: 'sm' | 'md' | 'lg'; className?: string; stacked?: boolean;
 }) {
   const mark = size === 'lg' ? 'h-16 w-20' : size === 'sm' ? 'h-7 w-9' : 'h-10 w-12';

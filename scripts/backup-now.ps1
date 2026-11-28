@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location $Root
 
 Say ''
-Say '=== AMIR ZAMEER ERP - Backup now ===' 'Yellow'
+Say '=== TailoringERP - Backup now ===' 'Yellow'
 Say ''
 $cli = Join-Path $Root 'apps\backend\dist\modules\backup\cli.js'
 if (-not (Test-Path $cli)) { Stop-WithError 'This version is not built yet. Run scripts\update-erp.ps1 first, then run this again.' }

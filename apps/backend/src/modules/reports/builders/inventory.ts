@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { Tenant } from '../../../common/tenant';
 import { MOVEMENT_TYPES } from '@az/shared';
 import { dec } from '../../../common/utils/money';
 import { MAX_ROWS, ReportBuilder, col, dateIn, label, m, money, num, q3, qty, summary, sumOf, timeIn, ymd } from '../report-kit';
@@ -85,7 +86,7 @@ export const fabricConsumption: ReportBuilder = async (input) => {
            COALESCE(SUM(CASE WHEN m.type = 'ORDER_REVERSAL' THEN m."totalCost" END), 0) AS cb,
            COUNT(DISTINCT CASE WHEN m.type = 'ORDER_CONSUMPTION' THEN m."referenceId" END) AS orders
     FROM inventory_movements m JOIN fabrics f ON f.id = m."fabricId" LEFT JOIN fabric_categories c ON c.id = f."categoryId"
-    WHERE m.type IN ('ORDER_CONSUMPTION', 'ORDER_REVERSAL') AND m."movementDate" >= ${r.start} AND m."movementDate" < ${r.endExclusive} ${cat}
+    WHERE m."companyId" = ${Tenant.require()}::uuid AND m.type IN ('ORDER_CONSUMPTION', 'ORDER_REVERSAL') AND m."movementDate" >= ${r.start} AND m."movementDate" < ${r.endExclusive} ${cat}
     GROUP BY f.id, f.code, f.name, c.name, f.unit`;
   const out = rows.map((x) => ({
     code: x.code, fabric: x.name, category: x.cat ?? '-', unit: unitLabel(x.unit), orders: Number(x.orders), used: q3(x.used), returned: q3(x.back),

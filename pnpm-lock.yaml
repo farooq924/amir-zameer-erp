@@ -143,6 +143,9 @@ importers:
       dexie:
         specifier: 4.4.6
         version: 4.4.6
+      exceljs:
+        specifier: 4.4.0
+        version: 4.4.0
       lucide-react:
         specifier: 0.544.0
         version: 0.544.0(react@19.1.1)
@@ -6031,7 +6034,7 @@ snapshots:
       '@babel/core': 7.29.13
       '@babel/helper-annotate-as-pure': 7.29.7
       '@babel/helper-wrap-function': 7.29.15
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
     transitivePeerDependencies:
       - supports-color
 
@@ -6046,7 +6049,7 @@ snapshots:
 
   '@babel/helper-skip-transparent-expression-wrappers@7.29.13':
     dependencies:
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
       '@babel/types': 7.29.15
     transitivePeerDependencies:
       - supports-color
@@ -6060,7 +6063,7 @@ snapshots:
   '@babel/helper-wrap-function@7.29.15':
     dependencies:
       '@babel/template': 7.29.7
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
       '@babel/types': 7.29.15
     transitivePeerDependencies:
       - supports-color
@@ -6078,7 +6081,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.13
       '@babel/helper-plugin-utils': 7.29.7
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
     transitivePeerDependencies:
       - supports-color
 
@@ -6113,7 +6116,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.13
       '@babel/helper-plugin-utils': 7.29.7
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
     transitivePeerDependencies:
       - supports-color
 
@@ -6227,7 +6230,7 @@ snapshots:
       '@babel/core': 7.29.13
       '@babel/helper-plugin-utils': 7.29.7
       '@babel/helper-remap-async-to-generator': 7.29.7(@babel/core@7.29.13)
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
     transitivePeerDependencies:
       - supports-color
 
@@ -6288,7 +6291,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.13
       '@babel/helper-plugin-utils': 7.29.7
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
     transitivePeerDependencies:
       - supports-color
 
@@ -6345,7 +6348,7 @@ snapshots:
       '@babel/core': 7.29.13
       '@babel/helper-compilation-targets': 7.29.13
       '@babel/helper-plugin-utils': 7.29.7
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
     transitivePeerDependencies:
       - supports-color
 
@@ -6398,7 +6401,7 @@ snapshots:
   '@babel/plugin-transform-modules-umd@7.29.14(@babel/core@7.29.13)':
     dependencies:
       '@babel/core': 7.29.13
-      '@babel/helper-module-transforms': 7.29.14(@babel/core@7.29.13)
+      '@babel/helper-module-transforms': 7.29.16(@babel/core@7.29.13)
       '@babel/helper-plugin-utils': 7.29.7
     transitivePeerDependencies:
       - supports-color
@@ -6431,7 +6434,7 @@ snapshots:
       '@babel/helper-plugin-utils': 7.29.7
       '@babel/plugin-transform-destructuring': 7.29.13(@babel/core@7.29.13)
       '@babel/plugin-transform-parameters': 7.29.7(@babel/core@7.29.13)
-      '@babel/traverse': 7.29.15
+      '@babel/traverse': 7.29.16
     transitivePeerDependencies:
       - supports-color
 
@@ -7706,7 +7709,7 @@ snapshots:
   '@rollup/plugin-replace@6.0.3(rollup@4.68.8)':
     dependencies:
       '@rollup/pluginutils': 5.5.1(rollup@4.68.8)
-      magic-string: 0.30.17
+      magic-string: 0.30.21
     optionalDependencies:
       rollup: 4.68.8
 

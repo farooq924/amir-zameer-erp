@@ -1,5 +1,5 @@
 <#
-  AMIR ZAMEER ERP - apply an update. Paste the update zip into the project folder (Replace),
+  TailoringERP - apply an update. Paste the update zip into the project folder (Replace),
   then in an Administrator PowerShell run:
     Get-ChildItem -Recurse -File | Unblock-File
     powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\update-erp.ps1
@@ -12,7 +12,7 @@ Ensure-Admin $PSCommandPath
 Set-Location $Root
 
 Say ''
-Say '=== AMIR ZAMEER ERP - Update ===' 'Yellow'
+Say '=== TailoringERP - Update ===' 'Yellow'
 Say ''
 if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) {
   Stop-WithError 'Auto-start is not set up yet. Double-click SETUP-AUTO-START.cmd first.'
@@ -28,8 +28,8 @@ if (Test-Path $backupCli) {
   Pop-Location
   if (-not $backupOk) {
     Say 'The backup before the update failed (see above).' 'Red'
-    $go = Read-Host 'Type YES to update anyway, or press Enter to stop'
-    if ($go -ne 'YES') { Stop-WithError 'Update cancelled. Nothing was changed.' }
+    $go = (Read-Host 'Type YES to update anyway, or press Enter to stop').Trim()
+    if ($go -notin @('YES', 'Y')) { Stop-WithError 'Update cancelled. Nothing was changed.' }
   }
 }
 

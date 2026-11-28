@@ -39,10 +39,13 @@ export function ReportPrintPage() {
       <style>{`@media print { @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 10mm; } thead { display: table-header-group; } tr { break-inside: avoid; } }`}</style>
       <article className={cn('mx-auto bg-white p-8 text-[11px] text-black shadow print:max-w-none print:p-0 print:shadow-none', landscape ? 'max-w-[297mm]' : 'max-w-[210mm]')}>
         <header className="flex items-start justify-between border-b-2 border-[#101f3d] pb-2">
-          <div>
-            <h1 className="text-xl font-bold tracking-wide text-[#101f3d]">{String(biz.businessName || 'AMIR ZAMEER')}</h1>
+          <div className="flex items-start gap-3">
+            {biz.logoUrl ? <img src={String(biz.logoUrl)} alt="" className="h-12 max-w-[110px] shrink-0 object-contain" /> : null}
+            <div>
+            <h1 className="text-xl font-bold tracking-wide text-[#101f3d]">{String(biz.businessName || '')}</h1>
             {biz.address || biz.city ? <p>{[biz.address, biz.city].filter(Boolean).join(', ') as string}</p> : null}
             {biz.phone ? <p>{String(biz.phone)}</p> : null}
+          </div>
           </div>
           <div className="text-right">
             <p className="text-base font-bold text-[#9a7420]">{r.title}</p>

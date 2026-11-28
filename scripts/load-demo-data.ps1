@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location $Root
 
 Say ''
-Say '=== AMIR ZAMEER ERP - Load demo data ===' 'Yellow'
+Say '=== TailoringERP - Load demo data ===' 'Yellow'
 Say ''
 if (-not (Test-Path (Join-Path $Root 'apps\backend\dist\demo\cli.js'))) {
   Stop-WithError 'This version is not built yet. Run scripts\update-erp.ps1 first, then run this again.'

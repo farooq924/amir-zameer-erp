@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant, byCompany } from '../../common/tenant';
 import { Prisma, RecurrenceFrequency } from '@prisma/client';
 import { monthLabel } from '@az/shared';
 import { paginate } from '../../common/dto/pagination.dto';
@@ -88,7 +89,7 @@ export class ExpensesService {
       this.prisma.recurringExpense.count({ where: { isActive: true, nextRunDate: { lte: asDate(karachiToday()) } } }),
       this.prisma.$queryRaw<{ month: string; amount: Prisma.Decimal }[]>`
         SELECT to_char("expenseDate", 'YYYY-MM') AS month, SUM(amount) AS amount FROM expenses
-        WHERE status = 'APPROVED' AND "deletedAt" IS NULL AND "expenseDate" >= (${start}::date - interval '5 months')
+        WHERE "companyId" = ${Tenant.require()}::uuid AND status = 'APPROVED' AND "deletedAt" IS NULL AND "expenseDate" >= (${start}::date - interval '5 months')
         GROUP BY 1 ORDER BY 1`,
     ]);
     const cats = await this.prisma.expenseCategory.findMany({ where: { id: { in: byCategory.map((c) => c.categoryId) } }, select: { id: true, name: true } });
@@ -202,7 +203,7 @@ export class ExpensesService {
   }
 
   private async lock(tx: PrismaTx, id: string) {
-    await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${id}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
     const x = await tx.expense.findFirst({ where: { id, deletedAt: null } });
     if (!x) throw new NotFoundException('Expense not found');
     return x;
@@ -256,7 +257,7 @@ export class ExpensesService {
 
   private async expenseAccount(id?: string) {
     if (!id) {
-      const misc = await this.prisma.chartOfAccount.findUnique({ where: { code: '5390' } });
+      const misc = await this.prisma.chartOfAccount.findUnique({ where: { companyId_code: byCompany({ code: '5390' }) } });
       return misc?.id ?? null;
     }
     const a = await this.prisma.chartOfAccount.findUnique({ where: { id } });
@@ -317,7 +318,7 @@ export class ExpensesService {
     let created = 0;
     for (const r of due) {
       await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM recurring_expenses WHERE id = ${r.id}::uuid FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM recurring_expenses WHERE id = ${r.id}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
         const fresh = await tx.recurringExpense.findUniqueOrThrow({ where: { id: r.id } });
         let date = dateOnly(fresh.nextRunDate);
         for (let i = 0; i < 12 && date <= today && fresh.isActive; i++) {

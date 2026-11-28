@@ -42,7 +42,7 @@ and `TRUST_PROXY=true` to `apps\backend\.env`, and the background server runs wi
 5. **Start**:
    ```bash
    docker compose up -d --build
-   docker compose exec backend node dist-seed/seed.js     # first time: roles + Owner (safe to re-run)
+   docker compose exec backend node dist/modules/platform/seed-cli.js     # first time: roles + Owner (safe to re-run)
    ```
    PostgreSQL 18 has no published port; only the backend reaches it. The web app listens on `127.0.0.1:8080` only.
 6. **Nginx site** `/etc/nginx/sites-available/amir-zameer-erp`:

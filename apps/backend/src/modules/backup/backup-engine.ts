@@ -15,7 +15,7 @@ export type TableCounts = Record<string, number>;
 
 /** Saved next to every backup as "<file>.json" so a backups folder describes itself (also on a new PC). */
 export interface BackupManifest {
-  app: 'AMIR ZAMEER ERP';
+  app: string; // 'TailoringERP' ('AMIR ZAMEER ERP' in backups made before v2.0)
   format: 1;
   id: string;
   fileName: string;
@@ -185,7 +185,7 @@ export class BackupEngine {
       const sizeBytes = statSync(target).size;
       const checksumSha256 = await sha256File(target);
       const manifest: BackupManifest = {
-        app: 'AMIR ZAMEER ERP', format: 1, id: record.id, fileName, type: opts.type, note: opts.note?.slice(0, 200) ?? null,
+        app: 'TailoringERP', format: 1, id: record.id, fileName, type: opts.type, note: opts.note?.slice(0, 200) ?? null,
         createdAt: record.startedAt.toISOString(), appVersion: appVersion(), database: this.conn.database, migration,
         keyFingerprint: key.fingerprint, sizeBytes, checksumSha256, counts, verifiedAt: null, restoreTest: null,
       };
@@ -235,8 +235,10 @@ export class BackupEngine {
       child.on('close', (code) => (code === 0 ? res() : rej(new Error(`pg_restore failed: ${lastLines(stderr) || `exit code ${code}`}`))));
     });
     const fed = pipeline(createDecryptStream(file, this.key().secret), child.stdin).catch((e: NodeJS.ErrnoException) => {
-      // pg_restore closing its input early is reported by its own exit code.
-      if (e.code === 'EPIPE' || e.code === 'ERR_STREAM_PREMATURE_CLOSE') return;
+      // pg_restore closing its input early is reported by its own exit code. "pg_restore --list" only reads the
+      // archive's table of contents and then exits, so the rest of the file hits a closed pipe:
+      // EPIPE on Linux, "write EOF" (code EOF) on Windows.
+      if (e.code === 'EPIPE' || e.code === 'EOF' || e.code === 'ERR_STREAM_PREMATURE_CLOSE' || e.code === 'ERR_STREAM_DESTROYED') return;
       child.kill();
       throw e;
     });

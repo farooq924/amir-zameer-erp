@@ -18,7 +18,7 @@ if ($File) { Ensure-Admin $PSCommandPath "-File `"$File`"" } else { Ensure-Admin
 Set-Location $Root
 
 Say ''
-Say '=== AMIR ZAMEER ERP - Restore a backup ===' 'Yellow'
+Say '=== TailoringERP - Restore a backup ===' 'Yellow'
 Say ''
 $cli = Join-Path $Root 'apps\backend\dist\modules\backup\cli.js'
 if (-not (Test-Path $cli)) { Stop-WithError 'This version is not built yet. Run scripts\update-erp.ps1 first, then run this again.' }

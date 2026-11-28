@@ -140,7 +140,7 @@ export async function toXlsx(r: ReportResult, cols: ReportColumn[], biz: Busines
 
 export function toPdf(r: ReportResult, cols: ReportColumn[], biz: Business): Promise<Buffer> {
   const landscape = cols.length > 6;
-  const doc = new PDFDocument({ size: 'A4', layout: landscape ? 'landscape' : 'portrait', margins: { top: 36, bottom: 40, left: 32, right: 32 }, bufferPages: true, info: { Title: `${r.title} - ${biz.name}`, Author: biz.name, Creator: 'AMIR ZAMEER ERP' } });
+  const doc = new PDFDocument({ size: 'A4', layout: landscape ? 'landscape' : 'portrait', margins: { top: 36, bottom: 40, left: 32, right: 32 }, bufferPages: true, info: { Title: `${r.title} - ${biz.name}`, Author: biz.name, Creator: 'TailoringERP By Brandistan' } });
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));
   const done = new Promise<Buffer>((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));

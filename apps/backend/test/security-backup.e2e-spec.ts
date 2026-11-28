@@ -20,6 +20,7 @@ describe('Phase 10: security & backups (e2e)', () => {
   let owner: Agent;
   let admin: Agent;
   let cashier: Agent;
+  let sa: Agent; // TailoringERP Super Admin: backups cover all companies
   let backupId: string;
   let backupFile: string;
 
@@ -34,6 +35,7 @@ describe('Phase 10: security & backups (e2e)', () => {
       .send({ fullName: 'Sec Cashier', email: 'seccash@test.local', username: 'seccash', password: 'SecCash12345', roleIds: [roleId('CASHIER')] }).expect(201);
     admin = await login(app, 'secadmin', 'SecAdmin12345');
     cashier = await login(app, 'seccash', 'SecCash12345');
+    sa = await login(app, 'superadmin', 'SuperAdmin12345');
   });
   afterAll(async () => {
     await app.close();
@@ -70,12 +72,12 @@ describe('Phase 10: security & backups (e2e)', () => {
   });
 
   it('does not leak internals in error responses', async () => {
-    const res = await owner.agent.get('/api/backup/not-a-uuid/download').expect(400);
+    const res = await sa.agent.get('/api/backup/not-a-uuid/download').expect(400);
     expect(JSON.stringify(res.body)).not.toMatch(/at \w+ \(|node_modules|prisma/i);
   });
 
   it('main screens answer quickly (performance smoke test)', async () => {
-    const paths = ['/api/dashboard/summary', '/api/customers', '/api/orders', '/api/payments', '/api/security/overview', '/api/backup/overview'];
+    const paths = ['/api/dashboard/summary', '/api/customers', '/api/orders', '/api/payments', '/api/security/overview'];
     for (const p of paths) {
       const times: number[] = [];
       for (let i = 0; i < 10; i++) {
@@ -146,8 +148,9 @@ describe('Phase 10: security & backups (e2e)', () => {
 
   it('backup pages need backup permissions', async () => {
     await cashier.agent.get('/api/backup/overview').expect(403);
+    await owner.agent.get('/api/backup/overview').expect(403); // a company Owner cannot reach platform backups
     await cashier.agent.post('/api/backup').set('X-CSRF-Token', cashier.csrf).send({}).expect(403);
-    const res = await owner.agent.get('/api/backup/overview').expect(200);
+    const res = await sa.agent.get('/api/backup/overview').expect(200);
     expect(res.body.config).toMatchObject({ autoEnabled: true, dailyTime: '23:00', keepAutomatic: 14 });
     expect(res.body.tool.pgDump).toMatch(/pg_dump/);
     expect(res.body.key.fingerprint).toHaveLength(16);
@@ -155,7 +158,7 @@ describe('Phase 10: security & backups (e2e)', () => {
   });
 
   it('makes an encrypted, verified backup', async () => {
-    const res = await owner.agent.post('/api/backup').set('X-CSRF-Token', owner.csrf).send({ note: 'e2e backup' }).expect(201);
+    const res = await sa.agent.post('/api/backup').set('X-CSRF-Token', sa.csrf).send({ note: 'e2e backup' }).expect(201);
     expect(res.body.status).toBe('VERIFIED');
     expect(res.body.note).toBe('e2e backup');
     expect(res.body.sizeBytes).toBeGreaterThan(1000);
@@ -166,15 +169,15 @@ describe('Phase 10: security & backups (e2e)', () => {
     expect(bytes.includes(Buffer.from('PGDMP'))).toBe(false); // not a readable pg_dump archive
     expect(bytes.includes(Buffer.from('owner@test.local'))).toBe(false);
     const manifest = JSON.parse(readFileSync(`${backupFile}.json`, 'utf8'));
-    expect(manifest).toMatchObject({ app: 'AMIR ZAMEER ERP', id: backupId, type: 'MANUAL' });
+    expect(manifest).toMatchObject({ app: 'TailoringERP', id: backupId, type: 'MANUAL' });
     expect(manifest.counts.users).toBeGreaterThanOrEqual(3);
     expect(await prisma.auditLog.findFirst({ where: { action: 'BACKUP_CREATED', recordId: backupId } })).not.toBeNull();
   });
 
   it('lists, downloads and verifies the backup', async () => {
-    const list = await owner.agent.get('/api/backup').expect(200);
+    const list = await sa.agent.get('/api/backup').expect(200);
     expect(list.body.data[0]).toMatchObject({ id: backupId, fileExists: true, encrypted: true });
-    const dl = await owner.agent.get(`/api/backup/${backupId}/download`).buffer(true).parse((res, cb) => {
+    const dl = await sa.agent.get(`/api/backup/${backupId}/download`).buffer(true).parse((res, cb) => {
       const chunks: Buffer[] = [];
       res.on('data', (c: Buffer) => chunks.push(c));
       res.on('end', () => cb(null, Buffer.concat(chunks)));
@@ -182,12 +185,12 @@ describe('Phase 10: security & backups (e2e)', () => {
     expect(dl.headers['content-disposition']).toContain('.azbak');
     expect((dl.body as Buffer).equals(readFileSync(backupFile))).toBe(true);
     await cashier.agent.get(`/api/backup/${backupId}/download`).expect(403);
-    const v = await owner.agent.post(`/api/backup/${backupId}/verify`).set('X-CSRF-Token', owner.csrf).expect(200);
+    const v = await sa.agent.post(`/api/backup/${backupId}/verify`).set('X-CSRF-Token', sa.csrf).expect(200);
     expect(v.body.status).toBe('VERIFIED');
   });
 
   it('restore test restores into a temporary database and compares row counts', async () => {
-    const res = await owner.agent.post(`/api/backup/${backupId}/restore-test`).set('X-CSRF-Token', owner.csrf).expect(200);
+    const res = await sa.agent.post(`/api/backup/${backupId}/restore-test`).set('X-CSRF-Token', sa.csrf).expect(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.tables).toBeGreaterThan(50);
     expect(res.body.counts.users).toBe(res.body.expected.users);
@@ -197,8 +200,8 @@ describe('Phase 10: security & backups (e2e)', () => {
 
   it('only the Owner can restore, with password and RESTORE', async () => {
     await admin.agent.post(`/api/backup/${backupId}/restore`).set('X-CSRF-Token', admin.csrf).send({ password: 'SecAdmin12345', confirm: 'RESTORE' }).expect(403);
-    await owner.agent.post(`/api/backup/${backupId}/restore`).set('X-CSRF-Token', owner.csrf).send({ password: 'OwnerPass123', confirm: 'yes' }).expect(400);
-    await owner.agent.post(`/api/backup/${backupId}/restore`).set('X-CSRF-Token', owner.csrf).send({ password: 'wrong', confirm: 'RESTORE' }).expect(400);
+    await sa.agent.post(`/api/backup/${backupId}/restore`).set('X-CSRF-Token', sa.csrf).send({ password: 'SuperAdmin12345', confirm: 'yes' }).expect(400);
+    await sa.agent.post(`/api/backup/${backupId}/restore`).set('X-CSRF-Token', sa.csrf).send({ password: 'wrong', confirm: 'RESTORE' }).expect(400);
   });
 
   it('restores the database exactly as it was (all or nothing) after a safety backup', async () => {
@@ -206,8 +209,8 @@ describe('Phase 10: security & backups (e2e)', () => {
     await owner.agent.post('/api/customers').set('X-CSRF-Token', owner.csrf).send({ name: 'Made After Backup', mobile: '03217776655' }).expect(201);
     expect(await prisma.customer.count()).toBe(before + 1);
 
-    const res = await owner.agent.post(`/api/backup/${backupId}/restore`).set('X-CSRF-Token', owner.csrf)
-      .send({ password: 'OwnerPass123', confirm: 'RESTORE' }).expect(200);
+    const res = await sa.agent.post(`/api/backup/${backupId}/restore`).set('X-CSRF-Token', sa.csrf)
+      .send({ password: 'SuperAdmin12345', confirm: 'RESTORE' }).expect(200);
     expect(res.body.success).toBe(true);
     expect(res.body.safetyBackup).toMatch(/\.azbak$/);
 
@@ -226,31 +229,32 @@ describe('Phase 10: security & backups (e2e)', () => {
 
   it('settings are validated, saved and audited', async () => {
     owner = await login(app, 'owner', 'OwnerPass123');
-    await owner.agent.put('/api/backup/settings').set('X-CSRF-Token', owner.csrf).send({ dailyTime: '25:00' }).expect(400);
-    await owner.agent.put('/api/backup/settings').set('X-CSRF-Token', owner.csrf).send({ copyFolder: 'relative/folder' }).expect(400);
+    sa = await login(app, 'superadmin', 'SuperAdmin12345');
+    await sa.agent.put('/api/backup/settings').set('X-CSRF-Token', sa.csrf).send({ dailyTime: '25:00' }).expect(400);
+    await sa.agent.put('/api/backup/settings').set('X-CSRF-Token', sa.csrf).send({ copyFolder: 'relative/folder' }).expect(400);
     const copy = join(dir, 'second-copy');
-    const res = await owner.agent.put('/api/backup/settings').set('X-CSRF-Token', owner.csrf)
+    const res = await sa.agent.put('/api/backup/settings').set('X-CSRF-Token', sa.csrf)
       .send({ dailyTime: '22:30', keepAutomatic: 3, copyFolder: copy }).expect(200);
     expect(res.body).toMatchObject({ dailyTime: '22:30', keepAutomatic: 3, copyFolder: copy });
-    const made = await owner.agent.post('/api/backup').set('X-CSRF-Token', owner.csrf).send({}).expect(201);
+    const made = await sa.agent.post('/api/backup').set('X-CSRF-Token', sa.csrf).send({}).expect(201);
     expect(made.body.externalPath).toBe(join(copy, made.body.fileName));
     expect(existsSync(made.body.externalPath)).toBe(true);
   });
 
   it('the Owner downloads the recovery key with the password', async () => {
     await admin.agent.post('/api/backup/recovery-key').set('X-CSRF-Token', admin.csrf).send({ password: 'SecAdmin12345' }).expect(403);
-    await owner.agent.post('/api/backup/recovery-key').set('X-CSRF-Token', owner.csrf).send({ password: 'nope' }).expect(400);
-    const res = await owner.agent.post('/api/backup/recovery-key').set('X-CSRF-Token', owner.csrf).send({ password: 'OwnerPass123' }).expect(200);
+    await sa.agent.post('/api/backup/recovery-key').set('X-CSRF-Token', sa.csrf).send({ password: 'nope' }).expect(400);
+    const res = await sa.agent.post('/api/backup/recovery-key').set('X-CSRF-Token', sa.csrf).send({ password: 'SuperAdmin12345' }).expect(200);
     const key = readFileSync(process.env.BACKUP_KEY_FILE!, 'utf8').trim();
     expect(res.text).toContain(key);
     expect(res.text).toContain('Brandistan');
-    const overview = await owner.agent.get('/api/backup/overview').expect(200);
+    const overview = await sa.agent.get('/api/backup/overview').expect(200);
     expect(overview.body.key.savedAt).not.toBeNull();
   });
 
   it('the daily automatic backup runs once per day and old ones are pruned', async () => {
     const svc = app.get((await import('../src/modules/backup/backup.service')).BackupService);
-    await prisma.systemSetting.update({ where: { key: 'backup.config' }, data: { value: { autoEnabled: true, dailyTime: '01:00', keepAutomatic: 3, copyFolder: '', verifyAfterBackup: false } } });
+    await prisma.platformSetting.update({ where: { key: 'backup.config' }, data: { value: { autoEnabled: true, dailyTime: '01:00', keepAutomatic: 3, copyFolder: '', verifyAfterBackup: false } } });
     // Each loop is "one day later": earlier automatic backups move one day back, then the tick runs.
     for (let n = 1; n <= 5; n++) {
       await prisma.$executeRawUnsafe(`UPDATE backup_records SET "startedAt" = "startedAt" - interval '1 day' WHERE type = 'AUTOMATIC'`);
@@ -266,9 +270,9 @@ describe('Phase 10: security & backups (e2e)', () => {
     // Forget one backup in the database only: the scan adds it back from its file.
     const other = await prisma.backupRecord.findFirstOrThrow({ where: { id: { not: r.id }, type: 'MANUAL' } });
     await prisma.backupRecord.delete({ where: { id: other.id } });
-    const scan = await owner.agent.post('/api/backup/scan').set('X-CSRF-Token', owner.csrf).expect(200);
+    const scan = await sa.agent.post('/api/backup/scan').set('X-CSRF-Token', sa.csrf).expect(200);
     expect(scan.body.added).toBe(1);
-    await owner.agent.delete(`/api/backup/${r.id}`).set('X-CSRF-Token', owner.csrf).expect(200);
+    await sa.agent.delete(`/api/backup/${r.id}`).set('X-CSRF-Token', sa.csrf).expect(200);
     expect(existsSync(join(process.env.BACKUP_DIR!, r.fileName))).toBe(false);
     expect(await prisma.backupRecord.findUnique({ where: { id: r.id } })).toBeNull();
   });

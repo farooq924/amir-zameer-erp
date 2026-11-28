@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { paginate } from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -88,7 +89,7 @@ export class MeasurementsService {
 
     const saved = await this.prisma.$transaction(async (tx) => {
       // Serialise versions per customer so two devices cannot create the same version number.
-      await tx.$queryRaw`SELECT id FROM customers WHERE id = ${customerId}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM customers WHERE id = ${customerId}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
       const last = await tx.customerMeasurement.aggregate({ where: { customerId, templateId: template.id }, _max: { versionNo: true } });
       await tx.customerMeasurement.updateMany({ where: { customerId, templateId: template.id, isLatest: true }, data: { isLatest: false } });
       const m = await tx.customerMeasurement.create({

@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { byCompany } from '../../common/tenant';
 import { GarmentType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -51,7 +52,7 @@ export class GarmentsService {
     await this.checkTemplate(dto.measurementTemplateId);
     await this.assertUniqueName(dto.name);
     let code = codeFrom(dto.name);
-    for (let n = 2; await this.prisma.garmentType.findUnique({ where: { code } }); n++) code = `${codeFrom(dto.name).slice(0, 30)}_${n}`;
+    for (let n = 2; await this.prisma.garmentType.findUnique({ where: { companyId_code: byCompany({ code }) } }); n++) code = `${codeFrom(dto.name).slice(0, 30)}_${n}`;
     const g = await this.prisma.$transaction(async (tx) => {
       const created = await tx.garmentType.create({
         data: {
@@ -86,5 +87,17 @@ export class GarmentsService {
       return after;
     });
     return presentGarment(g);
+  }
+
+  async remove(id: string, ctx: RequestContext) {
+    const g = await this.prisma.garmentType.findUnique({ where: { id } });
+    if (!g) throw new NotFoundException('Garment not found');
+    const used = await this.prisma.orderItem.count({ where: { garmentTypeId: id } });
+    if (used) throw new BadRequestException(`${g.name} is used on ${used} order item(s) and cannot be deleted. Mark it inactive instead.`);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.garmentType.delete({ where: { id } });
+      await this.audit.log({ action: 'DELETE', module: 'garments', recordId: id, oldValues: { code: g.code, name: g.name } }, ctx, tx);
+    });
+    return { success: true };
   }
 }

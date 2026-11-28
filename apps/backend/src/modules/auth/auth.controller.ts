@@ -4,6 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { CookieOptions, Request, Response } from 'express';
 import { env } from '../../config/env';
 import { CurrentUser, ReqContext, buildRequestContext } from '../../common/decorators/current-user.decorator';
+import { AllowReadOnly, CompanyOptional } from '../../common/decorators/platform.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { AuthUser, RequestContext } from '../../common/types/auth-user';
 import { AuthService } from './auth.service';
@@ -40,6 +41,8 @@ export class AuthController {
   }
 
   @Post('logout')
+  @CompanyOptional()
+  @AllowReadOnly()
   @HttpCode(200)
   @ApiCookieAuth()
   @ApiOperation({ summary: 'End the current session' })
@@ -56,6 +59,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @CompanyOptional()
   @ApiCookieAuth()
   @ApiOperation({ summary: 'Current user, roles and effective permissions' })
   me(@CurrentUser() user: AuthUser, @Req() req: Request & { csrfToken?: string }) {
@@ -63,6 +67,8 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @CompanyOptional()
+  @AllowReadOnly()
   @HttpCode(200)
   @ApiCookieAuth()
   @ApiOperation({ summary: 'Change own password. Other sessions are logged out.' })

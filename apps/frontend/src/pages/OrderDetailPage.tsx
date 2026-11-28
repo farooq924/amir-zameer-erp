@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import { DataTable } from '@/components/data-table/DataTable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { formatQty } from '@/features/inventory/shared';
@@ -258,25 +258,20 @@ export function OrderDetailPage() {
 
         <TabsContent value="payments" className="mt-4">
           <Card>
-            {!o.payments.length ? <EmptyState icon={<Wallet />} title="No payments yet" description="Advance and later payments for this order appear here with their receipt numbers."
-              action={canPay ? <Button onClick={() => openDialog('pay')}><Banknote /> Receive payment</Button> : undefined} /> : (
-              <Table>
-                <THead><TR><TH>Receipt</TH><TH>Date</TH><TH>Method</TH><TH className="hidden sm:table-cell">Type</TH><TH className="text-right">Amount</TH><TH className="w-24"><span className="sr-only">Actions</span></TH></TR></THead>
-                <TBody>{o.payments.map((p) => (
-                  <TR key={p.id}>
-                    <TD className="font-mono text-xs">{p.receiptNo}</TD><TD className="whitespace-nowrap">{formatDateTime(p.paymentDate)}</TD>
-                    <TD>{METHOD_LABEL[p.method] ?? humanize(p.method)}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</TD>
-                    <TD className="hidden sm:table-cell">{p.status === 'REVERSED' ? 'Reversed' : humanize(p.type)}</TD><TD className="text-right font-medium tabular-nums">{formatPKR(p.amount)}</TD>
-                    <TD>
-                      <div className="flex justify-end gap-1">
-                        {can('whatsapp', 'CREATE') && p.status !== 'REVERSED' && <Button variant="ghost" size="icon" aria-label={`WhatsApp receipt ${p.receiptNo}`} onClick={() => { setWaPayment(p.id); setWaOpenState(true); }}><MessageCircle className="text-emerald-600" /></Button>}
-                        {can('orders', 'PRINT') && <Button variant="ghost" size="icon" asChild aria-label={`Print receipt ${p.receiptNo}`}><Link to={`/print/orders/${o.id}?receipt=${p.id}`} target="_blank"><Printer /></Link></Button>}
-                      </div>
-                    </TD>
-                  </TR>
-                ))}</TBody>
-              </Table>
-            )}
+            <DataTable title={`${o.orderNumber} - payments`} module="orders" noun="payment" rows={o.payments} getRowId={(p) => p.id}
+              rowMenu={(p) => (can('whatsapp', 'CREATE') && p.status !== 'REVERSED') || can('orders', 'PRINT') ? <>
+                {can('orders', 'PRINT') && <DropdownMenuItem onSelect={() => window.open(`/print/orders/${o.id}?receipt=${p.id}`, '_blank')}><Printer /> Print receipt</DropdownMenuItem>}
+                {can('whatsapp', 'CREATE') && p.status !== 'REVERSED' && <DropdownMenuItem onSelect={() => { setWaPayment(p.id); setWaOpenState(true); }}><MessageCircle /> WhatsApp receipt</DropdownMenuItem>}
+              </> : null}
+              columns={[
+                { id: 'receipt', header: 'Receipt', value: (p) => p.receiptNo, cell: (p) => <span className="whitespace-nowrap font-mono text-xs">{p.receiptNo}</span> },
+                { id: 'date', header: 'Date', value: (p) => p.paymentDate, text: (p) => formatDateTime(p.paymentDate), className: 'whitespace-nowrap' },
+                { id: 'method', header: 'Method', value: (p) => METHOD_LABEL[p.method] ?? humanize(p.method), cell: (p) => <>{METHOD_LABEL[p.method] ?? humanize(p.method)}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</> },
+                { id: 'type', header: 'Type', value: (p) => (p.status === 'REVERSED' ? 'Reversed' : humanize(p.type)), className: 'hidden sm:table-cell' },
+                { id: 'amount', header: 'Amount', type: 'money', value: (p) => Number(p.amount), cell: (p) => <span className="font-medium">{formatPKR(p.amount)}</span>, text: (p) => formatPKR(p.amount) },
+              ]}
+              empty={<EmptyState icon={<Wallet />} title="No payments yet" description="Advance and later payments for this order appear here with their receipt numbers."
+                action={canPay ? <Button onClick={() => openDialog('pay')}><Banknote /> Receive payment</Button> : undefined} />} />
           </Card>
         </TabsContent>
 

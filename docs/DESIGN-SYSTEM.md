@@ -30,7 +30,23 @@ Dark mode: every token has a `.dark` value. Users switch it from the profile men
 ## Layout
 * Desktop: navy sidebar (gold active item, tailoring artwork at the bottom, collapsible), white top bar with customer search (Ctrl + K) and profile menu (Change Password, Dark Mode, Logout).
 * Mobile: navy header, slide-in navy menu with user card and Logout, bottom bar with Home, Customers, gold + (Quick add), Measure, More.
-* Lists: table on tablet/desktop; card list on phones (see Customers).
+* Lists: always the advanced `DataTable` (see below); give it a `mobileCard` for a card list on phones (see Customers).
+* Scrollbars: thin, themed in `index.css` (navy thumb, gold on hover; gold thumb in dark mode). Use the `scrollbar-navy` class on scroll areas that sit on navy (the sidebar).
+
+## Advanced tables (standard since v2.1.0, required for every table)
+Every list / table in the ERP, now and in future, uses `DataTable` from `apps/frontend/src/components/data-table/DataTable.tsx`. Never build a plain `<Table>` for a list.
+It gives, with no extra work:
+* **Row selection**: checkbox per row, page checkbox, "Select all N" across pages (server tables pass `fetchAll`).
+* **Bulk actions** (gold-soft bar): Print, Export (Excel / CSV), Duplicate, Delete, Clear.
+* **Sortable columns**: client tables sort by `value`; server tables set `sortKey` (backend sort field) and pass `sort` / `onSortChange`.
+* **Row action buttons**: View, Edit, Duplicate, Delete icons; extra items go in `rowMenu` (three-dot menu). Hidden when the role lacks the permission (`canRow`, `can()`).
+* **Pagination**: rows per page 10 / 25 / 50 / 100 (minimum 10, remembered per table), first / previous / page numbers / next / last. Server tables pass `pagination`.
+* **Import / Export / Print**: toolbar buttons. Export and Print follow the module's EXPORT / PRINT permission. Excel uses `exceljs`; print is A4 with the shop name and Brandistan footer. Import (`importer` prop) gives a template download, column mapping, preview and a per-row error list.
+* Totals row with `footer`, phone card list with `mobileCard`, filters in `toolbar`.
+
+Delete must stay safe: master data (customer, supplier, fabric, garment, employee) is deleted only when it has no history (the API checks). Transactions are never hard-deleted: Delete maps to cancel / reject / reverse, or is not offered. Duplicate is offered only where a copy makes sense.
+
+Not converted on purpose: input grids (attendance register, permission matrix), printable documents, and the report viewer (it has its own server sort, column chooser, Excel / CSV / PDF export and print).
 
 ## Rules for new phases
 1. Page = `PageHeader` + `Card` sections. Forms in a `Dialog` or a page with `Tabs` for sections.

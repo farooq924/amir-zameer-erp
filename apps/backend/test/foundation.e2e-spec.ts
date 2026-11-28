@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { Tenant } from '../src/common/tenant';
 import { PrismaClient } from '@prisma/client';
 import { SequenceService } from '../src/common/services/sequence.service';
 import { Agent, bootApp, login } from './helpers';
@@ -23,6 +24,12 @@ describe('Settings, audit log, dashboard & database rules (e2e)', () => {
     expect(all.regional).toMatchObject({ currency: 'PKR', timezone: 'Asia/Karachi' });
     await owner.agent.put('/api/settings/business').set('X-CSRF-Token', owner.csrf).send({ businessName: 'A' }).expect(400);
     await owner.agent.put('/api/settings/regional').set('X-CSRF-Token', owner.csrf).send({ currency: 'USD' }).expect(400);
+    // shop logo: only an uploaded image (data URL) or an https link
+    await owner.agent.put('/api/settings/business').set('X-CSRF-Token', owner.csrf).send({ logoUrl: 'javascript:alert(1)' }).expect(400);
+    const logo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    expect((await owner.agent.put('/api/settings/business').set('X-CSRF-Token', owner.csrf).send({ logoUrl: logo }).expect(200)).body.logoUrl).toBe(logo);
+    const logoAudit = await prisma.auditLog.findFirstOrThrow({ where: { action: 'SETTINGS_CHANGED', recordId: 'business' }, orderBy: { createdAt: 'desc' } });
+    expect(JSON.stringify(logoAudit.newValues)).not.toContain('base64');
     const saved = await owner.agent.put('/api/settings/business').set('X-CSRF-Token', owner.csrf)
       .send({ businessName: 'AMIR ZAMEER', phone: '0300-1234567', city: 'Lahore' }).expect(200);
     expect(saved.body).toMatchObject({ phone: '0300-1234567', city: 'Lahore' });
@@ -58,7 +65,7 @@ describe('Settings, audit log, dashboard & database rules (e2e)', () => {
   });
 
   it('dashboard reflects real order and expense records', async () => {
-    const stage = await prisma.workflowStage.findUniqueOrThrow({ where: { code: 'NEW' } });
+    const stage = await prisma.workflowStage.findFirstOrThrow({ where: { code: 'NEW' } });
     const customer = await prisma.customer.create({ data: { code: 'AZC-T0001', name: 'Dashboard Test', mobile: '923001112233' } });
     const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
     // order dated "today" in Karachi
@@ -85,7 +92,8 @@ describe('Settings, audit log, dashboard & database rules (e2e)', () => {
 
   it('sequence numbers are unique under concurrency', async () => {
     const seq = app.get(SequenceService);
-    const numbers = await Promise.all(Array.from({ length: 25 }, () => seq.next({ key: 'TEST', prefix: 'AZ', period: '2026' })));
+    const company = await prisma.company.findFirstOrThrow({ orderBy: { createdAt: 'asc' } });
+    const numbers = await Tenant.run(company.id, () => Promise.all(Array.from({ length: 25 }, () => seq.next({ key: 'TEST', prefix: 'AZ', period: '2026' }))));
     expect(new Set(numbers).size).toBe(25);
     expect(numbers.sort()[0]).toBe('AZ-2026-00001');
     expect(numbers.sort()[24]).toBe('AZ-2026-00025');

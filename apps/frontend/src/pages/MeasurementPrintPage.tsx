@@ -34,10 +34,13 @@ export function MeasurementPrintPage() {
       </div>
       <article className="print-sheet mx-auto max-w-[210mm] bg-white p-10 text-black shadow print:max-w-none print:p-0 print:shadow-none">
         <header className="flex items-start justify-between border-b-2 border-black pb-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-wide">{String(biz.businessName || 'AMIR ZAMEER')}</h1>
+          <div className="flex items-start gap-3">
+            {biz.logoUrl ? <img src={String(biz.logoUrl)} alt="" className="h-12 max-w-[110px] shrink-0 object-contain" /> : null}
+            <div>
+            <h1 className="text-2xl font-bold tracking-wide">{String(biz.businessName || '')}</h1>
             {biz.tagline ? <p className="text-sm">{String(biz.tagline)}</p> : null}
             <p className="text-xs">{[biz.address, biz.city].filter(Boolean).join(', ')}{biz.phone ? ` · ${String(biz.phone)}` : ''}</p>
+          </div>
           </div>
           <div className="text-right">
             <p className="text-lg font-semibold">Measurement Sheet</p>

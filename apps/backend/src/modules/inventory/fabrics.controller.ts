@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ReqContext } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -44,6 +44,13 @@ export class FabricsController {
   @RequirePermissions('inventory', 'CREATE')
   create(@Body() dto: CreateFabricDto, @ReqContext() ctx: RequestContext) {
     return this.fabrics.create(dto, ctx);
+  }
+
+  @Delete('fabrics/:id')
+  @RequirePermissions('inventory', 'DELETE')
+  @ApiOperation({ summary: 'Delete a fabric that has no stock and no history (otherwise mark it inactive)' })
+  remove(@Param('id', ParseUUIDPipe) id: string, @ReqContext() ctx: RequestContext) {
+    return this.fabrics.remove(id, ctx);
   }
 
   @Patch('fabrics/:id')

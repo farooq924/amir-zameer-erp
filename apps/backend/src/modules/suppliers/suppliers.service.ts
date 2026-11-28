@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant } from '../../common/tenant';
 import { Prisma, Supplier } from '@prisma/client';
 import { normalizePhone } from '@az/shared';
 import { paginate } from '../../common/dto/pagination.dto';
@@ -61,7 +62,7 @@ export class SuppliersService {
     }
     if (q.payable === 'true') {
       const owing = await this.prisma.$queryRaw<{ id: string }[]>`
-        SELECT "supplierId" AS id FROM supplier_ledger GROUP BY "supplierId" HAVING SUM(credit) - SUM(debit) > 0`;
+        SELECT "supplierId" AS id FROM supplier_ledger WHERE "companyId" = ${Tenant.require()}::uuid GROUP BY "supplierId" HAVING SUM(credit) - SUM(debit) > 0`;
       where.id = { in: owing.map((o) => o.id) };
     }
     const [rows, total] = await this.prisma.$transaction([
@@ -83,7 +84,7 @@ export class SuppliersService {
   async totals() {
     const [agg] = await this.prisma.$queryRaw<{ payable: Prisma.Decimal | null; owing: bigint }[]>`
       SELECT COALESCE(SUM(b), 0) AS payable, COUNT(*) FILTER (WHERE b > 0)::bigint AS owing
-      FROM (SELECT SUM(credit) - SUM(debit) AS b FROM supplier_ledger GROUP BY "supplierId") t WHERE b > 0`;
+      FROM (SELECT SUM(credit) - SUM(debit) AS b FROM supplier_ledger WHERE "companyId" = ${Tenant.require()}::uuid GROUP BY "supplierId") t WHERE b > 0`;
     const active = await this.prisma.supplier.count({ where: { deletedAt: null, status: 'ACTIVE' } });
     return { activeSuppliers: active, totalPayable: moneyString(agg?.payable), suppliersOwed: Number(agg?.owing ?? 0) };
   }
@@ -153,6 +154,27 @@ export class SuppliersService {
     return this.get(id);
   }
 
+  async remove(id: string, ctx: RequestContext) {
+    const s = await this.prisma.supplier.findFirst({ where: { id, deletedAt: null } });
+    if (!s) throw new NotFoundException('Supplier not found');
+    const [purchases, orders, returns, payments, ledger] = await Promise.all([
+      this.prisma.purchase.count({ where: { supplierId: id } }),
+      this.prisma.purchaseOrder.count({ where: { supplierId: id } }),
+      this.prisma.purchaseReturn.count({ where: { supplierId: id } }),
+      this.prisma.supplierPayment.count({ where: { supplierId: id } }),
+      this.prisma.supplierLedger.count({ where: { supplierId: id } }),
+    ]);
+    if (purchases || orders || returns || payments || ledger) {
+      throw new BadRequestException(`${s.name} has purchases, payments or ledger entries and cannot be deleted. Mark the supplier Inactive instead.`);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.fabric.updateMany({ where: { supplierId: id }, data: { supplierId: null } });
+      await tx.supplier.update({ where: { id }, data: { deletedAt: new Date(), status: 'INACTIVE', version: { increment: 1 } } });
+      await this.audit.log({ action: 'DELETE', module: 'suppliers', recordId: id, oldValues: { code: s.code, name: s.name } }, ctx, tx);
+    });
+    return { success: true };
+  }
+
   async ledger(id: string) {
     const s = await this.prisma.supplier.findFirst({ where: { id, deletedAt: null } });
     if (!s) throw new NotFoundException('Supplier not found');
@@ -190,7 +212,7 @@ export class SuppliersService {
    * (when given) or to the oldest unpaid purchases first. Call inside a transaction.
    */
   async postPayment(tx: PrismaTx, supplierId: string, input: SupplierPaymentInput, idempotencyKey: string, ctx: RequestContext) {
-    await tx.$queryRaw`SELECT id FROM suppliers WHERE id = ${supplierId}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM suppliers WHERE id = ${supplierId}::uuid AND "companyId" = ${Tenant.require()}::uuid FOR UPDATE`;
     const s = await tx.supplier.findFirst({ where: { id: supplierId, deletedAt: null } });
     if (!s) throw new NotFoundException('Supplier not found');
     const amount = money(input.amount);

@@ -5,10 +5,10 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from '@/components/common';
+import { type DataColumn, DataTable, fetchAllPages } from '@/components/data-table/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/features/dashboard/StatCard';
 import { FabricFormDialog } from '@/features/inventory/FabricFormDialog';
@@ -24,49 +24,36 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   return <div><dt className="text-xs font-medium text-muted-foreground">{label}</dt><dd className="mt-0.5 text-sm font-medium">{children || '-'}</dd></div>;
 }
 
-function FabricLedger({ id }: { id: string }) {
+function FabricLedger({ id, name }: { id: string; name: string }) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const q = useQuery({
-    queryKey: ['inventory', 'movements', { fabricId: id, page }],
-    queryFn: () => api.get<Paginated<StockMovement>>('/inventory/movements', { fabricId: id, page, pageSize: 50 }),
+    queryKey: ['inventory', 'movements', { fabricId: id, page, pageSize }],
+    queryFn: () => api.get<Paginated<StockMovement>>('/inventory/movements', { fabricId: id, page, pageSize }),
     placeholderData: keepPreviousData,
   });
-  if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
-  if (q.isLoading) return <LoadingState />;
-  if (!q.data!.data.length) return <EmptyState icon={<History />} title="No stock changes yet" description="Purchases, orders and adjustments of this fabric appear here." />;
   return (
-    <>
-      <MovementsTable rows={q.data!.data} showFabric={false} />
-      {q.data!.meta.totalPages > 1 && (
-        <div className="flex justify-end gap-2 border-t p-3">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-          <Button variant="outline" size="sm" disabled={page >= q.data!.meta.totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-        </div>
-      )}
-    </>
+    <MovementsTable rows={q.data?.data} showFabric={false} title={`${name} - stock ledger`} loading={q.isLoading} error={q.error} onRetry={() => q.refetch()}
+      pagination={{ page, pageSize, total: q.data?.meta.total ?? 0, onPageChange: setPage, onPageSizeChange: (n) => { setPageSize(n); setPage(1); } }}
+      fetchAll={() => fetchAllPages((pg, size) => api.get<Paginated<StockMovement>>('/inventory/movements', { fabricId: id, page: pg, pageSize: size }))}
+      empty={<EmptyState icon={<History />} title="No stock changes yet" description="Purchases, orders and adjustments of this fabric appear here." />} />
   );
 }
 
-function FabricPurchases({ id }: { id: string }) {
-  const q = useQuery({ queryKey: ['purchases', 'list', { fabricId: id }], queryFn: () => api.get<Paginated<PurchaseListRow>>('/purchases', { fabricId: id, pageSize: 50 }) });
-  if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
-  if (q.isLoading) return <LoadingState />;
-  if (!q.data!.data.length) return <EmptyState icon={<ShoppingCart />} title="No purchases yet" description="Supplier bills that include this fabric appear here." />;
+function FabricPurchases({ id, name }: { id: string; name: string }) {
+  const navigate = useNavigate();
+  const q = useQuery({ queryKey: ['purchases', 'list', { fabricId: id }], queryFn: () => api.get<Paginated<PurchaseListRow>>('/purchases', { fabricId: id, pageSize: 200 }) });
+  const columns: DataColumn<PurchaseListRow>[] = [
+    { id: 'date', header: 'Date', value: (p) => p.purchaseDate, text: (p) => formatDate(p.purchaseDate), className: 'whitespace-nowrap' },
+    { id: 'purchase', header: 'Purchase', value: (p) => p.purchaseNo, cell: (p) => <><span className="font-semibold">{p.purchaseNo}</span>{p.supplierInvoiceNo && <span className="block text-xs text-muted-foreground">Bill {p.supplierInvoiceNo}</span>}</> },
+    { id: 'supplier', header: 'Supplier', value: (p) => p.supplier.name },
+    { id: 'total', header: 'Bill total', type: 'money', value: (p) => p.totalAmount, cell: (p) => formatPKR(p.totalAmount) },
+    { id: 'payment', header: 'Payment', value: (p) => (Number(p.balanceAmount) > 0 ? 'To pay' : 'Paid'), cell: (p) => <PurchasePaymentBadge total={p.totalAmount} balance={p.balanceAmount} /> },
+  ];
   return (
-    <Table>
-      <THead><TR><TH>Date</TH><TH>Purchase</TH><TH>Supplier</TH><TH className="text-right">Bill total</TH><TH>Payment</TH></TR></THead>
-      <TBody>
-        {q.data!.data.map((p) => (
-          <TR key={p.id}>
-            <TD className="whitespace-nowrap">{formatDate(p.purchaseDate)}</TD>
-            <TD><Link className="font-semibold hover:underline" to={`/purchases/${p.id}`}>{p.purchaseNo}</Link>{p.supplierInvoiceNo && <span className="block text-xs text-muted-foreground">Bill {p.supplierInvoiceNo}</span>}</TD>
-            <TD>{p.supplier.name}</TD>
-            <TD className="text-right tabular-nums">{formatPKR(p.totalAmount)}</TD>
-            <TD><PurchasePaymentBadge total={p.totalAmount} balance={p.balanceAmount} /></TD>
-          </TR>
-        ))}
-      </TBody>
-    </Table>
+    <DataTable title={`${name} - purchases`} module="purchases" noun="purchase" rows={q.data?.data} columns={columns} getRowId={(p) => p.id}
+      loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} onRowClick={(p) => navigate(`/purchases/${p.id}`)} onView={(p) => navigate(`/purchases/${p.id}`)}
+      empty={<EmptyState icon={<ShoppingCart />} title="No purchases yet" description="Supplier bills that include this fabric appear here." />} />
   );
 }
 
@@ -134,29 +121,23 @@ export function FabricDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
-        <TabsContent value="ledger" className="mt-4"><Card><FabricLedger id={f.id} /></Card></TabsContent>
+        <TabsContent value="ledger" className="mt-4"><Card><FabricLedger id={f.id} name={f.name} /></Card></TabsContent>
         <TabsContent value="reserved" className="mt-4">
           <Card>
-            {!f.reservations.length ? <EmptyState icon={<Lock />} title="Nothing reserved" description="When an order uses this fabric from stock, it is reserved here until the garment is delivered." /> : (
-              <Table>
-                <THead><TR><TH>Order</TH><TH>Customer</TH><TH className="hidden sm:table-cell">Garment</TH><TH className="hidden md:table-cell">Delivery</TH><TH className="text-right">Reserved</TH><TH className="text-right">Issued</TH></TR></THead>
-                <TBody>
-                  {f.reservations.map((r) => (
-                    <TR key={r.id}>
-                      <TD><Link className="font-semibold hover:underline" to={`/orders/${r.orderId}`}>{r.orderNumber}</Link></TD>
-                      <TD>{r.customerName}</TD>
-                      <TD className="hidden sm:table-cell">{r.garment}</TD>
-                      <TD className="hidden md:table-cell">{formatDate(r.expectedDeliveryDate)}</TD>
-                      <TD className="text-right tabular-nums">{formatQty(r.remaining, f.unit)}</TD>
-                      <TD className="text-right tabular-nums">{Number(r.consumed) ? formatQty(r.consumed, f.unit) : '-'}</TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            )}
+            <DataTable title={`${f.name} - reserved`} module="inventory" noun="reservation" rows={f.reservations} getRowId={(r) => r.id}
+              onRowClick={(r) => navigate(`/orders/${r.orderId}`)} onView={(r) => navigate(`/orders/${r.orderId}`)}
+              columns={[
+                { id: 'order', header: 'Order', value: (r) => r.orderNumber, cell: (r) => <span className="font-semibold">{r.orderNumber}</span> },
+                { id: 'customer', header: 'Customer', value: (r) => r.customerName },
+                { id: 'garment', header: 'Garment', value: (r) => r.garment, className: 'hidden sm:table-cell' },
+                { id: 'delivery', header: 'Delivery', value: (r) => r.expectedDeliveryDate, text: (r) => formatDate(r.expectedDeliveryDate), className: 'hidden md:table-cell' },
+                { id: 'reserved', header: 'Reserved', type: 'number', value: (r) => r.remaining, text: (r) => formatQty(r.remaining, f.unit) },
+                { id: 'issued', header: 'Issued', type: 'number', value: (r) => r.consumed, text: (r) => (Number(r.consumed) ? formatQty(r.consumed, f.unit) : '-') },
+              ]}
+              empty={<EmptyState icon={<Lock />} title="Nothing reserved" description="When an order uses this fabric from stock, it is reserved here until the garment is delivered." />} />
           </Card>
         </TabsContent>
-        {can('purchases', 'VIEW') && <TabsContent value="purchases" className="mt-4"><Card><FabricPurchases id={f.id} /></Card></TabsContent>}
+        {can('purchases', 'VIEW') && <TabsContent value="purchases" className="mt-4"><Card><FabricPurchases id={f.id} name={f.name} /></Card></TabsContent>}
       </Tabs>
       <FabricFormDialog open={editOpen} onOpenChange={setEditOpen} fabric={f} />
       <AdjustStockDialog open={adjustOpen} onOpenChange={setAdjustOpen} fabric={f} />

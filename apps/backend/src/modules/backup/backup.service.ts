@@ -4,6 +4,7 @@ import { createReadStream, existsSync } from 'fs';
 import { isAbsolute, resolve } from 'path';
 import { paginate } from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { Tenant } from '../../common/tenant';
 import { AuditService } from '../../common/services/audit.service';
 import { AuthUser, RequestContext } from '../../common/types/auth-user';
 import { PasswordService } from '../auth/password.service';
@@ -49,7 +50,8 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (process.env.NODE_ENV === 'test') return;
-    setTimeout(() => void this.engine.reconcile().catch((e: Error) => this.logger.warn(`Backup folder check failed: ${e.message}`)), 5_000).unref();
+    // Backups cover the whole platform (all companies), so the scheduler runs in platform mode.
+    setTimeout(() => void Tenant.system(() => this.engine.reconcile()).catch((e: Error) => this.logger.warn(`Backup folder check failed: ${e.message}`)), 5_000).unref();
     this.timer = setInterval(() => void this.tick(), TICK_MS);
     this.timer.unref();
   }
@@ -61,7 +63,7 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
   // ---------------------------------------------------------------- settings
 
   async getConfig(): Promise<BackupConfig> {
-    const row = await this.prisma.systemSetting.findUnique({ where: { key: BACKUP_CONFIG_KEY } });
+    const row = await this.prisma.platformSetting.findUnique({ where: { key: BACKUP_CONFIG_KEY } });
     const parsed = BackupConfigSchema.safeParse({ ...DEFAULT_BACKUP_CONFIG, ...((row?.value as object) ?? {}) });
     return parsed.success ? parsed.data : DEFAULT_BACKUP_CONFIG;
   }
@@ -75,9 +77,9 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
     if (value.copyFolder && !isAbsolute(value.copyFolder)) throw new BadRequestException('The copy folder must be a full path, for example D:\\ERP-Backups');
     if (value.copyFolder && resolve(value.copyFolder) === resolve(this.engine.dir)) throw new BadRequestException('The copy folder must be different from the backups folder');
     await this.prisma.$transaction(async (tx) => {
-      await tx.systemSetting.upsert({
+      await tx.platformSetting.upsert({
         where: { key: BACKUP_CONFIG_KEY },
-        create: { key: BACKUP_CONFIG_KEY, group: 'backup', value: value as Prisma.InputJsonValue, updatedById: ctx.userId },
+        create: { key: BACKUP_CONFIG_KEY, value: value as Prisma.InputJsonValue, updatedById: ctx.userId },
         update: { value: value as Prisma.InputJsonValue, updatedById: ctx.userId },
       });
       await this.audit.log({ action: 'BACKUP_SETTINGS_CHANGED', module: 'backup', recordId: BACKUP_CONFIG_KEY, oldValues: before, newValues: value }, ctx, tx);
@@ -101,7 +103,7 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
       this.prisma.backupRecord.findFirst({ orderBy: { startedAt: 'desc' } }),
       this.prisma.backupRecord.aggregate({ where: { status: { in: ['COMPLETED', 'VERIFIED'] } }, _count: true, _sum: { sizeBytes: true } }),
       this.prisma.backupRecord.count({ where: { status: 'FAILED', startedAt: { gte: new Date(Date.now() - 86400_000) } } }),
-      this.prisma.systemSetting.findUnique({ where: { key: KEY_SAVED_SETTING } }),
+      this.prisma.platformSetting.findUnique({ where: { key: KEY_SAVED_SETTING } }),
       this.engine.toolInfo(),
     ]);
     const ageHours = lastGood ? (Date.now() - lastGood.startedAt.getTime()) / 3600_000 : null;
@@ -235,14 +237,14 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
     await this.confirmPassword(user, password);
     const key = this.engine.key();
     const at = new Date().toISOString();
-    await this.prisma.systemSetting.upsert({
+    await this.prisma.platformSetting.upsert({
       where: { key: KEY_SAVED_SETTING },
-      create: { key: KEY_SAVED_SETTING, group: 'backup', value: { at, fingerprint: key.fingerprint }, updatedById: user.id },
+      create: { key: KEY_SAVED_SETTING, value: { at, fingerprint: key.fingerprint }, updatedById: user.id },
       update: { value: { at, fingerprint: key.fingerprint }, updatedById: user.id },
     });
     await this.audit.log({ action: 'BACKUP_KEY_DOWNLOADED', module: 'backup', newValues: { fingerprint: key.fingerprint } }, ctx);
     const text = [
-      'AMIR ZAMEER ERP - BACKUP RECOVERY KEY',
+      'TAILORINGERP - BACKUP RECOVERY KEY',
       '',
       'Keep this file safe and private (for example on a USB drive in a locked drawer and in your email).',
       'Without this key the encrypted backups (.azbak) cannot be opened, also not by the developer.',
@@ -271,6 +273,10 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
 
   /** Runs the daily automatic backup when it is due. Also catches up after the PC was switched off. */
   async tick(now: Date = new Date()): Promise<'ran' | 'skipped' | 'failed'> {
+    return Tenant.system(() => this.runTick(now));
+  }
+
+  private async runTick(now: Date): Promise<'ran' | 'skipped' | 'failed'> {
     try {
       const config = await this.getConfig();
       if (!config.autoEnabled || BackupEngine.running) return 'skipped';

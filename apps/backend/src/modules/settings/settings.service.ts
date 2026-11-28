@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Tenant, byCompany } from '../../common/tenant';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -16,6 +17,15 @@ export class SettingsService {
     for (const g of SETTING_GROUP_KEYS) {
       const stored = rows.find((r) => r.key === `group.${g}`)?.value as Record<string, unknown> | undefined;
       out[g] = { ...SETTING_GROUPS[g].defaults, ...(stored ?? {}) };
+    }
+    // Each company's prints show its own name until the owner sets a business name.
+    if (!rows.some((r) => r.key === 'group.business')) {
+      const company = await this.prisma.company.findUnique({ where: { id: Tenant.require() }, select: { name: true, phone: true, address: true, city: true, email: true } });
+      if (company) {
+        out.business = {
+          ...out.business, businessName: company.name, phone: company.phone ?? '', address: company.address ?? '', city: company.city ?? '', email: company.email ?? '',
+        };
+      }
     }
     return out;
   }
@@ -36,12 +46,17 @@ export class SettingsService {
     const value = parsed.data as Prisma.InputJsonValue;
     await this.prisma.$transaction(async (tx) => {
       await tx.systemSetting.upsert({
-        where: { key: `group.${group}` },
+        where: { companyId_key: byCompany({ key: `group.${group}` }) },
         create: { key: `group.${group}`, group, value, updatedById: ctx.userId },
         update: { value, updatedById: ctx.userId },
       });
-      await this.audit.log({ action: 'SETTINGS_CHANGED', module: 'settings', recordId: group, oldValues: before, newValues: value }, ctx, tx);
+      await this.audit.log({ action: 'SETTINGS_CHANGED', module: 'settings', recordId: group, oldValues: slim(before), newValues: slim(value as Record<string, unknown>) }, ctx, tx);
     });
     return parsed.data as Record<string, unknown>;
   }
+}
+
+/** Keeps uploaded logo images out of the audit log (only a marker is stored). */
+function slim(v: Record<string, unknown>): Record<string, unknown> {
+  return typeof v.logoUrl === 'string' && v.logoUrl.startsWith('data:') ? { ...v, logoUrl: `[image ${Math.round(v.logoUrl.length / 1024)} KB]` } : v;
 }
