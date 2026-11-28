@@ -264,7 +264,7 @@ export function OrderDetailPage() {
                 {can('whatsapp', 'CREATE') && p.status !== 'REVERSED' && <DropdownMenuItem onSelect={() => { setWaPayment(p.id); setWaOpenState(true); }}><MessageCircle /> WhatsApp receipt</DropdownMenuItem>}
               </> : null}
               columns={[
-                { id: 'receipt', header: 'Receipt', value: (p) => p.receiptNo, cell: (p) => <span className="font-mono text-xs">{p.receiptNo}</span> },
+                { id: 'receipt', header: 'Receipt', value: (p) => p.receiptNo, cell: (p) => <span className="whitespace-nowrap font-mono text-xs">{p.receiptNo}</span> },
                 { id: 'date', header: 'Date', value: (p) => p.paymentDate, text: (p) => formatDateTime(p.paymentDate), className: 'whitespace-nowrap' },
                 { id: 'method', header: 'Method', value: (p) => METHOD_LABEL[p.method] ?? humanize(p.method), cell: (p) => <>{METHOD_LABEL[p.method] ?? humanize(p.method)}{p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}</> },
                 { id: 'type', header: 'Type', value: (p) => (p.status === 'REVERSED' ? 'Reversed' : humanize(p.type)), className: 'hidden sm:table-cell' },

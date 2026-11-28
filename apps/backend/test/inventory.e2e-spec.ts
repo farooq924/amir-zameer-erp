@@ -198,6 +198,25 @@ describe('Fabric inventory, suppliers & purchases (e2e)', () => {
     expect(picker.body[0]).toMatchObject({ id: fabricB, availableStock: '8.000' });
   });
 
+  it('deletes suppliers, fabrics and garments only when they have no history', async () => {
+    const del = (path: string, a: Agent = owner) => a.agent.delete(path).set('X-CSRF-Token', a.csrf);
+    // Used records are protected.
+    await del(`/api/suppliers/${supplierId}`).expect(400);
+    await del(`/api/inventory/fabrics/${fabricA}`).expect(400);
+    // Unused records go away and leave the lists.
+    const s = await post('/api/suppliers', { name: 'Temp Supplier' }).expect(201);
+    const f = await post('/api/inventory/fabrics', { name: 'Temp Fabric', color: 'Grey', supplierId: s.body.id }).expect(201);
+    await del(`/api/inventory/fabrics/${f.body.id}`).expect(200);
+    await del(`/api/suppliers/${s.body.id}`).expect(200);
+    const fabrics = await get('/api/inventory/fabrics?pageSize=200').expect(200);
+    expect(fabrics.body.data.map((x: { id: string }) => x.id)).not.toContain(f.body.id);
+    const suppliers = await get('/api/suppliers?pageSize=200').expect(200);
+    expect(suppliers.body.data.map((x: { id: string }) => x.id)).not.toContain(s.body.id);
+    const g = await post('/api/garments', { name: 'Temp Garment', category: 'CUSTOM' }).expect(201);
+    await del(`/api/garments/${g.body.id}`).expect(200);
+    await del(`/api/garments/${g.body.id}`).expect(404);
+  });
+
   it('enforces inventory permissions', async () => {
     const roles = await get('/api/roles').expect(200);
     const tailorRole = roles.body.find((r: { code: string }) => r.code === 'TAILOR');

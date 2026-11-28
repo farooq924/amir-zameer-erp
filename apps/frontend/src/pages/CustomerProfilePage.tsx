@@ -66,7 +66,7 @@ function OrdersTab({ id, status, name }: { id: string; status: CustomerStatus; n
 function PaymentsTab({ id, name }: { id: string; name: string }) {
   const q = useQuery({ queryKey: ['customer', id, 'payments'], queryFn: () => api.get<Paginated<PaymentRow>>(`/customers/${id}/payments`, { pageSize: 200 }) });
   const columns: DataColumn<PaymentRow>[] = [
-    { id: 'receipt', header: 'Receipt', value: (p) => p.receiptNo, cell: (p) => <span className="font-mono text-xs">{p.receiptNo}</span> },
+    { id: 'receipt', header: 'Receipt', value: (p) => p.receiptNo, cell: (p) => <span className="whitespace-nowrap font-mono text-xs">{p.receiptNo}</span> },
     { id: 'date', header: 'Date', value: (p) => p.paymentDate, text: (p) => formatDate(p.paymentDate), className: 'whitespace-nowrap' },
     { id: 'order', header: 'Order', value: (p) => p.order?.orderNumber ?? '-', className: 'hidden sm:table-cell' },
     { id: 'method', header: 'Method', value: (p) => humanize(p.method) },

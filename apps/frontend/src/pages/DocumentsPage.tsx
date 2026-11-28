@@ -1,7 +1,7 @@
 import {
   AlertTriangle, Banknote, Building2, CreditCard, Crown, History, Package, BarChart3, BookOpen, CalendarCheck, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, DatabaseBackup, Download,
   ExternalLink, FileText, IdCard, Layers, LayoutDashboard, Lightbulb, ListChecks, Lock, MessageCircle, Printer, Receipt, RefreshCw, Ruler,
-  Scissors, Search, Settings, ShieldCheck, Shirt, ShoppingCart, Truck, UserCog, Users, Wallet, WifiOff, type LucideIcon,
+  Scissors, Search, Settings, ShieldCheck, Shirt, ShoppingCart, Table2, Truck, UserCog, Users, Wallet, WifiOff, type LucideIcon,
 } from 'lucide-react';
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -18,7 +18,7 @@ import { cn } from '@/utils/cn';
 const ICONS: Record<string, LucideIcon> = {
   BookOpen, Lock, ListChecks, LayoutDashboard, Settings, UserCog, ShieldCheck, Users, Ruler, Shirt, ClipboardList, Printer, Layers, Truck,
   ShoppingCart, IdCard, CalendarCheck, Scissors, Wallet, Banknote, Receipt, BarChart3, MessageCircle, WifiOff, RefreshCw, DatabaseBackup,
-  CircleHelp, Download, Building2, CreditCard, Crown, History, Package,
+  CircleHelp, Download, Building2, CreditCard, Crown, History, Package, Table2,
 };
 
 /** "Press **Save**" -> Press <strong>Save</strong>. Guide text marks on-screen names with double stars. */

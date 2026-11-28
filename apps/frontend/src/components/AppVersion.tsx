@@ -11,6 +11,19 @@ export const BUILD_DATE = __BUILD_DATE__;
 /** Release history shown in "About". Newest first. Version = 1.<phase>.<fix>. */
 export const RELEASES = [
   {
+    version: '2.1.0', title: 'Advanced tables and themed scrollbars',
+    notes: [
+      'Every table in the ERP is now an advanced table with the same look and tools',
+      'Select one or many rows (also "select all" across pages) with a bulk bar: Print, Export, Duplicate, Delete',
+      'Click a column heading to sort; rows per page 10, 25, 50 or 100 with page navigation',
+      'Action buttons on every row: View, Edit, Duplicate, Delete (only where allowed for your role)',
+      'Export to Excel (.xlsx) or CSV, and print any table on A4 with the shop name and Brandistan footer',
+      'Import from Excel or CSV with a ready template for Customers, Suppliers, Fabrics and Garments',
+      'Safe delete: suppliers, fabrics and garments can be deleted only when they have no history; orders and expenses are cancelled instead',
+      'Scrollbars now match the navy and gold theme',
+    ],
+  },
+  {
     version: '2.0.0', title: 'TailoringERP SaaS (many companies)',
     notes: [
       'The ERP is now TailoringERP By Brandistan: many tailoring shops (companies) can use one ERP, each with fully separate data',

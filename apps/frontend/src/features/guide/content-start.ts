@@ -100,6 +100,31 @@ export const START_SECTIONS: GuideSection[] = [
     ],
   },
   {
+    id: 'tables', part: 'start', title: 'Working with Tables', icon: 'Table2',
+    summary: 'ERP ki har list (customers, orders, suppliers, fabrics, payments, expenses waghera) ek hi tarah ki advanced table hai. Yahan har table ke saare buttons ka tareeqa hai.',
+    blocks: [
+      { type: 'options', title: 'Table ke hisse', items: [
+        { name: 'Checkbox (row selection)', text: 'Har row ke shuru mein checkbox hai. Ek ya zyada rows chunein. Sab se upar wala checkbox is page ki saari rows chun leta hai, phir **Select all** se tamam pages ki rows chun sakte hain.' },
+        { name: 'Bulk bar', text: 'Rows chunte hi upar sunehri patti aati hai: **Print**, **Export**, **Duplicate**, **Delete** aur **Clear**. Ye sirf chuni hui rows par kaam karte hain.' },
+        { name: 'Sorting', text: 'Kisi column ke heading par click karein: pehli dafa chhote se bara (A-Z), dobara bare se chhota (Z-A). Teer ka nishan batata hai kaunsa column sort hai.' },
+        { name: 'Row buttons', text: 'Har row ke aakhir mein: **View** (aankh), **Edit** (pencil), **Duplicate** (copy) aur **Delete** (dabba). Teen nuqte wale button mein us record ke mazeed kaam hain (jaise Print receipt, Approve).' },
+        { name: 'Pagination', text: 'Neeche **Rows per page** mein 10, 25, 50 ya 100 chunein. Aage peeche jane ke liye page number ya teer dabaein. Aap ki pasand har table ke liye yaad rehti hai.' },
+        { name: 'Export', text: 'Upar **Export** dabaein aur **Excel (.xlsx)** ya **CSV** chunein. Is mein table ki saari rows (filter ke mutabiq) aa jati hain.' },
+        { name: 'Print', text: 'Upar **Print** dabaein. A4 page par shop ke naam, tareekh aur Brandistan footer ke saath table print hoti hai.' },
+        { name: 'Import', text: 'Customers, Suppliers, Fabrics aur Garments mein **Import** button hai. Excel ya CSV file se bohat se records ek saath daalein.' },
+      ] },
+      { type: 'steps', title: 'Excel se data import kaise karein', items: [
+        'List kholein (maslan Customers) aur upar **Import** dabaein.',
+        '**Download template** dabaein. Excel file mein columns ke naam pehli line mein hain; sunehre (gold) columns zaroori hain.',
+        'Har record ek line mein bharein aur file save karein.',
+        '**Choose file** dabaein aur file chunein. Pehli 5 lines ka preview nazar aayega.',
+        '**Import** dabaein. Aakhir mein batata hai kitne records aa gaye aur kaunsi line kyun nahi aayi (line number ke saath).',
+      ] },
+      { type: 'warning', text: 'Delete ka matlab har jagah alag hai taa ke hisaab kabhi kharab na ho: Orders mein Delete = order **Cancel**, Expenses mein Delete = Reject / Cancel, WhatsApp mein Delete = queued message cancel. Supplier, fabric aur garment sirf tab delete hote hain jab un ki koi history (purchase, order, stock) na ho. Purchases, journal aur payments delete nahi hote; payment ke liye **Reverse** istemal karein.' },
+      { type: 'tip', text: 'Buttons sirf unhi users ko nazar aate hain jin ke role mein wo ijazat (permission) hai. Maslan Export ya Print nazar na aaye to Owner se role mein EXPORT / PRINT ijazat lein.' },
+    ],
+  },
+  {
     id: 'settings', part: 'setup', title: 'Settings', icon: 'Settings', path: '/settings', module: 'settings',
     summary: 'Settings mein dukaan ki maloomat, numbering, order ke default aur printing ke options hain. Har hissa alag card mein hai aur har card ka apna **Save** button hai.',
     blocks: [
